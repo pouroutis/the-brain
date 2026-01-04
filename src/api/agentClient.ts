@@ -372,4 +372,3 @@ export async function callAgent(
 // -----------------------------------------------------------------------------
 
 export { AGENT_ENDPOINTS };
-export type { RunCoordination };

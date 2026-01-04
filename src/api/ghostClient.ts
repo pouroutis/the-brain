@@ -97,7 +97,7 @@ export async function callGhostOrchestrator(
       };
     }
 
-    return responseData as GhostResponse;
+    return responseData as unknown as GhostResponse;
 
   } catch (error) {
     if (timeoutId) clearTimeout(timeoutId);
