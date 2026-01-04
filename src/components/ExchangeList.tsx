@@ -3,7 +3,6 @@
 // ExchangeList Component (Phase 2 — Step 5)
 // =============================================================================
 
-import React from 'react';
 import type { Agent, Exchange, PendingExchange } from '../types/brain';
 import { renderCompletedExchange, renderPendingExchange } from './ExchangeCard';
 

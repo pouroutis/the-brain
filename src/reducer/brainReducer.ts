@@ -5,7 +5,6 @@
 
 import type {
   Agent,
-  AgentResponse,
   BrainState,
   BrainAction,
   Exchange,
@@ -249,6 +248,7 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
     // -------------------------------------------------------------------------
     default: {
       const _exhaustiveCheck: never = action;
+      void _exhaustiveCheck;
       return state;
     }
   }

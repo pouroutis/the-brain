@@ -3,7 +3,7 @@
 // Entry Point (Phase 2 — Step 5)
 // =============================================================================
 
-import React from 'react';
+import { StrictMode } from 'react';
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
 
@@ -20,7 +20,7 @@ if (rootElement === null) {
 const root = ReactDOM.createRoot(rootElement);
 
 root.render(
-  <React.StrictMode>
+  <StrictMode>
     <App />
-  </React.StrictMode>
+  </StrictMode>
 );

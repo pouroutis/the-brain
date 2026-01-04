@@ -3,7 +3,6 @@
 // WarningBanner Component (Phase 2 — Step 5)
 // =============================================================================
 
-import React from 'react';
 import type { WarningState } from '../types/brain';
 
 // -----------------------------------------------------------------------------

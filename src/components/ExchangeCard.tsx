@@ -3,7 +3,6 @@
 // ExchangeCard Component (Phase 2 — Step 5, Phase 6 — Routing Telemetry)
 // =============================================================================
 
-import React from 'react';
 import type { Agent, AgentResponse, Exchange, PendingExchange } from '../types/brain';
 import { AgentCard } from './AgentCard';
 

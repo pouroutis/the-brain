@@ -3,7 +3,7 @@
 // BrainChat Container Component (Phase 2 — Step 5)
 // =============================================================================
 
-import React, { useCallback } from 'react';
+import { useCallback } from 'react';
 import { useBrain } from '../context/BrainContext';
 import { ExchangeList } from './ExchangeList';
 import { PromptInput } from './PromptInput';

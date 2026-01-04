@@ -8,6 +8,29 @@ import type { GhostRequest, GhostResponse, GhostErrorCode } from '../types/ghost
 import { env } from '../config/env';
 
 /**
+ * Whitelist of valid GhostErrorCode values for runtime validation
+ */
+const VALID_ERROR_CODES: ReadonlySet<string> = new Set<string>([
+  'GHOST_GPT_FAILED',
+  'GHOST_TIMEOUT',
+  'GHOST_TOKEN_CAP',
+  'GHOST_ROUND_CAP',
+  'GHOST_CALL_CAP',
+  'GHOST_AUDIT_FAILED',
+  'GHOST_INTERNAL',
+  'GHOST_KILLED',
+  'GHOST_DAILY_CAP_EXCEEDED',
+  'GHOST_CIRCUIT_OPEN',
+]);
+
+/**
+ * Type guard: validates that a value is a valid GhostErrorCode
+ */
+function isGhostErrorCode(value: unknown): value is GhostErrorCode {
+  return typeof value === 'string' && VALID_ERROR_CODES.has(value);
+}
+
+/**
  * Ghost orchestrator endpoint URL
  */
 const GHOST_ORCHESTRATOR_URL = env.supabaseUrl
@@ -97,7 +120,22 @@ export async function callGhostOrchestrator(
       };
     }
 
-    return responseData as unknown as GhostResponse;
+    // Construct validated GhostResponse
+    if (responseData.status === 'success') {
+      return {
+        status: 'success',
+        content: typeof responseData.content === 'string' ? responseData.content : undefined,
+      };
+    }
+
+    // Error response
+    return {
+      status: 'error',
+      error: typeof responseData.error === 'string' ? responseData.error : 'Unknown error',
+      errorCode: isGhostErrorCode(responseData.errorCode) 
+        ? responseData.errorCode 
+        : 'GHOST_INTERNAL',
+    };
 
   } catch (error) {
     if (timeoutId) clearTimeout(timeoutId);

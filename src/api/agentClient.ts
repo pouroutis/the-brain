@@ -9,7 +9,7 @@ import {
   MAX_AGENT_CALLS,
 } from '../utils/costConfig';
 import { buildContext } from '../utils/contextBuilder';
-import { logCost, logCalls } from '../utils/devLogger';
+import { logCalls } from '../utils/devLogger';
 
 // -----------------------------------------------------------------------------
 // Constants

@@ -3,7 +3,6 @@
 // App Component (Phase 2 — Step 5)
 // =============================================================================
 
-import React from 'react';
 import { BrainProvider } from './context/BrainContext';
 import { BrainChat } from './components/BrainChat';
 import './styles.css';

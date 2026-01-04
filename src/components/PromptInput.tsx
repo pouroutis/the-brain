@@ -3,7 +3,7 @@
 // PromptInput Component (Phase 2 — Step 5)
 // =============================================================================
 
-import React, { useState, useCallback, type FormEvent, type ChangeEvent } from 'react';
+import { useState, useCallback, type FormEvent, type ChangeEvent, type KeyboardEvent } from 'react';
 
 // -----------------------------------------------------------------------------
 // Types
@@ -40,7 +40,7 @@ export function PromptInput({ canSubmit, onSubmit }: PromptInputProps): JSX.Elem
   );
 
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    (e: KeyboardEvent<HTMLTextAreaElement>) => {
       // Submit on Enter (without Shift)
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();

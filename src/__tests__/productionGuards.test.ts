@@ -3,7 +3,7 @@
 // Phase 11: Kill-switch, daily caps, circuit breaker
 // =============================================================================
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
 // =============================================================================
 // Mock Types (matching productionGuards.ts)

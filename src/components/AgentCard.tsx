@@ -3,7 +3,6 @@
 // AgentCard Component (Phase 2 — Step 5)
 // =============================================================================
 
-import React from 'react';
 import type { Agent, AgentResponse } from '../types/brain';
 
 // -----------------------------------------------------------------------------
