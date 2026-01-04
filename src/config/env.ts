@@ -1,0 +1,111 @@
+// =============================================================================
+// The Brain — Multi-AI Sequential Chat System
+// Environment Configuration (Phase 3 — Integration)
+// =============================================================================
+
+/**
+ * Environment configuration with safe fallbacks.
+ * Uses Vite's import.meta.env for environment variables.
+ * 
+ * Required env vars (in .env or .env.local):
+ *   VITE_SUPABASE_URL=https://your-project.supabase.co
+ *   VITE_SUPABASE_ANON_KEY=your-anon-key (optional, not needed for Edge Functions)
+ */
+
+// -----------------------------------------------------------------------------
+// Environment Variables
+// -----------------------------------------------------------------------------
+
+const getEnvVar = (key: string, fallback?: string): string => {
+  const value = import.meta.env[key];
+  if (value !== undefined && value !== '') {
+    return value;
+  }
+  if (fallback !== undefined) {
+    return fallback;
+  }
+  console.warn(`[env] Missing environment variable: ${key}`);
+  return '';
+};
+
+// -----------------------------------------------------------------------------
+// Configuration Object
+// -----------------------------------------------------------------------------
+
+export const env = {
+  /**
+   * Supabase project URL
+   * Example: https://fgjjbxznstbxqtcjmtzv.supabase.co
+   */
+  supabaseUrl: getEnvVar('VITE_SUPABASE_URL'),
+
+  /**
+   * Supabase anon key (optional for Edge Functions that don't require auth)
+   */
+  supabaseAnonKey: getEnvVar('VITE_SUPABASE_ANON_KEY', ''),
+
+  /**
+   * Whether we're in development mode
+   */
+  isDev: import.meta.env.DEV,
+
+  /**
+   * Whether we're in production mode
+   */
+  isProd: import.meta.env.PROD,
+} as const;
+
+// -----------------------------------------------------------------------------
+// Derived Configuration
+// -----------------------------------------------------------------------------
+
+/**
+ * Base URL for Supabase Edge Functions
+ */
+export const FUNCTIONS_BASE_URL = env.supabaseUrl
+  ? `${env.supabaseUrl}/functions/v1`
+  : '';
+
+/**
+ * Agent endpoint URLs
+ */
+export const AGENT_ENDPOINTS = {
+  gpt: `${FUNCTIONS_BASE_URL}/openai-proxy`,
+  claude: `${FUNCTIONS_BASE_URL}/anthropic-proxy`,
+  gemini: `${FUNCTIONS_BASE_URL}/gemini-proxy`,
+} as const;
+
+// -----------------------------------------------------------------------------
+// Validation
+// -----------------------------------------------------------------------------
+
+/**
+ * Check if the environment is properly configured
+ */
+export function validateEnv(): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  if (!env.supabaseUrl) {
+    errors.push('VITE_SUPABASE_URL is not set');
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}
+
+/**
+ * Log environment status (safe for console, no secrets)
+ */
+export function logEnvStatus(): void {
+  const { valid, errors } = validateEnv();
+  
+  if (valid) {
+    console.log('[env] Configuration valid');
+    console.log(`[env] Supabase URL: ${env.supabaseUrl}`);
+    console.log(`[env] Functions base: ${FUNCTIONS_BASE_URL}`);
+  } else {
+    console.error('[env] Configuration errors:', errors);
+  }
+}

@@ -1,0 +1,255 @@
+// =============================================================================
+// The Brain — Multi-AI Sequential Chat System
+// Reducer (Phase 2)
+// =============================================================================
+
+import type {
+  Agent,
+  AgentResponse,
+  BrainState,
+  BrainAction,
+  Exchange,
+  PendingExchange,
+} from '../types/brain';
+
+// -----------------------------------------------------------------------------
+// Initial State
+// -----------------------------------------------------------------------------
+
+export const initialBrainState: BrainState = {
+  exchanges: [],
+  pendingExchange: null,
+  currentAgent: null,
+  isProcessing: false,
+  userCancelled: false,
+  warningState: null,
+  error: null,
+  clearBoardVersion: 0,
+};
+
+// -----------------------------------------------------------------------------
+// Helper: Generate Exchange ID
+// -----------------------------------------------------------------------------
+
+function generateExchangeId(): string {
+  return `ex-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+// -----------------------------------------------------------------------------
+// Helper: Check runId Match
+// -----------------------------------------------------------------------------
+
+function isRunIdMatch(state: BrainState, runId: string): boolean {
+  return state.pendingExchange !== null && state.pendingExchange.runId === runId;
+}
+
+// -----------------------------------------------------------------------------
+// Helper: Finalize Pending Exchange to Exchange
+// -----------------------------------------------------------------------------
+
+function finalizePendingExchange(pending: PendingExchange): Exchange {
+  return {
+    id: generateExchangeId(),
+    userPrompt: pending.userPrompt,
+    responsesByAgent: pending.responsesByAgent,
+    timestamp: Date.now(),
+  };
+}
+
+// -----------------------------------------------------------------------------
+// Reducer
+// -----------------------------------------------------------------------------
+
+export function brainReducer(state: BrainState, action: BrainAction): BrainState {
+  switch (action.type) {
+    // -------------------------------------------------------------------------
+    // SUBMIT_START
+    // -------------------------------------------------------------------------
+    case 'SUBMIT_START': {
+      // Guard: Block if already processing (double-submit protection)
+      if (state.isProcessing) {
+        return state;
+      }
+
+      const newPendingExchange: PendingExchange = {
+        runId: action.runId,
+        userPrompt: action.userPrompt,
+        responsesByAgent: {},
+      };
+
+      return {
+        ...state,
+        pendingExchange: newPendingExchange,
+        currentAgent: 'gpt' as Agent,
+        isProcessing: true,
+        userCancelled: false,
+        warningState: null,
+        error: null,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // AGENT_STARTED
+    // -------------------------------------------------------------------------
+    case 'AGENT_STARTED': {
+      // Guard: Reject if runId mismatch
+      if (!isRunIdMatch(state, action.runId)) {
+        return state;
+      }
+
+      // Guard: Reject if not currently processing
+      if (!state.isProcessing) {
+        return state;
+      }
+
+      return {
+        ...state,
+        currentAgent: action.agent,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // AGENT_COMPLETED
+    // -------------------------------------------------------------------------
+    case 'AGENT_COMPLETED': {
+      // Guard: Reject if runId mismatch
+      if (!isRunIdMatch(state, action.runId)) {
+        return state;
+      }
+
+      // Guard: Reject if no pending exchange
+      if (state.pendingExchange === null) {
+        return state;
+      }
+
+      const updatedResponsesByAgent = {
+        ...state.pendingExchange.responsesByAgent,
+        [action.response.agent]: action.response,
+      };
+
+      return {
+        ...state,
+        pendingExchange: {
+          ...state.pendingExchange,
+          responsesByAgent: updatedResponsesByAgent,
+        },
+        currentAgent: null,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // SEQUENCE_COMPLETED
+    // -------------------------------------------------------------------------
+    case 'SEQUENCE_COMPLETED': {
+      // Guard: Reject if runId mismatch
+      if (!isRunIdMatch(state, action.runId)) {
+        return state;
+      }
+
+      // Guard: Reject if no pending exchange
+      if (state.pendingExchange === null) {
+        return state;
+      }
+
+      const finalizedExchange = finalizePendingExchange(state.pendingExchange);
+
+      return {
+        ...state,
+        exchanges: [...state.exchanges, finalizedExchange],
+        pendingExchange: null,
+        currentAgent: null,
+        isProcessing: false,
+        userCancelled: false,
+        warningState: null,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // CANCEL_REQUESTED
+    // -------------------------------------------------------------------------
+    case 'CANCEL_REQUESTED': {
+      // Guard: Reject if runId mismatch
+      if (!isRunIdMatch(state, action.runId)) {
+        return state;
+      }
+
+      return {
+        ...state,
+        userCancelled: true,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // CANCEL_COMPLETE
+    // -------------------------------------------------------------------------
+    case 'CANCEL_COMPLETE': {
+      // Guard: Reject if runId mismatch
+      if (!isRunIdMatch(state, action.runId)) {
+        return state;
+      }
+
+      // Guard: Reject if no pending exchange
+      if (state.pendingExchange === null) {
+        return state;
+      }
+
+      // Finalize without reasonTag (cancellation is signaled via terminal statuses)
+      const finalizedExchange = finalizePendingExchange(state.pendingExchange);
+
+      return {
+        ...state,
+        exchanges: [...state.exchanges, finalizedExchange],
+        pendingExchange: null,
+        currentAgent: null,
+        isProcessing: false,
+        userCancelled: false,
+        warningState: null,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // SET_WARNING
+    // -------------------------------------------------------------------------
+    case 'SET_WARNING': {
+      // Guard: Reject if runId mismatch (warnings are sequence-scoped)
+      if (!isRunIdMatch(state, action.runId)) {
+        return state;
+      }
+
+      return {
+        ...state,
+        warningState: action.warning,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // CLEAR
+    // -------------------------------------------------------------------------
+    case 'CLEAR': {
+      // Guard: Block if currently processing
+      if (state.isProcessing) {
+        return state;
+      }
+
+      return {
+        ...state,
+        exchanges: [],
+        pendingExchange: null,
+        currentAgent: null,
+        isProcessing: false,
+        userCancelled: false,
+        warningState: null,
+        error: null,
+        clearBoardVersion: state.clearBoardVersion + 1,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // Default: Unknown action type (TypeScript exhaustiveness)
+    // -------------------------------------------------------------------------
+    default: {
+      const _exhaustiveCheck: never = action;
+      return state;
+    }
+  }
+}
