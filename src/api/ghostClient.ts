@@ -161,11 +161,14 @@ export async function callGhostOrchestrator(
  * Check if Ghost mode is enabled
  * Per Phase 9A: CEO mode always enables Ghost (server-side enforced)
  * This client-side check is for UI logic only — server is authoritative
+ *
+ * Returns false when Ghost orchestrator URL is not configured,
+ * allowing Single-Pass Mode to work in test environments.
  */
 export function isGhostEnabled(): boolean {
-  // In the current implementation, Ghost is always enabled for CEO mode
-  // The server enforces this — client cannot disable
-  return true;
+  // Ghost mode requires configured orchestrator URL
+  // When URL is missing/invalid, fall back to Single-Pass Mode
+  return Boolean(GHOST_ORCHESTRATOR_URL && !GHOST_ORCHESTRATOR_URL.includes('undefined'));
 }
 
 /**

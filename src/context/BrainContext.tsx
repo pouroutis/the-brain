@@ -31,6 +31,15 @@ import { callAgent } from '../api/agentClient';
 import { callGhostOrchestrator, isGhostEnabled } from '../api/ghostClient';
 
 // -----------------------------------------------------------------------------
+// Constants
+// -----------------------------------------------------------------------------
+
+/**
+ * Agent call timeout in milliseconds (matches agentClient DEFAULT_TIMEOUT_MS)
+ */
+const AGENT_TIMEOUT_MS = 30_000;
+
+// -----------------------------------------------------------------------------
 // Helper: Generate Run ID
 // -----------------------------------------------------------------------------
 
@@ -318,6 +327,11 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
         gptAbortController.abort();
       });
 
+      // Set up timeout for GPT call (triggers abort after AGENT_TIMEOUT_MS)
+      const gptTimeoutId = setTimeout(() => {
+        gptAbortController.abort();
+      }, AGENT_TIMEOUT_MS);
+
       // Increment call counter (Phase 5)
       callIndexRef.current += 1;
 
@@ -328,6 +342,9 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
         gptAbortController,
         { runId, callIndex: callIndexRef.current, exchanges: state.exchanges }
       );
+
+      // Clear timeout after call completes
+      clearTimeout(gptTimeoutId);
 
       // Post-await cancellation check
       if (isCancelled()) {
@@ -389,6 +406,11 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
           claudeAbortController.abort();
         });
 
+        // Set up timeout for Claude call
+        const claudeTimeoutId = setTimeout(() => {
+          claudeAbortController.abort();
+        }, AGENT_TIMEOUT_MS);
+
         // Increment call counter (Phase 5)
         callIndexRef.current += 1;
 
@@ -399,6 +421,9 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
           claudeAbortController,
           { runId, callIndex: callIndexRef.current, exchanges: state.exchanges }
         );
+
+        // Clear timeout after call completes
+        clearTimeout(claudeTimeoutId);
 
         // Post-await cancellation check
         if (isCancelled()) {
@@ -431,6 +456,11 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
           geminiAbortController.abort();
         });
 
+        // Set up timeout for Gemini call
+        const geminiTimeoutId = setTimeout(() => {
+          geminiAbortController.abort();
+        }, AGENT_TIMEOUT_MS);
+
         // Increment call counter (Phase 5)
         callIndexRef.current += 1;
 
@@ -441,6 +471,9 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
           geminiAbortController,
           { runId, callIndex: callIndexRef.current, exchanges: state.exchanges }
         );
+
+        // Clear timeout after call completes
+        clearTimeout(geminiTimeoutId);
 
         // Post-await cancellation check
         if (isCancelled()) {
