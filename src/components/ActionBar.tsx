@@ -45,6 +45,8 @@ interface ActionBarProps {
   canGenerateExecutionPrompt?: boolean;
   /** Latest result artifact from Claude Code (Phase 2C) */
   resultArtifact?: string | null;
+  /** Callback when CEO execution prompt is generated (for persistence) */
+  onGenerateCeoPrompt?: (prompt: string) => void;
 }
 
 // -----------------------------------------------------------------------------
@@ -91,6 +93,7 @@ export function ActionBar({
   canGenerateExecutionPrompt = false,
   resultArtifact,
   onSaveResultArtifact,
+  onGenerateCeoPrompt,
 }: ActionBarProps): JSX.Element {
   // Derived state
   const isRunning = loopState === 'running';
@@ -134,13 +137,15 @@ export function ActionBar({
     try {
       await navigator.clipboard.writeText(ceoExecutionPrompt);
       generatedForExchangeRef.current.add(lastExchangeId);
+      // Persist the prompt for Executor Panel display
+      onGenerateCeoPrompt?.(ceoExecutionPrompt);
       setCopyFeedback('Copied!');
       setTimeout(() => setCopyFeedback(null), 2000);
     } catch {
       setCopyFeedback('Failed to copy');
       setTimeout(() => setCopyFeedback(null), 2000);
     }
-  }, [ceoExecutionPrompt, lastExchangeId, mode]);
+  }, [ceoExecutionPrompt, lastExchangeId, mode, onGenerateCeoPrompt]);
 
   const handleCeoChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {

@@ -149,6 +149,8 @@ interface BrainActions {
   stopExecutionLoop: () => void;
   /** Set the result artifact from Claude Code execution (Phase 2C) */
   setResultArtifact: (artifact: string | null) => void;
+  /** Set the CEO execution prompt (Phase 2D — Executor Panel) */
+  setCeoExecutionPrompt: (prompt: string | null) => void;
 }
 
 /**
@@ -202,6 +204,8 @@ interface BrainSelectors {
   canGenerateExecutionPrompt: () => boolean;
   /** Get the latest result artifact from Claude Code execution (Phase 2C) */
   getResultArtifact: () => string | null;
+  /** Get the persisted CEO execution prompt (Phase 2D — Executor Panel) */
+  getCeoExecutionPrompt: () => string | null;
 }
 
 /**
@@ -466,6 +470,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
 
       // Helper to check if agent should be called (gatekeeping)
       const shouldCallAgent = (agent: Agent, isCeo: boolean): boolean => {
+        // DISCUSSION MODE OVERRIDE: Always call all agents, ignore gatekeeping
+        if (currentMode === 'discussion') return true;
         // CEO always speaks
         if (isCeo) return true;
         // Force all overrides gatekeeping
@@ -671,6 +677,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     dispatch({ type: 'SET_RESULT_ARTIFACT', artifact });
   }, []);
 
+  const setCeoExecutionPrompt = useCallback((prompt: string | null): void => {
+    dispatch({ type: 'SET_CEO_EXECUTION_PROMPT', prompt });
+  }, []);
+
   // ---------------------------------------------------------------------------
   // Selectors
   // ---------------------------------------------------------------------------
@@ -805,6 +815,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     return state.resultArtifact;
   }, [state.resultArtifact]);
 
+  const getCeoExecutionPrompt = useCallback((): string | null => {
+    return state.ceoExecutionPrompt;
+  }, [state.ceoExecutionPrompt]);
+
   // ---------------------------------------------------------------------------
   // Memoized Context Value
   // ---------------------------------------------------------------------------
@@ -824,6 +838,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       pauseExecutionLoop,
       stopExecutionLoop,
       setResultArtifact,
+      setCeoExecutionPrompt,
       // Selectors
       getState,
       getActiveRunId,
@@ -848,6 +863,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       isLoopRunning,
       canGenerateExecutionPrompt,
       getResultArtifact,
+      getCeoExecutionPrompt,
     }),
     [
       submitPrompt,
@@ -862,6 +878,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       pauseExecutionLoop,
       stopExecutionLoop,
       setResultArtifact,
+      setCeoExecutionPrompt,
       getState,
       getActiveRunId,
       getPendingExchange,
@@ -885,6 +902,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       isLoopRunning,
       canGenerateExecutionPrompt,
       getResultArtifact,
+      getCeoExecutionPrompt,
     ]
   );
 

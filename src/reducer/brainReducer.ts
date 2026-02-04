@@ -27,6 +27,7 @@ export const initialBrainState: BrainState = {
   mode: 'discussion',
   loopState: 'idle',
   resultArtifact: null,
+  ceoExecutionPrompt: null,
 };
 
 // -----------------------------------------------------------------------------
@@ -345,6 +346,16 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         ...state,
         loopState: 'idle',
         // Keep exchanges and resultArtifact intact
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // SET_CEO_EXECUTION_PROMPT (Phase 2D — Persist prompt for Executor Panel)
+    // -------------------------------------------------------------------------
+    case 'SET_CEO_EXECUTION_PROMPT': {
+      return {
+        ...state,
+        ceoExecutionPrompt: action.prompt,
       };
     }
 

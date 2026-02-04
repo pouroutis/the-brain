@@ -146,6 +146,8 @@ export interface BrainState {
   loopState: LoopState;
   /** Latest Claude Code execution result artifact (Phase 2C) */
   resultArtifact: string | null;
+  /** Persisted CEO execution prompt for Executor Panel (Phase 2D) */
+  ceoExecutionPrompt: string | null;
 }
 
 // -----------------------------------------------------------------------------
@@ -166,7 +168,8 @@ export type BrainAction =
   | { type: 'STOP_EXECUTION_LOOP' }
   | { type: 'PAUSE_EXECUTION_LOOP' }
   | { type: 'SET_RESULT_ARTIFACT'; artifact: string | null }
-  | { type: 'CEO_DONE_DETECTED' };
+  | { type: 'CEO_DONE_DETECTED' }
+  | { type: 'SET_CEO_EXECUTION_PROMPT'; prompt: string | null };
 
 // -----------------------------------------------------------------------------
 // Brain Events (Logging / Debugging) — 6 variants, contract-locked

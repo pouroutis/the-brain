@@ -53,9 +53,15 @@ function createAgentResponse(agent: 'claude' | 'gemini'): AgentResponse {
 }
 
 // Helper to run a sequence and return which agents were called
+// Sets mode to 'decision' to ensure gatekeeping is active (Discussion mode bypasses gatekeeping)
 async function runSequenceAndGetCalledAgents(
   result: { current: ReturnType<typeof useBrain> }
 ): Promise<string[]> {
+  // Set mode to 'decision' to enable gatekeeping (Discussion mode bypasses it)
+  act(() => {
+    result.current.setMode('decision');
+  });
+
   act(() => {
     result.current.submitPrompt('Test');
   });

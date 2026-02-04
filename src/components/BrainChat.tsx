@@ -9,6 +9,7 @@ import { ExchangeList } from './ExchangeList';
 import { PromptInput } from './PromptInput';
 import { ActionBar } from './ActionBar';
 import { WarningBanner } from './WarningBanner';
+import { ExecutorPanel } from './ExecutorPanel';
 import { buildCeoExecutionPrompt } from '../utils/executionPromptBuilder';
 import type { Agent, BrainMode } from '../types/brain';
 
@@ -29,6 +30,7 @@ export function BrainChat(): JSX.Element {
     pauseExecutionLoop,
     stopExecutionLoop,
     setResultArtifact,
+    setCeoExecutionPrompt,
     // Selectors
     getState,
     canSubmit,
@@ -44,6 +46,7 @@ export function BrainChat(): JSX.Element {
     isLoopRunning,
     canGenerateExecutionPrompt,
     getResultArtifact,
+    getCeoExecutionPrompt,
   } = useBrain();
 
   // ---------------------------------------------------------------------------
@@ -63,6 +66,7 @@ export function BrainChat(): JSX.Element {
   const loopRunning = isLoopRunning();
   const canGenerate = canGenerateExecutionPrompt();
   const resultArtifact = getResultArtifact();
+  const persistedCeoPrompt = getCeoExecutionPrompt();
 
   // ---------------------------------------------------------------------------
   // CEO Execution Prompt (memoized)
@@ -140,6 +144,13 @@ export function BrainChat(): JSX.Element {
     [setResultArtifact]
   );
 
+  const handleGenerateCeoPrompt = useCallback(
+    (prompt: string) => {
+      setCeoExecutionPrompt(prompt);
+    },
+    [setCeoExecutionPrompt]
+  );
+
   const handleStartExecution = useCallback(() => {
     startExecutionLoop();
   }, [startExecutionLoop]);
@@ -192,6 +203,15 @@ export function BrainChat(): JSX.Element {
         canGenerateExecutionPrompt={canGenerate}
         resultArtifact={resultArtifact}
         onSaveResultArtifact={handleSaveResultArtifact}
+        onGenerateCeoPrompt={handleGenerateCeoPrompt}
+      />
+
+      {/* Executor Panel (Project mode only) */}
+      <ExecutorPanel
+        ceoExecutionPrompt={persistedCeoPrompt}
+        resultArtifact={resultArtifact}
+        onSaveResultArtifact={handleSaveResultArtifact}
+        isProjectMode={mode === 'project'}
       />
     </div>
   );

@@ -191,6 +191,11 @@ describe('Orchestrator — Gatekeeping Flags', () => {
 
     const { result } = renderHook(() => useBrain(), { wrapper });
 
+    // Set mode to 'decision' to enable gatekeeping (Discussion mode bypasses it)
+    act(() => {
+      result.current.setMode('decision');
+    });
+
     act(() => {
       result.current.submitPrompt('Quick question');
     });
@@ -220,6 +225,11 @@ describe('Orchestrator — Gatekeeping Flags', () => {
 
     const { result } = renderHook(() => useBrain(), { wrapper });
 
+    // Set mode to 'decision' to enable gatekeeping (Discussion mode bypasses it)
+    act(() => {
+      result.current.setMode('decision');
+    });
+
     act(() => {
       result.current.submitPrompt('Code review');
     });
@@ -245,6 +255,11 @@ describe('Orchestrator — Gatekeeping Flags', () => {
     mockCallAgent.mockResolvedValueOnce(gptResponse);
 
     const { result } = renderHook(() => useBrain(), { wrapper });
+
+    // Set mode to 'decision' to enable gatekeeping (Discussion mode bypasses it)
+    act(() => {
+      result.current.setMode('decision');
+    });
 
     act(() => {
       result.current.submitPrompt('Hi');
@@ -280,6 +295,12 @@ describe('Orchestrator — Gatekeeping Flags', () => {
 
     const { result } = renderHook(() => useBrain(), { wrapper });
 
+    // Set mode to 'decision' to enable gatekeeping (Discussion mode bypasses it)
+    // This tests the fallback behavior when flags are missing, not Discussion mode
+    act(() => {
+      result.current.setMode('decision');
+    });
+
     act(() => {
       result.current.submitPrompt('Test fallback');
     });
@@ -304,6 +325,12 @@ describe('Orchestrator — Gatekeeping Flags', () => {
       .mockResolvedValueOnce(createMockResponse('gemini', 'Gemini after GPT error'));
 
     const { result } = renderHook(() => useBrain(), { wrapper });
+
+    // Set mode to 'decision' to enable gatekeeping (Discussion mode bypasses it)
+    // This tests the fallback behavior when GPT errors, not Discussion mode
+    act(() => {
+      result.current.setMode('decision');
+    });
 
     act(() => {
       result.current.submitPrompt('GPT will fail');
@@ -561,6 +588,11 @@ describe('Orchestrator — Double Submit Protection', () => {
 
     const { result } = renderHook(() => useBrain(), { wrapper });
 
+    // Set mode to 'decision' to enable gatekeeping (Discussion mode bypasses it)
+    act(() => {
+      result.current.setMode('decision');
+    });
+
     // First submission
     let runId1: string = '';
     act(() => {
@@ -600,6 +632,11 @@ describe('Orchestrator — Clear Board', () => {
 
     const { result } = renderHook(() => useBrain(), { wrapper });
 
+    // Set mode to 'decision' to enable gatekeeping (Discussion mode bypasses it)
+    act(() => {
+      result.current.setMode('decision');
+    });
+
     // Submit and complete first exchange
     act(() => {
       result.current.submitPrompt('First');
@@ -621,7 +658,7 @@ describe('Orchestrator — Clear Board', () => {
 
   it('clearBoard is blocked while processing', async () => {
     let gptResolve: (value: AgentResponse) => void;
-    
+
     // First call resolves immediately, second hangs
     let callCount = 0;
     mockCallAgent.mockImplementation(() => {
@@ -635,6 +672,11 @@ describe('Orchestrator — Clear Board', () => {
     });
 
     const { result } = renderHook(() => useBrain(), { wrapper });
+
+    // Set mode to 'decision' to enable gatekeeping (Discussion mode bypasses it)
+    act(() => {
+      result.current.setMode('decision');
+    });
 
     // First exchange completes
     act(() => {

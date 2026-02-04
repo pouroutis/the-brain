@@ -705,6 +705,7 @@ describe('brainReducer — CLEAR', () => {
       mode: 'discussion',
       loopState: 'idle',
       resultArtifact: null,
+      ceoExecutionPrompt: null,
     };
 
     const action: BrainAction = { type: 'CLEAR' };
@@ -740,6 +741,7 @@ describe('brainReducer — State Invariants', () => {
       'mode',
       'loopState',
       'resultArtifact',
+      'ceoExecutionPrompt',
     ].sort();
 
     const actualKeys = Object.keys(initialBrainState).sort();
