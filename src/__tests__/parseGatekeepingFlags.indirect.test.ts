@@ -1,6 +1,6 @@
 // =============================================================================
-// The Brain — parseGatekeepingFlags Indirect Tests (Phase 3B)
-// Tests gatekeeping logic through orchestrator behavior observation
+// The Brain — Phase 2F Force-All Tests (Gatekeeping Disabled for MVP)
+// Tests that ALL modes call ALL agents regardless of gatekeeping flags
 // =============================================================================
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -20,6 +20,11 @@ vi.mock('../api/agentClient', () => ({
     claude: 'https://mock.supabase.co/functions/v1/anthropic-proxy',
     gemini: 'https://mock.supabase.co/functions/v1/gemini-proxy',
   },
+}));
+
+vi.mock('../api/ghostClient', () => ({
+  callGhostOrchestrator: vi.fn(),
+  isGhostEnabled: vi.fn().mockReturnValue(false),
 }));
 
 import { callAgent } from '../api/agentClient';
@@ -53,15 +58,9 @@ function createAgentResponse(agent: 'claude' | 'gemini'): AgentResponse {
 }
 
 // Helper to run a sequence and return which agents were called
-// Sets mode to 'decision' to ensure gatekeeping is active (Discussion mode bypasses gatekeeping)
 async function runSequenceAndGetCalledAgents(
   result: { current: ReturnType<typeof useBrain> }
 ): Promise<string[]> {
-  // Set mode to 'decision' to enable gatekeeping (Discussion mode bypasses it)
-  act(() => {
-    result.current.setMode('decision');
-  });
-
   act(() => {
     result.current.submitPrompt('Test');
   });
@@ -82,11 +81,11 @@ beforeEach(() => {
 });
 
 // -----------------------------------------------------------------------------
-// Valid Flag Parsing Tests
+// Phase 2F: Force-All Tests — Gatekeeping Flags Ignored
 // -----------------------------------------------------------------------------
 
-describe('parseGatekeepingFlags (indirect) — Valid Flags', () => {
-  it('parses CALL_CLAUDE=true CALL_GEMINI=true → calls both', async () => {
+describe('Phase 2F Force-All — Gatekeeping Flags Ignored', () => {
+  it('calls all 3 agents when flags say CALL_CLAUDE=true CALL_GEMINI=true', async () => {
     const gptContent = `
 Here is my analysis of your question.
 
@@ -107,7 +106,7 @@ REASON_TAG=comprehensive
     expect(calledAgents).toEqual(['gpt', 'claude', 'gemini']);
   });
 
-  it('parses CALL_CLAUDE=false CALL_GEMINI=true → skips Claude', async () => {
+  it('calls all 3 agents when flags say CALL_CLAUDE=false CALL_GEMINI=true (flags ignored)', async () => {
     const gptContent = `
 Simple factual question.
 
@@ -119,15 +118,17 @@ REASON_TAG=factual
 `;
     mockCallAgent
       .mockResolvedValueOnce(createGPTResponse(gptContent))
+      .mockResolvedValueOnce(createAgentResponse('claude'))
       .mockResolvedValueOnce(createAgentResponse('gemini'));
 
     const { result } = renderHook(() => useBrain(), { wrapper });
     const calledAgents = await runSequenceAndGetCalledAgents(result);
 
-    expect(calledAgents).toEqual(['gpt', 'gemini']);
+    // Phase 2F: All agents called despite CALL_CLAUDE=false
+    expect(calledAgents).toEqual(['gpt', 'claude', 'gemini']);
   });
 
-  it('parses CALL_CLAUDE=true CALL_GEMINI=false → skips Gemini', async () => {
+  it('calls all 3 agents when flags say CALL_CLAUDE=true CALL_GEMINI=false (flags ignored)', async () => {
     const gptContent = `
 Code analysis needed.
 
@@ -139,15 +140,17 @@ REASON_TAG=code_review
 `;
     mockCallAgent
       .mockResolvedValueOnce(createGPTResponse(gptContent))
-      .mockResolvedValueOnce(createAgentResponse('claude'));
+      .mockResolvedValueOnce(createAgentResponse('claude'))
+      .mockResolvedValueOnce(createAgentResponse('gemini'));
 
     const { result } = renderHook(() => useBrain(), { wrapper });
     const calledAgents = await runSequenceAndGetCalledAgents(result);
 
-    expect(calledAgents).toEqual(['gpt', 'claude']);
+    // Phase 2F: All agents called despite CALL_GEMINI=false
+    expect(calledAgents).toEqual(['gpt', 'claude', 'gemini']);
   });
 
-  it('parses CALL_CLAUDE=false CALL_GEMINI=false → GPT only', async () => {
+  it('calls all 3 agents when flags say both false (flags ignored)', async () => {
     const gptContent = `
 Hi there! Just a greeting.
 
@@ -157,63 +160,6 @@ CALL_GEMINI=false
 REASON_TAG=greeting
 ---
 `;
-    mockCallAgent.mockResolvedValueOnce(createGPTResponse(gptContent));
-
-    const { result } = renderHook(() => useBrain(), { wrapper });
-    const calledAgents = await runSequenceAndGetCalledAgents(result);
-
-    expect(calledAgents).toEqual(['gpt']);
-  });
-
-  it('handles case-insensitive flag values (TRUE/FALSE)', async () => {
-    const gptContent = `
-Mixed case test.
-
----
-CALL_CLAUDE=TRUE
-CALL_GEMINI=FALSE
-REASON_TAG=case_test
----
-`;
-    mockCallAgent
-      .mockResolvedValueOnce(createGPTResponse(gptContent))
-      .mockResolvedValueOnce(createAgentResponse('claude'));
-
-    const { result } = renderHook(() => useBrain(), { wrapper });
-    const calledAgents = await runSequenceAndGetCalledAgents(result);
-
-    expect(calledAgents).toEqual(['gpt', 'claude']);
-  });
-
-  it('handles whitespace around equals sign', async () => {
-    const gptContent = `
-Whitespace tolerance test.
-
----
-CALL_CLAUDE = true
-CALL_GEMINI = false
-REASON_TAG = whitespace_test
----
-`;
-    mockCallAgent
-      .mockResolvedValueOnce(createGPTResponse(gptContent))
-      .mockResolvedValueOnce(createAgentResponse('claude'));
-
-    const { result } = renderHook(() => useBrain(), { wrapper });
-    const calledAgents = await runSequenceAndGetCalledAgents(result);
-
-    expect(calledAgents).toEqual(['gpt', 'claude']);
-  });
-
-  it('handles flags without REASON_TAG (defaults to "default")', async () => {
-    const gptContent = `
-No reason tag.
-
----
-CALL_CLAUDE=true
-CALL_GEMINI=true
----
-`;
     mockCallAgent
       .mockResolvedValueOnce(createGPTResponse(gptContent))
       .mockResolvedValueOnce(createAgentResponse('claude'))
@@ -222,58 +168,11 @@ CALL_GEMINI=true
     const { result } = renderHook(() => useBrain(), { wrapper });
     const calledAgents = await runSequenceAndGetCalledAgents(result);
 
-    expect(calledAgents).toEqual(['gpt', 'claude', 'gemini']);
-  });
-});
-
-// -----------------------------------------------------------------------------
-// Invalid / Missing Flags — Fallback Behavior
-// -----------------------------------------------------------------------------
-
-describe('parseGatekeepingFlags (indirect) — Fallback Behavior', () => {
-  it('missing CALL_CLAUDE flag → fallback calls all agents', async () => {
-    const gptContent = `
-Missing Claude flag.
-
----
-CALL_GEMINI=false
-REASON_TAG=incomplete
----
-`;
-    mockCallAgent
-      .mockResolvedValueOnce(createGPTResponse(gptContent))
-      .mockResolvedValueOnce(createAgentResponse('claude'))
-      .mockResolvedValueOnce(createAgentResponse('gemini'));
-
-    const { result } = renderHook(() => useBrain(), { wrapper });
-    const calledAgents = await runSequenceAndGetCalledAgents(result);
-
-    // Fallback: call all agents
+    // Phase 2F: All agents called despite both flags=false
     expect(calledAgents).toEqual(['gpt', 'claude', 'gemini']);
   });
 
-  it('missing CALL_GEMINI flag → fallback calls all agents', async () => {
-    const gptContent = `
-Missing Gemini flag.
-
----
-CALL_CLAUDE=true
-REASON_TAG=incomplete
----
-`;
-    mockCallAgent
-      .mockResolvedValueOnce(createGPTResponse(gptContent))
-      .mockResolvedValueOnce(createAgentResponse('claude'))
-      .mockResolvedValueOnce(createAgentResponse('gemini'));
-
-    const { result } = renderHook(() => useBrain(), { wrapper });
-    const calledAgents = await runSequenceAndGetCalledAgents(result);
-
-    // Fallback: call all agents
-    expect(calledAgents).toEqual(['gpt', 'claude', 'gemini']);
-  });
-
-  it('no flags block at all → fallback calls all agents', async () => {
+  it('calls all 3 agents with no flags at all', async () => {
     const gptContent = `
 Just a regular response with no flags at all.
 No dashes, no structure.
@@ -289,41 +188,7 @@ No dashes, no structure.
     expect(calledAgents).toEqual(['gpt', 'claude', 'gemini']);
   });
 
-  it('malformed flag values → fallback calls all agents', async () => {
-    const gptContent = `
-Bad values.
-
----
-CALL_CLAUDE=yes
-CALL_GEMINI=no
-REASON_TAG=malformed
----
-`;
-    mockCallAgent
-      .mockResolvedValueOnce(createGPTResponse(gptContent))
-      .mockResolvedValueOnce(createAgentResponse('claude'))
-      .mockResolvedValueOnce(createAgentResponse('gemini'));
-
-    const { result } = renderHook(() => useBrain(), { wrapper });
-    const calledAgents = await runSequenceAndGetCalledAgents(result);
-
-    // "yes" and "no" don't match true/false → fallback
-    expect(calledAgents).toEqual(['gpt', 'claude', 'gemini']);
-  });
-
-  it('empty GPT response → fallback calls all agents', async () => {
-    mockCallAgent
-      .mockResolvedValueOnce(createGPTResponse(''))
-      .mockResolvedValueOnce(createAgentResponse('claude'))
-      .mockResolvedValueOnce(createAgentResponse('gemini'));
-
-    const { result } = renderHook(() => useBrain(), { wrapper });
-    const calledAgents = await runSequenceAndGetCalledAgents(result);
-
-    expect(calledAgents).toEqual(['gpt', 'claude', 'gemini']);
-  });
-
-  it('GPT error status → fallback calls all agents', async () => {
+  it('calls all 3 agents when GPT errors', async () => {
     const gptError: AgentResponse = {
       agent: 'gpt',
       timestamp: Date.now(),
@@ -343,7 +208,7 @@ REASON_TAG=malformed
     expect(calledAgents).toEqual(['gpt', 'claude', 'gemini']);
   });
 
-  it('GPT timeout status → fallback calls all agents', async () => {
+  it('calls all 3 agents when GPT times out', async () => {
     const gptTimeout: AgentResponse = {
       agent: 'gpt',
       timestamp: Date.now(),
@@ -363,71 +228,57 @@ REASON_TAG=malformed
 });
 
 // -----------------------------------------------------------------------------
-// Edge Cases
+// Mode-Specific Force-All Tests
 // -----------------------------------------------------------------------------
 
-describe('parseGatekeepingFlags (indirect) — Edge Cases', () => {
-  it('flags embedded in prose are still parsed', async () => {
-    const gptContent = `
-Here is my detailed response to your query about machine learning.
-
-I believe we need additional perspectives, so:
-CALL_CLAUDE=true
-CALL_GEMINI=false
-REASON_TAG=ml_analysis
-
-Let me know if you have questions.
-`;
+describe('Phase 2F Force-All — All Modes', () => {
+  it('Discussion mode calls all 3 agents', async () => {
     mockCallAgent
-      .mockResolvedValueOnce(createGPTResponse(gptContent))
-      .mockResolvedValueOnce(createAgentResponse('claude'));
-
-    const { result } = renderHook(() => useBrain(), { wrapper });
-    const calledAgents = await runSequenceAndGetCalledAgents(result);
-
-    expect(calledAgents).toEqual(['gpt', 'claude']);
-  });
-
-  it('handles multiple dashes blocks (uses regex matching)', async () => {
-    const gptContent = `
-Some text
----
-Other stuff
----
-CALL_CLAUDE=false
-CALL_GEMINI=true
-REASON_TAG=multi_block
----
-`;
-    mockCallAgent
-      .mockResolvedValueOnce(createGPTResponse(gptContent))
+      .mockResolvedValueOnce(createGPTResponse('GPT response'))
+      .mockResolvedValueOnce(createAgentResponse('claude'))
       .mockResolvedValueOnce(createAgentResponse('gemini'));
 
     const { result } = renderHook(() => useBrain(), { wrapper });
+
+    // Default mode is discussion
+    expect(result.current.getMode()).toBe('discussion');
+
     const calledAgents = await runSequenceAndGetCalledAgents(result);
 
-    expect(calledAgents).toEqual(['gpt', 'gemini']);
+    expect(calledAgents).toEqual(['gpt', 'claude', 'gemini']);
   });
 
-  it('flags with extra text on same line are parsed', async () => {
-    const gptContent = `
-Response.
-
----
-CALL_CLAUDE=true (Claude should handle this)
-CALL_GEMINI=false (skip Gemini)
-REASON_TAG=inline_comments
----
-`;
-    // This should still work because regex matches CALL_CLAUDE=true
+  it('Decision mode calls all 3 agents', async () => {
     mockCallAgent
-      .mockResolvedValueOnce(createGPTResponse(gptContent))
-      .mockResolvedValueOnce(createAgentResponse('claude'));
+      .mockResolvedValueOnce(createGPTResponse('GPT response'))
+      .mockResolvedValueOnce(createAgentResponse('claude'))
+      .mockResolvedValueOnce(createAgentResponse('gemini'));
 
     const { result } = renderHook(() => useBrain(), { wrapper });
+
+    act(() => {
+      result.current.setMode('decision');
+    });
+
     const calledAgents = await runSequenceAndGetCalledAgents(result);
 
-    // Regex should match 'true' even with trailing text
-    expect(calledAgents).toEqual(['gpt', 'claude']);
+    expect(calledAgents).toEqual(['gpt', 'claude', 'gemini']);
+  });
+
+  it('Project mode calls all 3 agents', async () => {
+    mockCallAgent
+      .mockResolvedValueOnce(createGPTResponse('GPT response'))
+      .mockResolvedValueOnce(createAgentResponse('claude'))
+      .mockResolvedValueOnce(createAgentResponse('gemini'));
+
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    act(() => {
+      result.current.setMode('project');
+    });
+
+    const calledAgents = await runSequenceAndGetCalledAgents(result);
+
+    expect(calledAgents).toEqual(['gpt', 'claude', 'gemini']);
   });
 });

@@ -186,21 +186,23 @@ describe('Orchestrator — Happy Path', () => {
 });
 
 // -----------------------------------------------------------------------------
-// Gatekeeping Flag Tests (Real Timers)
+// Gatekeeping Flag Tests (Phase 2F: Flags IGNORED — All Modes Force All Agents)
 // -----------------------------------------------------------------------------
 
-describe('Orchestrator — Gatekeeping Flags', () => {
-  it('skips Claude when CALL_CLAUDE=false', async () => {
+describe('Orchestrator — Gatekeeping Flags (MVP: Ignored)', () => {
+  it('calls all 3 agents even when CALL_CLAUDE=false (flags ignored in MVP)', async () => {
     const gptResponse = createGPTResponseWithFlags(false, true, 'skip_claude');
-    const geminiResponse = createMockResponse('gemini', 'Gemini only');
+    const claudeResponse = createMockResponse('claude', 'Claude response');
+    const geminiResponse = createMockResponse('gemini', 'Gemini response');
 
     mockCallAgent
       .mockResolvedValueOnce(gptResponse)
+      .mockResolvedValueOnce(claudeResponse)
       .mockResolvedValueOnce(geminiResponse);
 
     const { result } = renderHook(() => useBrain(), { wrapper });
 
-    // Set mode to 'decision' to enable gatekeeping (Discussion mode bypasses it)
+    // Set mode to 'decision' — but flags are ignored in MVP
     act(() => {
       result.current.setMode('decision');
     });
@@ -213,28 +215,28 @@ describe('Orchestrator — Gatekeeping Flags', () => {
       expect(result.current.isProcessing()).toBe(false);
     });
 
-    // Only GPT and Gemini called
-    expect(mockCallAgent).toHaveBeenCalledTimes(2);
-    expect(mockCallAgent).toHaveBeenNthCalledWith(1, 'gpt', expect.any(String), expect.any(String), expect.any(AbortController), expect.objectContaining({ callIndex: 1, exchanges: expect.any(Array) }));
-    expect(mockCallAgent).toHaveBeenNthCalledWith(2, 'gemini', expect.any(String), expect.any(String), expect.any(AbortController), expect.objectContaining({ callIndex: 2, exchanges: expect.any(Array) }));
+    // Phase 2F: All 3 agents called (flags ignored)
+    expect(mockCallAgent).toHaveBeenCalledTimes(3);
 
     const exchange = result.current.getExchanges()[0];
     expect(exchange.responsesByAgent.gpt).toBeDefined();
-    expect(exchange.responsesByAgent.claude).toBeUndefined();
+    expect(exchange.responsesByAgent.claude).toBeDefined();
     expect(exchange.responsesByAgent.gemini).toBeDefined();
   });
 
-  it('skips Gemini when CALL_GEMINI=false', async () => {
+  it('calls all 3 agents even when CALL_GEMINI=false (flags ignored in MVP)', async () => {
     const gptResponse = createGPTResponseWithFlags(true, false, 'skip_gemini');
-    const claudeResponse = createMockResponse('claude', 'Claude only');
+    const claudeResponse = createMockResponse('claude', 'Claude response');
+    const geminiResponse = createMockResponse('gemini', 'Gemini response');
 
     mockCallAgent
       .mockResolvedValueOnce(gptResponse)
-      .mockResolvedValueOnce(claudeResponse);
+      .mockResolvedValueOnce(claudeResponse)
+      .mockResolvedValueOnce(geminiResponse);
 
     const { result } = renderHook(() => useBrain(), { wrapper });
 
-    // Set mode to 'decision' to enable gatekeeping (Discussion mode bypasses it)
+    // Set mode to 'decision' — but flags are ignored in MVP
     act(() => {
       result.current.setMode('decision');
     });
@@ -247,25 +249,28 @@ describe('Orchestrator — Gatekeeping Flags', () => {
       expect(result.current.isProcessing()).toBe(false);
     });
 
-    // Only GPT and Claude called
-    expect(mockCallAgent).toHaveBeenCalledTimes(2);
-    expect(mockCallAgent).toHaveBeenNthCalledWith(1, 'gpt', expect.any(String), expect.any(String), expect.any(AbortController), expect.objectContaining({ callIndex: 1, exchanges: expect.any(Array) }));
-    expect(mockCallAgent).toHaveBeenNthCalledWith(2, 'claude', expect.any(String), expect.any(String), expect.any(AbortController), expect.objectContaining({ callIndex: 2, exchanges: expect.any(Array) }));
+    // Phase 2F: All 3 agents called (flags ignored)
+    expect(mockCallAgent).toHaveBeenCalledTimes(3);
 
     const exchange = result.current.getExchanges()[0];
     expect(exchange.responsesByAgent.gpt).toBeDefined();
     expect(exchange.responsesByAgent.claude).toBeDefined();
-    expect(exchange.responsesByAgent.gemini).toBeUndefined();
+    expect(exchange.responsesByAgent.gemini).toBeDefined();
   });
 
-  it('skips both Claude and Gemini when both flags are false', async () => {
+  it('calls all 3 agents even when both flags are false (flags ignored in MVP)', async () => {
     const gptResponse = createGPTResponseWithFlags(false, false, 'gpt_only');
+    const claudeResponse = createMockResponse('claude', 'Claude response');
+    const geminiResponse = createMockResponse('gemini', 'Gemini response');
 
-    mockCallAgent.mockResolvedValueOnce(gptResponse);
+    mockCallAgent
+      .mockResolvedValueOnce(gptResponse)
+      .mockResolvedValueOnce(claudeResponse)
+      .mockResolvedValueOnce(geminiResponse);
 
     const { result } = renderHook(() => useBrain(), { wrapper });
 
-    // Set mode to 'decision' to enable gatekeeping (Discussion mode bypasses it)
+    // Set mode to 'decision' — but flags are ignored in MVP
     act(() => {
       result.current.setMode('decision');
     });
@@ -278,18 +283,17 @@ describe('Orchestrator — Gatekeeping Flags', () => {
       expect(result.current.isProcessing()).toBe(false);
     });
 
-    // Only GPT called
-    expect(mockCallAgent).toHaveBeenCalledTimes(1);
-    expect(mockCallAgent).toHaveBeenCalledWith('gpt', expect.any(String), expect.any(String), expect.any(AbortController), expect.objectContaining({ callIndex: 1, exchanges: expect.any(Array) }));
+    // Phase 2F: All 3 agents called (flags ignored)
+    expect(mockCallAgent).toHaveBeenCalledTimes(3);
 
     const exchange = result.current.getExchanges()[0];
     expect(exchange.responsesByAgent.gpt).toBeDefined();
-    expect(exchange.responsesByAgent.claude).toBeUndefined();
-    expect(exchange.responsesByAgent.gemini).toBeUndefined();
+    expect(exchange.responsesByAgent.claude).toBeDefined();
+    expect(exchange.responsesByAgent.gemini).toBeDefined();
   });
 
-  it('calls all agents when GPT response has no flags (fallback)', async () => {
-    // GPT response without flags
+  it('calls all agents when GPT response has no flags (consistent with force-all)', async () => {
+    // GPT response without flags — same behavior as with flags in MVP
     const gptResponseNoFlags: AgentResponse = {
       agent: 'gpt',
       timestamp: Date.now(),
@@ -299,26 +303,25 @@ describe('Orchestrator — Gatekeeping Flags', () => {
 
     mockCallAgent
       .mockResolvedValueOnce(gptResponseNoFlags)
-      .mockResolvedValueOnce(createMockResponse('claude', 'Claude fallback'))
-      .mockResolvedValueOnce(createMockResponse('gemini', 'Gemini fallback'));
+      .mockResolvedValueOnce(createMockResponse('claude', 'Claude response'))
+      .mockResolvedValueOnce(createMockResponse('gemini', 'Gemini response'));
 
     const { result } = renderHook(() => useBrain(), { wrapper });
 
-    // Set mode to 'decision' to enable gatekeeping (Discussion mode bypasses it)
-    // This tests the fallback behavior when flags are missing, not Discussion mode
+    // Set mode to 'decision' — force-all applies regardless of flags
     act(() => {
       result.current.setMode('decision');
     });
 
     act(() => {
-      result.current.submitPrompt('Test fallback');
+      result.current.submitPrompt('Test no flags');
     });
 
     await waitFor(() => {
       expect(result.current.isProcessing()).toBe(false);
     });
 
-    // All three agents called (fallback behavior)
+    // All three agents called (force-all behavior)
     expect(mockCallAgent).toHaveBeenCalledTimes(3);
 
     // Exchange exists
@@ -588,19 +591,24 @@ describe('Orchestrator — Timeout', () => {
 
 describe('Orchestrator — Double Submit Protection', () => {
   it('blocks second submission while processing', async () => {
-    let gptResolve: (value: AgentResponse) => void;
-    const gptPromise = new Promise<AgentResponse>((resolve) => {
-      gptResolve = resolve;
-    });
+    let firstCallResolve: (value: AgentResponse) => void;
 
-    mockCallAgent.mockImplementation(() => gptPromise);
+    // Phase 2F: Force-all means 3 calls per exchange
+    // First call hangs, subsequent calls resolve immediately
+    let callCount = 0;
+    mockCallAgent.mockImplementation((agent) => {
+      callCount++;
+      if (callCount === 1) {
+        // First call (GPT) hangs until resolved
+        return new Promise((resolve) => {
+          firstCallResolve = resolve;
+        });
+      }
+      // Subsequent calls resolve immediately with correct agent type
+      return Promise.resolve(createMockResponse(agent, `${agent} response`));
+    });
 
     const { result } = renderHook(() => useBrain(), { wrapper });
-
-    // Set mode to 'decision' to enable gatekeeping (Discussion mode bypasses it)
-    act(() => {
-      result.current.setMode('decision');
-    });
 
     // First submission
     let runId1: string = '';
@@ -620,9 +628,9 @@ describe('Orchestrator — Double Submit Protection', () => {
     // Second submission should return empty string (blocked)
     expect(runId2).toBe('');
 
-    // Cleanup - resolve GPT
+    // Cleanup - resolve first call (GPT), then Claude/Gemini will complete immediately
     await act(async () => {
-      gptResolve!(createGPTResponseWithFlags(false, false));
+      firstCallResolve!(createMockResponse('gpt', 'GPT response'));
     });
 
     await waitFor(() => {
@@ -637,16 +645,14 @@ describe('Orchestrator — Double Submit Protection', () => {
 
 describe('Orchestrator — Clear Board', () => {
   it('clearBoard removes exchanges when not processing', async () => {
-    mockCallAgent.mockResolvedValue(createGPTResponseWithFlags(false, false));
+    // Phase 2F: Force-all means all 3 agents called, mock must return correct agent type
+    mockCallAgent.mockImplementation((agent) => {
+      return Promise.resolve(createMockResponse(agent, `${agent} response`));
+    });
 
     const { result } = renderHook(() => useBrain(), { wrapper });
 
-    // Set mode to 'decision' to enable gatekeeping (Discussion mode bypasses it)
-    act(() => {
-      result.current.setMode('decision');
-    });
-
-    // Submit and complete first exchange
+    // Submit and complete first exchange (all 3 agents)
     act(() => {
       result.current.submitPrompt('First');
     });
@@ -666,28 +672,27 @@ describe('Orchestrator — Clear Board', () => {
   });
 
   it('clearBoard is blocked while processing', async () => {
-    let gptResolve: (value: AgentResponse) => void;
+    let secondExchangeResolve: (value: AgentResponse) => void;
 
-    // First call resolves immediately, second hangs
+    // Phase 2F: Force-all means 3 calls per exchange
+    // First exchange (calls 1-3) resolves immediately
+    // Second exchange (call 4+) hangs until resolved
     let callCount = 0;
-    mockCallAgent.mockImplementation(() => {
+    mockCallAgent.mockImplementation((agent) => {
       callCount++;
-      if (callCount === 1) {
-        return Promise.resolve(createGPTResponseWithFlags(false, false));
+      // First exchange: calls 1-3 (GPT, Claude, Gemini) resolve immediately
+      if (callCount <= 3) {
+        return Promise.resolve(createMockResponse(agent, `${agent} response`));
       }
+      // Second exchange: call 4 (GPT) hangs
       return new Promise((resolve) => {
-        gptResolve = resolve;
+        secondExchangeResolve = resolve;
       });
     });
 
     const { result } = renderHook(() => useBrain(), { wrapper });
 
-    // Set mode to 'decision' to enable gatekeeping (Discussion mode bypasses it)
-    act(() => {
-      result.current.setMode('decision');
-    });
-
-    // First exchange completes
+    // First exchange completes (3 agent calls)
     act(() => {
       result.current.submitPrompt('Setup');
     });
@@ -698,7 +703,7 @@ describe('Orchestrator — Clear Board', () => {
 
     expect(result.current.getExchanges()).toHaveLength(1);
 
-    // Start second exchange (will hang)
+    // Start second exchange (will hang on GPT call)
     act(() => {
       result.current.submitPrompt('Processing');
     });
@@ -713,9 +718,13 @@ describe('Orchestrator — Clear Board', () => {
     // Should still have the exchange (clear blocked)
     expect(result.current.getExchanges()).toHaveLength(1);
 
-    // Cleanup
+    // Cleanup - resolve second exchange GPT, then Claude/Gemini will also resolve
+    mockCallAgent.mockImplementation((agent) => {
+      return Promise.resolve(createMockResponse(agent, `${agent} response`));
+    });
+
     await act(async () => {
-      gptResolve!(createGPTResponseWithFlags(false, false));
+      secondExchangeResolve!(createMockResponse('gpt', 'GPT response'));
     });
 
     await waitFor(() => {
@@ -766,5 +775,136 @@ describe('Orchestrator — Discussion Mode Bypasses Ghost', () => {
     expect(exchange.responsesByAgent.gpt).toBeDefined();
     expect(exchange.responsesByAgent.claude).toBeDefined();
     expect(exchange.responsesByAgent.gemini).toBeDefined();
+  });
+});
+
+// -----------------------------------------------------------------------------
+// Phase 2F: Force-All in Decision + Project Modes
+// -----------------------------------------------------------------------------
+
+describe('Orchestrator — Phase 2F Force-All Modes', () => {
+  it('Decision mode calls 3/3 agents even when GPT flags say skip both', async () => {
+    // GPT returns flags saying skip Claude and Gemini
+    const gptResponse = createGPTResponseWithFlags(false, false, 'skip_all');
+    const claudeResponse = createMockResponse('claude', 'Claude response');
+    const geminiResponse = createMockResponse('gemini', 'Gemini response');
+
+    mockCallAgent
+      .mockResolvedValueOnce(gptResponse)
+      .mockResolvedValueOnce(claudeResponse)
+      .mockResolvedValueOnce(geminiResponse);
+
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    // Set mode to 'decision' (should force all agents)
+    act(() => {
+      result.current.setMode('decision');
+    });
+
+    act(() => {
+      result.current.submitPrompt('Test decision mode force-all');
+    });
+
+    await waitFor(() => {
+      expect(result.current.isProcessing()).toBe(false);
+    });
+
+    // CRITICAL: All 3 agents must be called (Calls 3/3) despite flags
+    expect(mockCallAgent).toHaveBeenCalledTimes(3);
+
+    const exchange = result.current.getExchanges()[0];
+    expect(exchange.responsesByAgent.gpt).toBeDefined();
+    expect(exchange.responsesByAgent.claude).toBeDefined();
+    expect(exchange.responsesByAgent.gemini).toBeDefined();
+  });
+
+  it('Project mode calls 3/3 agents even when GPT flags say skip both', async () => {
+    // GPT returns flags saying skip Claude and Gemini
+    const gptResponse = createGPTResponseWithFlags(false, false, 'skip_all');
+    const claudeResponse = createMockResponse('claude', 'Claude response');
+    const geminiResponse = createMockResponse('gemini', 'Gemini response');
+
+    mockCallAgent
+      .mockResolvedValueOnce(gptResponse)
+      .mockResolvedValueOnce(claudeResponse)
+      .mockResolvedValueOnce(geminiResponse);
+
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    // Set mode to 'project' (should force all agents)
+    act(() => {
+      result.current.setMode('project');
+    });
+
+    act(() => {
+      result.current.submitPrompt('Test project mode force-all');
+    });
+
+    await waitFor(() => {
+      expect(result.current.isProcessing()).toBe(false);
+    });
+
+    // CRITICAL: All 3 agents must be called (Calls 3/3) despite flags
+    expect(mockCallAgent).toHaveBeenCalledTimes(3);
+
+    const exchange = result.current.getExchanges()[0];
+    expect(exchange.responsesByAgent.gpt).toBeDefined();
+    expect(exchange.responsesByAgent.claude).toBeDefined();
+    expect(exchange.responsesByAgent.gemini).toBeDefined();
+  });
+});
+
+// -----------------------------------------------------------------------------
+// Phase 2F: Mark DONE Button
+// -----------------------------------------------------------------------------
+
+describe('Orchestrator — Phase 2F Mark DONE', () => {
+  it('markDone sets loopState to idle when running', async () => {
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    // Set up project mode and start execution loop
+    act(() => {
+      result.current.setMode('project');
+    });
+
+    act(() => {
+      result.current.startExecutionLoop();
+    });
+
+    expect(result.current.getLoopState()).toBe('running');
+
+    // Click Mark DONE
+    act(() => {
+      result.current.markDone();
+    });
+
+    // Loop state should be idle
+    expect(result.current.getLoopState()).toBe('idle');
+  });
+
+  it('markDone works even when loopState is paused', async () => {
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    // Set up project mode, start, then pause
+    act(() => {
+      result.current.setMode('project');
+    });
+
+    act(() => {
+      result.current.startExecutionLoop();
+    });
+
+    act(() => {
+      result.current.pauseExecutionLoop();
+    });
+
+    expect(result.current.getLoopState()).toBe('paused');
+
+    // markDone should still work
+    act(() => {
+      result.current.markDone();
+    });
+
+    expect(result.current.getLoopState()).toBe('idle');
   });
 });

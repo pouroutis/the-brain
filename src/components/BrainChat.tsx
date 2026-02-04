@@ -29,6 +29,7 @@ export function BrainChat(): JSX.Element {
     startExecutionLoop,
     pauseExecutionLoop,
     stopExecutionLoop,
+    markDone,
     setResultArtifact,
     setCeoExecutionPrompt,
     // Selectors
@@ -163,6 +164,10 @@ export function BrainChat(): JSX.Element {
     stopExecutionLoop();
   }, [stopExecutionLoop]);
 
+  const handleMarkDone = useCallback(() => {
+    markDone();
+  }, [markDone]);
+
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
@@ -197,6 +202,7 @@ export function BrainChat(): JSX.Element {
         onStartExecution={handleStartExecution}
         onPauseExecution={handlePauseExecution}
         onStopExecution={handleStopExecution}
+        onMarkDone={handleMarkDone}
         ceo={ceo}
         onCeoChange={handleCeoChange}
         ceoExecutionPrompt={ceoExecutionPrompt}

@@ -33,6 +33,8 @@ interface ActionBarProps {
   onPauseExecution: () => void;
   /** Callback to stop execution loop (clears context) */
   onStopExecution: () => void;
+  /** Callback to mark execution as DONE (Phase 2F — deterministic termination) */
+  onMarkDone: () => void;
   /** CEO execution prompt to copy (null if not available) */
   ceoExecutionPrompt?: string | null;
   /** Current CEO agent */
@@ -86,6 +88,7 @@ export function ActionBar({
   onStartExecution,
   onPauseExecution,
   onStopExecution,
+  onMarkDone,
   ceoExecutionPrompt,
   ceo = 'gpt',
   onCeoChange,
@@ -263,13 +266,23 @@ export function ActionBar({
           {(isRunning || isPaused) && (
             <>
               {isRunning && (
-                <button
-                  className="action-bar__button action-bar__button--pause"
-                  onClick={onPauseExecution}
-                  title="Pause execution loop, return to Discussion mode"
-                >
-                  PAUSE
-                </button>
+                <>
+                  <button
+                    className="action-bar__button action-bar__button--done"
+                    onClick={onMarkDone}
+                    disabled={isProcessing}
+                    title="Mark execution as DONE (terminates loop, unlocks controls)"
+                  >
+                    Mark DONE
+                  </button>
+                  <button
+                    className="action-bar__button action-bar__button--pause"
+                    onClick={onPauseExecution}
+                    title="Pause execution loop, return to Discussion mode"
+                  >
+                    PAUSE
+                  </button>
+                </>
               )}
               <button
                 className="action-bar__button action-bar__button--stop"

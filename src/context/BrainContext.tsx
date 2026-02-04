@@ -147,6 +147,8 @@ interface BrainActions {
   pauseExecutionLoop: () => void;
   /** Stop execution loop and clear context */
   stopExecutionLoop: () => void;
+  /** Mark execution as DONE (Phase 2F — deterministic termination via UI) */
+  markDone: () => void;
   /** Set the result artifact from Claude Code execution (Phase 2C) */
   setResultArtifact: (artifact: string | null) => void;
   /** Set the CEO execution prompt (Phase 2D — Executor Panel) */
@@ -427,8 +429,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       // Capture settings at start of run (currentMode already captured above)
       const useProjectContext = projectDiscussionModeRef.current;
       const currentCeo = ceoRef.current;
-      const forceAll = forceAllAdvisorsRef.current;
       const currentLoopState = state.loopState;
+      // Note: forceAllAdvisorsRef removed — Phase 2F force-all makes it obsolete
 
       // Compute agent order: advisors first, CEO last
       const agentOrder = getAgentOrder(currentCeo);
@@ -471,20 +473,12 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
         return response;
       };
 
-      // Helper to check if agent should be called (gatekeeping)
-      const shouldCallAgent = (agent: Agent, isCeo: boolean): boolean => {
-        // DISCUSSION MODE OVERRIDE: Always call all agents, ignore gatekeeping
-        if (currentMode === 'discussion') return true;
-        // CEO always speaks
-        if (isCeo) return true;
-        // Force all overrides gatekeeping
-        if (forceAll) return true;
-        // If flags not valid, call all
-        if (!flags.valid) return true;
-        // Check specific flags
-        if (agent === 'claude') return flags.callClaude;
-        if (agent === 'gemini') return flags.callGemini;
-        // GPT as non-CEO advisor: always call (does gatekeeping)
+      // Helper to check if agent should be called
+      // Phase 2F: ALL modes force all agents (gatekeeping disabled for MVP)
+      const shouldCallAgent = (_agent: Agent, _isCeo: boolean): boolean => {
+        // ALL MODES: Force all agents (Discussion, Decision, Project)
+        // Gatekeeping flags are ignored — all 3 agents always speak
+        // CEO ordering is handled by getAgentOrder() — CEO speaks last
         return true;
       };
 
@@ -588,8 +582,16 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       abortControllerRef.current = null;
     };
 
-    // Start the sequence
-    runSequence();
+    // Start the sequence with error handling to ensure processing always resets
+    runSequence().catch(() => {
+      // On any unhandled error, ensure we clean up and reset processing state
+      // Dispatch SEQUENCE_COMPLETED to reset isProcessing=false
+      if (activeRunIdRef.current === runId) {
+        dispatch({ type: 'SEQUENCE_COMPLETED', runId });
+      }
+      activeRunIdRef.current = null;
+      abortControllerRef.current = null;
+    });
 
     // -------------------------------------------------------------------------
     // Cleanup: Abort on unmount or if effect re-runs
@@ -674,6 +676,12 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
 
   const stopExecutionLoop = useCallback((): void => {
     dispatch({ type: 'STOP_EXECUTION_LOOP' });
+  }, []);
+
+  const markDone = useCallback((): void => {
+    // Phase 2F: Deterministic termination via UI button
+    // Reuses CEO_DONE_DETECTED action (sets loopState to 'idle')
+    dispatch({ type: 'CEO_DONE_DETECTED' });
   }, []);
 
   const setResultArtifact = useCallback((artifact: string | null): void => {
@@ -840,6 +848,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       startExecutionLoop,
       pauseExecutionLoop,
       stopExecutionLoop,
+      markDone,
       setResultArtifact,
       setCeoExecutionPrompt,
       // Selectors
@@ -880,6 +889,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       startExecutionLoop,
       pauseExecutionLoop,
       stopExecutionLoop,
+      markDone,
       setResultArtifact,
       setCeoExecutionPrompt,
       getState,
