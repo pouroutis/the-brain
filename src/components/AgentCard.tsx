@@ -94,11 +94,11 @@ function getStatusSubMessage(response: AgentResponse | null): string | null {
 }
 
 /**
- * Sanitize response content for Discussion mode.
+ * Sanitize response content for ALL modes.
  * Removes internal gatekeeping flags (CALL_CLAUDE, CALL_GEMINI, REASON_TAG)
  * and surrounding delimiter lines (---).
  */
-function sanitizeContentForDiscussion(content: string): string {
+function sanitizeGatekeepingFlags(content: string): string {
   // Split into lines
   const lines = content.split('\n');
   const sanitizedLines: string[] = [];
@@ -133,16 +133,16 @@ function sanitizeContentForDiscussion(content: string): string {
 // Component
 // -----------------------------------------------------------------------------
 
-export function AgentCard({ agent, response, isActive, mode }: AgentCardProps): JSX.Element {
+export function AgentCard({ agent, response, isActive, mode: _mode }: AgentCardProps): JSX.Element {
   const status = getDisplayStatus(response, isActive);
   const statusLabel = getStatusLabel(status);
 
   // Extract content (available for success, and optionally for error/terminal states)
   const rawContent = response?.status === 'success' ? response.content : response?.content;
 
-  // Sanitize content in Discussion mode (hide gatekeeping flags from user)
-  const content = rawContent && mode === 'discussion'
-    ? sanitizeContentForDiscussion(rawContent)
+  // Sanitize gatekeeping flags in ALL modes (CALL_CLAUDE, CALL_GEMINI, REASON_TAG)
+  const content = rawContent
+    ? sanitizeGatekeepingFlags(rawContent)
     : rawContent;
 
   // Get contextual sub-message for terminal states

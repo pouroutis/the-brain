@@ -31,7 +31,7 @@ import type {
 
 import { brainReducer, initialBrainState } from '../reducer/brainReducer';
 import { callAgent } from '../api/agentClient';
-import { callGhostOrchestrator, isGhostEnabled } from '../api/ghostClient';
+import { callGhostOrchestrator } from '../api/ghostClient';
 import { env } from '../config/env';
 
 // -----------------------------------------------------------------------------
@@ -95,22 +95,15 @@ function parseGatekeepingFlags(content: string): GatekeepingFlags {
 
 /**
  * Compute agent order based on CEO.
- * CEO speaks LAST. Other advisors speak first in their natural order.
+ * CEO ALWAYS speaks LAST. Non-CEO advisors speak first in their natural order.
  *
- * Special case: When CEO=GPT, maintain backward-compatible order (GPT first)
- * because GPT serves dual role as gatekeeper + CEO. GPT's single response
- * contains both gatekeeping flags and the CEO decision.
- *
- * When CEO=gpt: gpt, claude, gemini (backward compatible, GPT is gatekeeper+CEO)
- * When CEO=claude: gpt, gemini, claude (GPT gatekeeps, Claude CEO speaks last)
- * When CEO=gemini: gpt, claude, gemini (GPT gatekeeps, Gemini CEO speaks last)
+ * Order examples:
+ * - When CEO=gpt: claude, gemini, gpt (CEO last)
+ * - When CEO=claude: gpt, gemini, claude (CEO last)
+ * - When CEO=gemini: gpt, claude, gemini (CEO last)
  */
 function getAgentOrder(ceo: Agent): Agent[] {
-  // Special case: GPT as CEO maintains original order for backward compatibility
-  if (ceo === 'gpt') {
-    return ['gpt', 'claude', 'gemini'];
-  }
-  // For other CEOs: GPT first (gatekeeper), then other advisor, then CEO last
+  // CEO always speaks LAST — no special cases
   const allAgents: Agent[] = ['gpt', 'claude', 'gemini'];
   const advisors = allAgents.filter((a) => a !== ceo);
   return [...advisors, ceo];
@@ -359,15 +352,16 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
      */
     const runSequence = async (): Promise<void> => {
       // -----------------------------------------------------------------------
-      // Ghost Mode Branch (Phase 9B)
-      // Per Phase 9A: CEO mode always uses Ghost (server-side enforced)
-      // EXCEPTION: Discussion mode ALWAYS uses client-side orchestration
+      // Ghost Mode Branch — DISABLED
+      // All modes (Discussion, Decision, Project) use client-side orchestration.
+      // All 3 agents (GPT, Claude, Gemini) are always called. CEO speaks LAST.
       // -----------------------------------------------------------------------
 
-      // Capture mode early for ghost/client branching decision
+      // Capture mode early for client-side orchestration
       const currentMode = state.mode;
 
-      if (isGhostEnabled() && currentMode !== 'discussion') {
+      // Ghost mode disabled for all modes — client-side handles all orchestration
+      if (false) {
         // Dispatch AGENT_STARTED for GPT (Ghost orchestrator is GPT-led)
         dispatch({ type: 'AGENT_STARTED', runId, agent: 'gpt' });
 
@@ -390,7 +384,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
               agent: 'gpt',
               timestamp: Date.now(),
               status: 'success',
-              content: ghostResult.content,
+              content: ghostResult.content as string, // Safe: guarded by if condition
             },
           });
         } else {
