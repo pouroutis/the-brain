@@ -703,7 +703,8 @@ describe('brainReducer — CLEAR', () => {
       error: 'Some error',
       clearBoardVersion: 5,
       mode: 'discussion',
-      executionLoopActive: false,
+      executionLoopState: 'idle',
+      resultArtifact: null,
     };
 
     const action: BrainAction = { type: 'CLEAR' };
@@ -726,9 +727,9 @@ describe('brainReducer — CLEAR', () => {
 // -----------------------------------------------------------------------------
 
 describe('brainReducer — State Invariants', () => {
-  it('state always has exactly 10 fields', () => {
+  it('state always has exactly 11 fields', () => {
     const fields = Object.keys(initialBrainState);
-    expect(fields).toHaveLength(10);
+    expect(fields).toHaveLength(11);
     expect(fields).toContain('exchanges');
     expect(fields).toContain('pendingExchange');
     expect(fields).toContain('currentAgent');
@@ -738,7 +739,8 @@ describe('brainReducer — State Invariants', () => {
     expect(fields).toContain('error');
     expect(fields).toContain('clearBoardVersion');
     expect(fields).toContain('mode');
-    expect(fields).toContain('executionLoopActive');
+    expect(fields).toContain('executionLoopState');
+    expect(fields).toContain('resultArtifact');
   });
 
   it('responsesByAgent is keyed by Agent (not an array)', () => {

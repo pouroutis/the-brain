@@ -25,7 +25,8 @@ export const initialBrainState: BrainState = {
   error: null,
   clearBoardVersion: 0,
   mode: 'discussion',
-  executionLoopActive: false,
+  executionLoopState: 'idle',
+  resultArtifact: null,
 };
 
 // -----------------------------------------------------------------------------
@@ -259,8 +260,8 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         return state;
       }
 
-      // Guard: Block mode change while execution loop is active
-      if (state.executionLoopActive) {
+      // Guard: Block mode change while execution loop is running
+      if (state.executionLoopState === 'running') {
         return state;
       }
 
@@ -268,12 +269,12 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         ...state,
         mode: action.mode,
         // Reset execution loop when mode changes
-        executionLoopActive: false,
+        executionLoopState: 'idle',
       };
     }
 
     // -------------------------------------------------------------------------
-    // START_EXECUTION_LOOP (Phase 2 — Project Mode Only)
+    // START_EXECUTION_LOOP (Phase 2C — Project Mode Only)
     // -------------------------------------------------------------------------
     case 'START_EXECUTION_LOOP': {
       // Guard: Only allowed in project mode
@@ -281,30 +282,30 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         return state;
       }
 
-      // Guard: Don't start if already active
-      if (state.executionLoopActive) {
+      // Guard: Don't start if already running
+      if (state.executionLoopState === 'running') {
         return state;
       }
 
       return {
         ...state,
-        executionLoopActive: true,
+        executionLoopState: 'running',
       };
     }
 
     // -------------------------------------------------------------------------
-    // PAUSE_EXECUTION_LOOP (Phase 2B — Returns to Discussion Mode)
+    // PAUSE_EXECUTION_LOOP (Phase 2C — Sets paused state + Discussion mode)
     // -------------------------------------------------------------------------
     case 'PAUSE_EXECUTION_LOOP': {
       return {
         ...state,
-        executionLoopActive: false,
+        executionLoopState: 'paused',
         mode: 'discussion',
       };
     }
 
     // -------------------------------------------------------------------------
-    // STOP_EXECUTION_LOOP (Phase 2B — Clears execution context)
+    // STOP_EXECUTION_LOOP (Phase 2C — Sets idle + clears context)
     // -------------------------------------------------------------------------
     case 'STOP_EXECUTION_LOOP': {
       // Guard: Block if currently processing
@@ -314,13 +315,37 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
 
       return {
         ...state,
-        executionLoopActive: false,
+        executionLoopState: 'idle',
+        mode: 'discussion',
         // Clear execution context - requires explicit EXECUTE to restart
         exchanges: [],
         pendingExchange: null,
         currentAgent: null,
         warningState: null,
         error: null,
+        resultArtifact: null,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // SET_RESULT_ARTIFACT (Phase 2C — Store Claude Code execution result)
+    // -------------------------------------------------------------------------
+    case 'SET_RESULT_ARTIFACT': {
+      return {
+        ...state,
+        resultArtifact: action.artifact,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // CEO_DONE_DETECTED (Phase 2C — CEO output DONE keyword)
+    // -------------------------------------------------------------------------
+    case 'CEO_DONE_DETECTED': {
+      // Transition to idle, keep history, re-enable controls
+      return {
+        ...state,
+        executionLoopState: 'idle',
+        // Keep exchanges and resultArtifact intact
       };
     }
 

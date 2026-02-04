@@ -39,8 +39,10 @@ export function BrainChat(): JSX.Element {
     getLastExchange,
     getCeo,
     getMode,
-    getExecutionLoopActive,
+    getExecutionLoopState,
+    isExecutionLoopRunning,
     canGenerateExecutionPrompt,
+    getResultArtifact,
   } = useBrain();
 
   // ---------------------------------------------------------------------------
@@ -56,8 +58,10 @@ export function BrainChat(): JSX.Element {
   const processing = isProcessing();
   const ceo = getCeo();
   const mode = getMode();
-  const executionLoopActive = getExecutionLoopActive();
+  const executionLoopState = getExecutionLoopState();
+  const executionLoopRunning = isExecutionLoopRunning();
   const canGenerate = canGenerateExecutionPrompt();
+  const resultArtifact = getResultArtifact();
 
   // ---------------------------------------------------------------------------
   // CEO Execution Prompt (memoized)
@@ -66,8 +70,8 @@ export function BrainChat(): JSX.Element {
   // ---------------------------------------------------------------------------
 
   const ceoExecutionPrompt = useMemo(
-    () => (mode === 'project' ? buildCeoExecutionPrompt(lastExchange, ceo) : null),
-    [lastExchange, ceo, mode]
+    () => (mode === 'project' ? buildCeoExecutionPrompt(lastExchange, ceo, mode, resultArtifact) : null),
+    [lastExchange, ceo, mode, resultArtifact]
   );
 
   // ---------------------------------------------------------------------------
@@ -83,7 +87,7 @@ export function BrainChat(): JSX.Element {
   // Block advisor input during execution loop (read-only mode)
   // ---------------------------------------------------------------------------
 
-  const canSubmitPrompt = canSubmit() && !executionLoopActive;
+  const canSubmitPrompt = canSubmit() && !executionLoopRunning;
 
   // ---------------------------------------------------------------------------
   // Handlers
@@ -92,10 +96,10 @@ export function BrainChat(): JSX.Element {
   const handleSubmit = useCallback(
     (prompt: string) => {
       // Hard block: No input during execution loop
-      if (executionLoopActive) return;
+      if (executionLoopRunning) return;
       submitPrompt(prompt);
     },
-    [submitPrompt, executionLoopActive]
+    [submitPrompt, executionLoopRunning]
   );
 
   const handleCancel = useCallback(() => {
@@ -113,19 +117,19 @@ export function BrainChat(): JSX.Element {
   const handleCeoChange = useCallback(
     (agent: Agent) => {
       // Hard block: No CEO changes during execution loop
-      if (executionLoopActive) return;
+      if (executionLoopRunning) return;
       setCeo(agent);
     },
-    [setCeo, executionLoopActive]
+    [setCeo, executionLoopRunning]
   );
 
   const handleModeChange = useCallback(
     (newMode: BrainMode) => {
       // Hard block: No mode changes during execution loop
-      if (executionLoopActive) return;
+      if (executionLoopRunning) return;
       setMode(newMode);
     },
-    [setMode, executionLoopActive]
+    [setMode, executionLoopRunning]
   );
 
   const handleStartExecution = useCallback(() => {
@@ -169,7 +173,7 @@ export function BrainChat(): JSX.Element {
         onCancel={handleCancel}
         mode={mode}
         onModeChange={handleModeChange}
-        executionLoopActive={executionLoopActive}
+        executionLoopState={executionLoopState}
         onStartExecution={handleStartExecution}
         onPauseExecution={handlePauseExecution}
         onStopExecution={handleStopExecution}
@@ -178,6 +182,7 @@ export function BrainChat(): JSX.Element {
         ceoExecutionPrompt={ceoExecutionPrompt}
         lastExchangeId={lastExchange?.id ?? null}
         canGenerateExecutionPrompt={canGenerate}
+        resultArtifact={resultArtifact}
       />
     </div>
   );

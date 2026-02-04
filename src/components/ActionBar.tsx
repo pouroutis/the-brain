@@ -4,7 +4,7 @@
 // =============================================================================
 
 import { useCallback, useState, useRef, useEffect } from 'react';
-import type { Agent, BrainMode } from '../types/brain';
+import type { Agent, BrainMode, ExecutionLoopState } from '../types/brain';
 
 // -----------------------------------------------------------------------------
 // Types
@@ -23,8 +23,8 @@ interface ActionBarProps {
   mode: BrainMode;
   /** Callback to change mode */
   onModeChange: (mode: BrainMode) => void;
-  /** Whether execution loop is active (Project mode) */
-  executionLoopActive: boolean;
+  /** Execution loop state (Phase 2C) */
+  executionLoopState: ExecutionLoopState;
   /** Callback to start execution loop (EXECUTE) */
   onStartExecution: () => void;
   /** Callback to pause execution loop (returns to Discussion) */
@@ -41,6 +41,8 @@ interface ActionBarProps {
   lastExchangeId?: string | null;
   /** Whether CEO can generate execution prompt (Project mode + has exchanges) */
   canGenerateExecutionPrompt?: boolean;
+  /** Latest result artifact from Claude Code (Phase 2C) */
+  resultArtifact?: string | null;
 }
 
 // -----------------------------------------------------------------------------
@@ -76,7 +78,7 @@ export function ActionBar({
   onCancel,
   mode,
   onModeChange,
-  executionLoopActive,
+  executionLoopState,
   onStartExecution,
   onPauseExecution,
   onStopExecution,
@@ -85,7 +87,11 @@ export function ActionBar({
   onCeoChange,
   lastExchangeId,
   canGenerateExecutionPrompt = false,
+  resultArtifact,
 }: ActionBarProps): JSX.Element {
+  // Derived state
+  const isRunning = executionLoopState === 'running';
+  const isPaused = executionLoopState === 'paused';
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
 
   // Track which exchange IDs have had execution prompts generated (safety)
@@ -134,19 +140,19 @@ export function ActionBar({
   const handleCeoChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
       // Hard block: No CEO changes during execution loop
-      if (executionLoopActive) return;
+      if (isRunning) return;
       onCeoChange?.(e.target.value as Agent);
     },
-    [onCeoChange, executionLoopActive]
+    [onCeoChange, isRunning]
   );
 
   const handleModeChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
       // Hard block: No mode changes during execution loop
-      if (executionLoopActive) return;
+      if (isRunning) return;
       onModeChange(e.target.value as BrainMode);
     },
-    [onModeChange, executionLoopActive]
+    [onModeChange, isRunning]
   );
 
   // CEO is active in Decision and Project modes
@@ -167,9 +173,19 @@ export function ActionBar({
             <strong>CEO:</strong> {CEO_LABELS[ceo]}
           </span>
         )}
-        {executionLoopActive && (
+        {isRunning && (
           <span className="action-bar__status-item action-bar__status-item--running">
             <strong>RUNNING</strong>
+          </span>
+        )}
+        {isPaused && (
+          <span className="action-bar__status-item action-bar__status-item--paused">
+            <strong>PAUSED</strong>
+          </span>
+        )}
+        {resultArtifact && (
+          <span className="action-bar__status-item action-bar__status-item--result">
+            <strong>Result:</strong> {resultArtifact.length > 50 ? resultArtifact.slice(0, 50) + '...' : resultArtifact}
           </span>
         )}
       </div>
@@ -181,7 +197,7 @@ export function ActionBar({
           className="action-bar__select"
           value={mode}
           onChange={handleModeChange}
-          disabled={isProcessing || executionLoopActive}
+          disabled={isProcessing || isRunning}
           title={MODE_OPTIONS.find(m => m.value === mode)?.description}
         >
           {MODE_OPTIONS.map((opt) => (
@@ -200,7 +216,7 @@ export function ActionBar({
             className="action-bar__select"
             value={ceo}
             onChange={handleCeoChange}
-            disabled={isProcessing || executionLoopActive}
+            disabled={isProcessing || isRunning}
           >
             {CEO_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -214,7 +230,7 @@ export function ActionBar({
       {/* Execution Controls (Project mode only) */}
       {showExecutionControls && (
         <>
-          {!executionLoopActive ? (
+          {executionLoopState === 'idle' && (
             <button
               className="action-bar__button action-bar__button--execute"
               onClick={onStartExecution}
@@ -223,15 +239,28 @@ export function ActionBar({
             >
               EXECUTE
             </button>
-          ) : (
+          )}
+          {executionLoopState === 'paused' && (
+            <button
+              className="action-bar__button action-bar__button--resume"
+              onClick={onStartExecution}
+              disabled={isProcessing}
+              title="Resume execution loop"
+            >
+              RESUME
+            </button>
+          )}
+          {(isRunning || isPaused) && (
             <>
-              <button
-                className="action-bar__button action-bar__button--pause"
-                onClick={onPauseExecution}
-                title="Pause execution loop, return to Discussion mode"
-              >
-                PAUSE
-              </button>
+              {isRunning && (
+                <button
+                  className="action-bar__button action-bar__button--pause"
+                  onClick={onPauseExecution}
+                  title="Pause execution loop, return to Discussion mode"
+                >
+                  PAUSE
+                </button>
+              )}
               <button
                 className="action-bar__button action-bar__button--stop"
                 onClick={onStopExecution}
@@ -273,11 +302,11 @@ export function ActionBar({
         </button>
       )}
 
-      {/* Clear button: always visible, disabled when processing or execution loop */}
+      {/* Clear button: always visible, disabled when processing or execution loop running */}
       <button
         className="action-bar__button action-bar__button--clear"
         onClick={onClear}
-        disabled={!canClear || executionLoopActive}
+        disabled={!canClear || isRunning}
       >
         Clear Board
       </button>

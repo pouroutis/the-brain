@@ -3,7 +3,7 @@
 // Builds Claude Code prompts from exchange responses
 // =============================================================================
 
-import type { Exchange, Agent } from '../types/brain';
+import type { Exchange, Agent, BrainMode } from '../types/brain';
 
 /**
  * Agent order for building execution prompts (legacy, all advisors)
@@ -80,16 +80,30 @@ Key priorities:
 }
 
 /**
+ * Mode display names for the prompt
+ */
+const MODE_NAMES: Record<BrainMode, string> = {
+  discussion: 'Discussion',
+  decision: 'Decision',
+  project: 'Project',
+};
+
+/**
  * Build a CEO-only execution prompt from the last exchange.
  * Contains ONLY the CEO's final decision, formatted for direct Claude Code execution.
+ * Includes current mode, CEO, and result artifact summary when available.
  *
  * @param exchange - The exchange to build the prompt from
  * @param ceo - The CEO agent whose response to extract
+ * @param mode - The current operating mode
+ * @param resultArtifact - The latest Claude Code execution result (optional)
  * @returns The formatted CEO execution prompt string, or null if CEO has no response
  */
 export function buildCeoExecutionPrompt(
   exchange: Exchange | null,
-  ceo: Agent
+  ceo: Agent,
+  mode: BrainMode = 'project',
+  resultArtifact: string | null = null
 ): string | null {
   if (!exchange) {
     return null;
@@ -101,11 +115,20 @@ export function buildCeoExecutionPrompt(
     return null;
   }
 
+  // Build result artifact section if available
+  const resultSection = resultArtifact
+    ? `\n## Previous Execution Result\n\n${resultArtifact.slice(0, 2000)}${resultArtifact.length > 2000 ? '\n...(truncated)' : ''}\n`
+    : '';
+
   const prompt = `# The Brain — CEO Execution Directive
+
+## Context
+- **Mode:** ${MODE_NAMES[mode]}
+- **CEO:** ${CEO_ROLE_NAMES[ceo]}
 
 ## Original Question
 ${exchange.userPrompt}
-
+${resultSection}
 ## ${CEO_ROLE_NAMES[ceo]} Decision
 
 ${ceoResponse.content}

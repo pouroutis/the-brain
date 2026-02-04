@@ -22,6 +22,7 @@ import type {
   BrainMode,
   BrainState,
   Exchange,
+  ExecutionLoopState,
   PendingExchange,
   WarningState,
   ErrorCode,
@@ -146,6 +147,8 @@ interface BrainActions {
   pauseExecutionLoop: () => void;
   /** Stop execution loop and clear context */
   stopExecutionLoop: () => void;
+  /** Set the result artifact from Claude Code execution (Phase 2C) */
+  setResultArtifact: (artifact: string | null) => void;
 }
 
 /**
@@ -191,10 +194,14 @@ interface BrainSelectors {
   getCeo: () => Agent;
   /** Get the current operating mode (Phase 2) */
   getMode: () => BrainMode;
-  /** Check if execution loop is active (Phase 2) */
-  getExecutionLoopActive: () => boolean;
+  /** Get the execution loop state (Phase 2C) */
+  getExecutionLoopState: () => ExecutionLoopState;
+  /** Check if execution loop is running (convenience helper) */
+  isExecutionLoopRunning: () => boolean;
   /** Check if CEO can generate execution prompt (Project mode only) */
   canGenerateExecutionPrompt: () => boolean;
+  /** Get the latest result artifact from Claude Code execution (Phase 2C) */
+  getResultArtifact: () => string | null;
 }
 
 /**
@@ -515,6 +522,11 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
             gemini: 'Gemini',
           };
           conversationContext += `${agentLabels[agent]}: ${response.content}\n\n`;
+
+          // DONE detection: If CEO outputs "DONE" keyword, end execution loop
+          if (isCeoAgent && /\bDONE\b/.test(response.content)) {
+            dispatch({ type: 'CEO_DONE_DETECTED' });
+          }
         }
 
         // Parse gatekeeping flags if GPT spoke first
@@ -647,6 +659,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     dispatch({ type: 'STOP_EXECUTION_LOOP' });
   }, []);
 
+  const setResultArtifact = useCallback((artifact: string | null): void => {
+    dispatch({ type: 'SET_RESULT_ARTIFACT', artifact });
+  }, []);
+
   // ---------------------------------------------------------------------------
   // Selectors
   // ---------------------------------------------------------------------------
@@ -764,14 +780,22 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     return state.mode;
   }, [state.mode]);
 
-  const getExecutionLoopActive = useCallback((): boolean => {
-    return state.executionLoopActive;
-  }, [state.executionLoopActive]);
+  const getExecutionLoopState = useCallback((): ExecutionLoopState => {
+    return state.executionLoopState;
+  }, [state.executionLoopState]);
+
+  const isExecutionLoopRunning = useCallback((): boolean => {
+    return state.executionLoopState === 'running';
+  }, [state.executionLoopState]);
 
   const canGenerateExecutionPrompt = useCallback((): boolean => {
     // Only CEO can generate execution prompts, and only in Project mode
     return state.mode === 'project' && !state.isProcessing && state.exchanges.length > 0;
   }, [state.mode, state.isProcessing, state.exchanges]);
+
+  const getResultArtifact = useCallback((): string | null => {
+    return state.resultArtifact;
+  }, [state.resultArtifact]);
 
   // ---------------------------------------------------------------------------
   // Memoized Context Value
@@ -791,6 +815,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       startExecutionLoop,
       pauseExecutionLoop,
       stopExecutionLoop,
+      setResultArtifact,
       // Selectors
       getState,
       getActiveRunId,
@@ -811,8 +836,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       getProjectDiscussionMode,
       getCeo,
       getMode,
-      getExecutionLoopActive,
+      getExecutionLoopState,
+      isExecutionLoopRunning,
       canGenerateExecutionPrompt,
+      getResultArtifact,
     }),
     [
       submitPrompt,
@@ -826,6 +853,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       startExecutionLoop,
       pauseExecutionLoop,
       stopExecutionLoop,
+      setResultArtifact,
       getState,
       getActiveRunId,
       getPendingExchange,
@@ -845,8 +873,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       getProjectDiscussionMode,
       getCeo,
       getMode,
-      getExecutionLoopActive,
+      getExecutionLoopState,
+      isExecutionLoopRunning,
       canGenerateExecutionPrompt,
+      getResultArtifact,
     ]
   );
 

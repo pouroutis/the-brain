@@ -22,6 +22,15 @@ export type Agent = 'gpt' | 'claude' | 'gemini';
  */
 export type BrainMode = 'discussion' | 'decision' | 'project';
 
+/**
+ * Execution loop states (Phase 2C — Project Mode only)
+ *
+ * - idle: Not executing, controls enabled
+ * - running: Autonomous execution active, controls locked
+ * - paused: Temporarily paused, can resume or stop
+ */
+export type ExecutionLoopState = 'idle' | 'running' | 'paused';
+
 // -----------------------------------------------------------------------------
 // Status Types
 // -----------------------------------------------------------------------------
@@ -133,8 +142,10 @@ export interface BrainState {
   clearBoardVersion: number;
   /** Current operating mode (Phase 2) */
   mode: BrainMode;
-  /** Whether autonomous execution loop is active (Project mode only) */
-  executionLoopActive: boolean;
+  /** Execution loop state (Phase 2C — Project mode only) */
+  executionLoopState: ExecutionLoopState;
+  /** Latest Claude Code execution result artifact (Phase 2C) */
+  resultArtifact: string | null;
 }
 
 // -----------------------------------------------------------------------------
@@ -153,7 +164,9 @@ export type BrainAction =
   | { type: 'SET_MODE'; mode: BrainMode }
   | { type: 'START_EXECUTION_LOOP' }
   | { type: 'STOP_EXECUTION_LOOP' }
-  | { type: 'PAUSE_EXECUTION_LOOP' };
+  | { type: 'PAUSE_EXECUTION_LOOP' }
+  | { type: 'SET_RESULT_ARTIFACT'; artifact: string | null }
+  | { type: 'CEO_DONE_DETECTED' };
 
 // -----------------------------------------------------------------------------
 // Brain Events (Logging / Debugging) — 6 variants, contract-locked
