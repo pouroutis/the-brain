@@ -19,6 +19,7 @@ import type {
   Agent,
   AgentResponse,
   AgentStatus,
+  BrainMode,
   BrainState,
   Exchange,
   PendingExchange,
@@ -137,6 +138,12 @@ interface BrainActions {
   setProjectDiscussionMode: (enabled: boolean) => void;
   /** Set the CEO agent (speaks last, generates execution prompt) */
   setCeo: (agent: Agent) => void;
+  /** Set the operating mode (Phase 2) */
+  setMode: (mode: BrainMode) => void;
+  /** Start the autonomous execution loop (Project mode only) */
+  startExecutionLoop: () => void;
+  /** Stop the autonomous execution loop */
+  stopExecutionLoop: () => void;
 }
 
 /**
@@ -180,6 +187,12 @@ interface BrainSelectors {
   getProjectDiscussionMode: () => boolean;
   /** Get the current CEO agent */
   getCeo: () => Agent;
+  /** Get the current operating mode (Phase 2) */
+  getMode: () => BrainMode;
+  /** Check if execution loop is active (Phase 2) */
+  getExecutionLoopActive: () => boolean;
+  /** Check if CEO can generate execution prompt (Project mode only) */
+  canGenerateExecutionPrompt: () => boolean;
 }
 
 /**
@@ -616,6 +629,18 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     setCeoState(agent);
   }, []);
 
+  const setMode = useCallback((mode: BrainMode): void => {
+    dispatch({ type: 'SET_MODE', mode });
+  }, []);
+
+  const startExecutionLoop = useCallback((): void => {
+    dispatch({ type: 'START_EXECUTION_LOOP' });
+  }, []);
+
+  const stopExecutionLoop = useCallback((): void => {
+    dispatch({ type: 'STOP_EXECUTION_LOOP' });
+  }, []);
+
   // ---------------------------------------------------------------------------
   // Selectors
   // ---------------------------------------------------------------------------
@@ -729,6 +754,19 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     return ceo;
   }, [ceo]);
 
+  const getMode = useCallback((): BrainMode => {
+    return state.mode;
+  }, [state.mode]);
+
+  const getExecutionLoopActive = useCallback((): boolean => {
+    return state.executionLoopActive;
+  }, [state.executionLoopActive]);
+
+  const canGenerateExecutionPrompt = useCallback((): boolean => {
+    // Only CEO can generate execution prompts, and only in Project mode
+    return state.mode === 'project' && !state.isProcessing && state.exchanges.length > 0;
+  }, [state.mode, state.isProcessing, state.exchanges]);
+
   // ---------------------------------------------------------------------------
   // Memoized Context Value
   // ---------------------------------------------------------------------------
@@ -743,6 +781,9 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       setForceAllAdvisors,
       setProjectDiscussionMode,
       setCeo,
+      setMode,
+      startExecutionLoop,
+      stopExecutionLoop,
       // Selectors
       getState,
       getActiveRunId,
@@ -762,6 +803,9 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       getForceAllAdvisors,
       getProjectDiscussionMode,
       getCeo,
+      getMode,
+      getExecutionLoopActive,
+      canGenerateExecutionPrompt,
     }),
     [
       submitPrompt,
@@ -771,6 +815,9 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       setForceAllAdvisors,
       setProjectDiscussionMode,
       setCeo,
+      setMode,
+      startExecutionLoop,
+      stopExecutionLoop,
       getState,
       getActiveRunId,
       getPendingExchange,
@@ -789,6 +836,9 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       getForceAllAdvisors,
       getProjectDiscussionMode,
       getCeo,
+      getMode,
+      getExecutionLoopActive,
+      canGenerateExecutionPrompt,
     ]
   );
 

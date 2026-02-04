@@ -24,6 +24,8 @@ export const initialBrainState: BrainState = {
   warningState: null,
   error: null,
   clearBoardVersion: 0,
+  mode: 'discussion',
+  executionLoopActive: false,
 };
 
 // -----------------------------------------------------------------------------
@@ -245,6 +247,58 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         warningState: null,
         error: null,
         clearBoardVersion: state.clearBoardVersion + 1,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // SET_MODE (Phase 2)
+    // -------------------------------------------------------------------------
+    case 'SET_MODE': {
+      // Guard: Block mode change while processing
+      if (state.isProcessing) {
+        return state;
+      }
+
+      // Guard: Block mode change while execution loop is active
+      if (state.executionLoopActive) {
+        return state;
+      }
+
+      return {
+        ...state,
+        mode: action.mode,
+        // Reset execution loop when mode changes
+        executionLoopActive: false,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // START_EXECUTION_LOOP (Phase 2 — Project Mode Only)
+    // -------------------------------------------------------------------------
+    case 'START_EXECUTION_LOOP': {
+      // Guard: Only allowed in project mode
+      if (state.mode !== 'project') {
+        return state;
+      }
+
+      // Guard: Don't start if already active
+      if (state.executionLoopActive) {
+        return state;
+      }
+
+      return {
+        ...state,
+        executionLoopActive: true,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // STOP_EXECUTION_LOOP (Phase 2 — Project Mode Only)
+    // -------------------------------------------------------------------------
+    case 'STOP_EXECUTION_LOOP': {
+      return {
+        ...state,
+        executionLoopActive: false,
       };
     }
 

@@ -10,6 +10,19 @@
 export type Agent = 'gpt' | 'claude' | 'gemini';
 
 // -----------------------------------------------------------------------------
+// Mode Types (Phase 2)
+// -----------------------------------------------------------------------------
+
+/**
+ * Brain operating modes with distinct behavior rules.
+ *
+ * - discussion: All AIs speak, multi-turn allowed, CEO inactive, no execution prompts
+ * - decision: All AIs speak ONCE, CEO active (speaks last), single output, no execution prompts
+ * - project: All AIs speak, CEO active, CEO controls flow, execution prompts ENABLED
+ */
+export type BrainMode = 'discussion' | 'decision' | 'project';
+
+// -----------------------------------------------------------------------------
 // Status Types
 // -----------------------------------------------------------------------------
 
@@ -106,7 +119,7 @@ export interface GatekeepingFlags {
 }
 
 // -----------------------------------------------------------------------------
-// Brain State (8 fields — locked, no additions)
+// Brain State (Phase 2 — Mode + Execution Loop)
 // -----------------------------------------------------------------------------
 
 export interface BrainState {
@@ -118,6 +131,10 @@ export interface BrainState {
   warningState: WarningState | null;
   error: string | null;
   clearBoardVersion: number;
+  /** Current operating mode (Phase 2) */
+  mode: BrainMode;
+  /** Whether autonomous execution loop is active (Project mode only) */
+  executionLoopActive: boolean;
 }
 
 // -----------------------------------------------------------------------------
@@ -132,7 +149,10 @@ export type BrainAction =
   | { type: 'CANCEL_REQUESTED'; runId: string }
   | { type: 'CANCEL_COMPLETE'; runId: string }
   | { type: 'SET_WARNING'; runId: string; warning: WarningState | null }
-  | { type: 'CLEAR' };
+  | { type: 'CLEAR' }
+  | { type: 'SET_MODE'; mode: BrainMode }
+  | { type: 'START_EXECUTION_LOOP' }
+  | { type: 'STOP_EXECUTION_LOOP' };
 
 // -----------------------------------------------------------------------------
 // Brain Events (Logging / Debugging) — 6 variants, contract-locked

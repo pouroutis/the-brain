@@ -1,6 +1,6 @@
 // =============================================================================
 // The Brain — Multi-AI Sequential Chat System
-// BrainChat Container Component (Phase 2A — CEO Authority)
+// BrainChat Container Component (Phase 2 — Modes + CEO Authority)
 // =============================================================================
 
 import { useCallback, useMemo } from 'react';
@@ -10,7 +10,7 @@ import { PromptInput } from './PromptInput';
 import { ActionBar } from './ActionBar';
 import { WarningBanner } from './WarningBanner';
 import { buildCeoExecutionPrompt } from '../utils/executionPromptBuilder';
-import type { Agent } from '../types/brain';
+import type { Agent, BrainMode } from '../types/brain';
 
 // -----------------------------------------------------------------------------
 // Component
@@ -23,8 +23,10 @@ export function BrainChat(): JSX.Element {
     cancelSequence,
     clearBoard,
     dismissWarning,
-    setProjectDiscussionMode,
     setCeo,
+    setMode,
+    startExecutionLoop,
+    stopExecutionLoop,
     // Selectors
     getState,
     canSubmit,
@@ -34,8 +36,10 @@ export function BrainChat(): JSX.Element {
     getPendingExchange,
     getExchanges,
     getLastExchange,
-    getProjectDiscussionMode,
     getCeo,
+    getMode,
+    getExecutionLoopActive,
+    canGenerateExecutionPrompt,
   } = useBrain();
 
   // ---------------------------------------------------------------------------
@@ -49,17 +53,20 @@ export function BrainChat(): JSX.Element {
   const currentAgent = state.currentAgent;
   const warning = getWarning();
   const processing = isProcessing();
-  const projectDiscussionMode = getProjectDiscussionMode();
   const ceo = getCeo();
+  const mode = getMode();
+  const executionLoopActive = getExecutionLoopActive();
+  const canGenerate = canGenerateExecutionPrompt();
 
   // ---------------------------------------------------------------------------
   // CEO Execution Prompt (memoized)
   // Only contains the CEO's final decision
+  // Only available in Project mode
   // ---------------------------------------------------------------------------
 
   const ceoExecutionPrompt = useMemo(
-    () => buildCeoExecutionPrompt(lastExchange, ceo),
-    [lastExchange, ceo]
+    () => (mode === 'project' ? buildCeoExecutionPrompt(lastExchange, ceo) : null),
+    [lastExchange, ceo, mode]
   );
 
   // ---------------------------------------------------------------------------
@@ -93,19 +100,27 @@ export function BrainChat(): JSX.Element {
     dismissWarning();
   }, [dismissWarning]);
 
-  const handleToggleProjectDiscussionMode = useCallback(
-    (enabled: boolean) => {
-      setProjectDiscussionMode(enabled);
-    },
-    [setProjectDiscussionMode]
-  );
-
   const handleCeoChange = useCallback(
     (agent: Agent) => {
       setCeo(agent);
     },
     [setCeo]
   );
+
+  const handleModeChange = useCallback(
+    (newMode: BrainMode) => {
+      setMode(newMode);
+    },
+    [setMode]
+  );
+
+  const handleStartExecution = useCallback(() => {
+    startExecutionLoop();
+  }, [startExecutionLoop]);
+
+  const handleStopExecution = useCallback(() => {
+    stopExecutionLoop();
+  }, [stopExecutionLoop]);
 
   // ---------------------------------------------------------------------------
   // Render
@@ -128,18 +143,22 @@ export function BrainChat(): JSX.Element {
       {/* Prompt Input */}
       <PromptInput canSubmit={canSubmit()} onSubmit={handleSubmit} />
 
-      {/* Action Bar (CEO selector + Project Mode toggle + Generate CEO Prompt + Clear + Cancel) */}
+      {/* Action Bar (Mode + CEO + Execution Controls + Clear + Cancel) */}
       <ActionBar
         canClear={canClear()}
         isProcessing={processing}
         onClear={handleClear}
         onCancel={handleCancel}
-        projectDiscussionMode={projectDiscussionMode}
-        onToggleProjectDiscussionMode={handleToggleProjectDiscussionMode}
+        mode={mode}
+        onModeChange={handleModeChange}
+        executionLoopActive={executionLoopActive}
+        onStartExecution={handleStartExecution}
+        onStopExecution={handleStopExecution}
         ceo={ceo}
         onCeoChange={handleCeoChange}
         ceoExecutionPrompt={ceoExecutionPrompt}
         lastExchangeId={lastExchange?.id ?? null}
+        canGenerateExecutionPrompt={canGenerate}
       />
     </div>
   );
