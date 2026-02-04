@@ -121,6 +121,11 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         return state;
       }
 
+      // Guard: Reject if response is undefined (malformed dispatch)
+      if (!action.response) {
+        return state;
+      }
+
       const updatedResponsesByAgent = {
         ...state.pendingExchange.responsesByAgent,
         [action.response.agent]: action.response,

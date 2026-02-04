@@ -63,9 +63,10 @@ export const env = {
   isProd: import.meta.env.PROD,
 
   /**
-   * Force all advisors to respond (testing-phase override)
+   * Force all advisors to respond
    * When true, ignores CALL_CLAUDE/CALL_GEMINI flags and always calls all 3 agents
-   * Default: false
+   * Set to true via VITE_FORCE_ALL_ADVISORS=true to override gatekeeping
+   * Default: false (gatekeeping enabled, tests pass)
    */
   forceAllAdvisors: getBoolEnvVar('VITE_FORCE_ALL_ADVISORS', false),
 

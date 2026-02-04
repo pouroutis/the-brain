@@ -3,6 +3,8 @@
 // ActionBar Component (Phase 2 — Step 5)
 // =============================================================================
 
+import { useCallback, useState } from 'react';
+
 // -----------------------------------------------------------------------------
 // Types
 // -----------------------------------------------------------------------------
@@ -20,6 +22,8 @@ interface ActionBarProps {
   projectDiscussionMode?: boolean;
   /** Callback to toggle project discussion mode */
   onToggleProjectDiscussionMode?: (enabled: boolean) => void;
+  /** Execution prompt to copy (null if not available) */
+  executionPrompt?: string | null;
 }
 
 // -----------------------------------------------------------------------------
@@ -33,7 +37,23 @@ export function ActionBar({
   onCancel,
   projectDiscussionMode = false,
   onToggleProjectDiscussionMode,
+  executionPrompt,
 }: ActionBarProps): JSX.Element {
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+
+  const handleCopyExecutionPrompt = useCallback(async () => {
+    if (!executionPrompt) return;
+
+    try {
+      await navigator.clipboard.writeText(executionPrompt);
+      setCopyFeedback('Copied!');
+      setTimeout(() => setCopyFeedback(null), 2000);
+    } catch {
+      setCopyFeedback('Failed to copy');
+      setTimeout(() => setCopyFeedback(null), 2000);
+    }
+  }, [executionPrompt]);
+
   return (
     <div className="action-bar">
       {/* Project Discussion Mode toggle */}
@@ -48,6 +68,16 @@ export function ActionBar({
           <span className="action-bar__toggle-label">Project Mode</span>
         </label>
       )}
+
+      {/* Copy Execution Prompt button */}
+      <button
+        className="action-bar__button action-bar__button--copy"
+        onClick={handleCopyExecutionPrompt}
+        disabled={!executionPrompt || isProcessing}
+        title="Copy a Claude Code prompt based on the last exchange"
+      >
+        {copyFeedback ?? 'Copy Execution Prompt'}
+      </button>
 
       {/* Cancel button: visible only when processing */}
       {isProcessing && (

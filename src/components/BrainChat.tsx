@@ -3,12 +3,13 @@
 // BrainChat Container Component (Phase 2 — Step 5)
 // =============================================================================
 
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useBrain } from '../context/BrainContext';
 import { ExchangeList } from './ExchangeList';
 import { PromptInput } from './PromptInput';
 import { ActionBar } from './ActionBar';
 import { WarningBanner } from './WarningBanner';
+import { buildExecutionPrompt } from '../utils/executionPromptBuilder';
 
 // -----------------------------------------------------------------------------
 // Component
@@ -30,6 +31,7 @@ export function BrainChat(): JSX.Element {
     getWarning,
     getPendingExchange,
     getExchanges,
+    getLastExchange,
     getProjectDiscussionMode,
   } = useBrain();
 
@@ -40,10 +42,20 @@ export function BrainChat(): JSX.Element {
   const state = getState();
   const exchanges = getExchanges();
   const pendingExchange = getPendingExchange();
+  const lastExchange = getLastExchange();
   const currentAgent = state.currentAgent;
   const warning = getWarning();
   const processing = isProcessing();
   const projectDiscussionMode = getProjectDiscussionMode();
+
+  // ---------------------------------------------------------------------------
+  // Execution Prompt (memoized)
+  // ---------------------------------------------------------------------------
+
+  const executionPrompt = useMemo(
+    () => buildExecutionPrompt(lastExchange),
+    [lastExchange]
+  );
 
   // ---------------------------------------------------------------------------
   // Warning display rule (GPT mandate):
@@ -104,7 +116,7 @@ export function BrainChat(): JSX.Element {
       {/* Prompt Input */}
       <PromptInput canSubmit={canSubmit()} onSubmit={handleSubmit} />
 
-      {/* Action Bar (Clear + Cancel + Project Mode toggle) */}
+      {/* Action Bar (Clear + Cancel + Project Mode toggle + Copy Execution Prompt) */}
       <ActionBar
         canClear={canClear()}
         isProcessing={processing}
@@ -112,6 +124,7 @@ export function BrainChat(): JSX.Element {
         onCancel={handleCancel}
         projectDiscussionMode={projectDiscussionMode}
         onToggleProjectDiscussionMode={handleToggleProjectDiscussionMode}
+        executionPrompt={executionPrompt}
       />
     </div>
   );
