@@ -21,9 +21,16 @@ vi.mock('../api/agentClient', () => ({
   },
 }));
 
+vi.mock('../api/ghostClient', () => ({
+  callGhostOrchestrator: vi.fn(),
+  isGhostEnabled: vi.fn(),
+}));
+
 import { callAgent } from '../api/agentClient';
+import { isGhostEnabled } from '../api/ghostClient';
 
 const mockCallAgent = vi.mocked(callAgent);
+const mockIsGhostEnabled = vi.mocked(isGhostEnabled);
 
 // -----------------------------------------------------------------------------
 // Test Helpers
@@ -88,6 +95,8 @@ function wrapper({ children }: { children: React.ReactNode }) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Default: Ghost disabled (most tests expect client-side orchestration)
+  mockIsGhostEnabled.mockReturnValue(false);
 });
 
 // -----------------------------------------------------------------------------
@@ -712,5 +721,50 @@ describe('Orchestrator — Clear Board', () => {
     await waitFor(() => {
       expect(result.current.isProcessing()).toBe(false);
     });
+  });
+});
+
+// -----------------------------------------------------------------------------
+// Discussion Mode Bypasses Ghost (Real Timers)
+// -----------------------------------------------------------------------------
+
+describe('Orchestrator — Discussion Mode Bypasses Ghost', () => {
+  it('calls all 3 agents in Discussion mode even when Ghost is enabled', async () => {
+    // Enable Ghost (but Discussion mode should bypass it)
+    mockIsGhostEnabled.mockReturnValue(true);
+
+    const gptResponse = createMockResponse('gpt', 'GPT response in discussion');
+    const claudeResponse = createMockResponse('claude', 'Claude response');
+    const geminiResponse = createMockResponse('gemini', 'Gemini response');
+
+    mockCallAgent
+      .mockResolvedValueOnce(gptResponse)
+      .mockResolvedValueOnce(claudeResponse)
+      .mockResolvedValueOnce(geminiResponse);
+
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    // Mode defaults to 'discussion' — ensure it stays that way
+    expect(result.current.getMode()).toBe('discussion');
+
+    act(() => {
+      result.current.submitPrompt('Test discussion with ghost enabled');
+    });
+
+    await waitFor(() => {
+      expect(result.current.isProcessing()).toBe(false);
+    });
+
+    // CRITICAL: All 3 agents must be called (Calls 3/3), NOT Ghost
+    expect(mockCallAgent).toHaveBeenCalledTimes(3);
+    expect(mockCallAgent).toHaveBeenNthCalledWith(1, 'gpt', expect.any(String), expect.any(String), expect.any(AbortController), expect.any(Object));
+    expect(mockCallAgent).toHaveBeenNthCalledWith(2, 'claude', expect.any(String), expect.any(String), expect.any(AbortController), expect.any(Object));
+    expect(mockCallAgent).toHaveBeenNthCalledWith(3, 'gemini', expect.any(String), expect.any(String), expect.any(AbortController), expect.any(Object));
+
+    // Exchange should have all 3 responses
+    const exchange = result.current.getExchanges()[0];
+    expect(exchange.responsesByAgent.gpt).toBeDefined();
+    expect(exchange.responsesByAgent.claude).toBeDefined();
+    expect(exchange.responsesByAgent.gemini).toBeDefined();
   });
 });

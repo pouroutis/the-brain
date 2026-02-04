@@ -359,9 +359,13 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       // -----------------------------------------------------------------------
       // Ghost Mode Branch (Phase 9B)
       // Per Phase 9A: CEO mode always uses Ghost (server-side enforced)
+      // EXCEPTION: Discussion mode ALWAYS uses client-side orchestration
       // -----------------------------------------------------------------------
 
-      if (isGhostEnabled()) {
+      // Capture mode early for ghost/client branching decision
+      const currentMode = state.mode;
+
+      if (isGhostEnabled() && currentMode !== 'discussion') {
         // Dispatch AGENT_STARTED for GPT (Ghost orchestrator is GPT-led)
         dispatch({ type: 'AGENT_STARTED', runId, agent: 'gpt' });
 
@@ -420,11 +424,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
 
       let conversationContext = '';
 
-      // Capture settings at start of run
+      // Capture settings at start of run (currentMode already captured above)
       const useProjectContext = projectDiscussionModeRef.current;
       const currentCeo = ceoRef.current;
       const forceAll = forceAllAdvisorsRef.current;
-      const currentMode = state.mode;
       const currentLoopState = state.loopState;
 
       // Compute agent order: advisors first, CEO last
