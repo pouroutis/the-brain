@@ -48,6 +48,14 @@ export const env = {
   supabaseUrl: getEnvVar('VITE_SUPABASE_URL'),
 
   /**
+   * Default CEO agent
+   * The CEO speaks last and is the only agent whose response becomes the execution prompt
+   * Valid values: 'gpt' | 'claude' | 'gemini'
+   * Default: 'gpt' (ChatGPT)
+   */
+  defaultCeo: getEnvVar('VITE_DEFAULT_CEO', 'gpt') as 'gpt' | 'claude' | 'gemini',
+
+  /**
    * Supabase anon key (optional for Edge Functions that don't require auth)
    */
   supabaseAnonKey: getEnvVar('VITE_SUPABASE_ANON_KEY', ''),

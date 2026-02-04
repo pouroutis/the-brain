@@ -6,7 +6,7 @@
 import type { Exchange, Agent } from '../types/brain';
 
 /**
- * Agent order for building execution prompts
+ * Agent order for building execution prompts (legacy, all advisors)
  */
 const AGENT_ORDER: Agent[] = ['gpt', 'claude', 'gemini'];
 
@@ -20,8 +20,18 @@ const AGENT_NAMES: Record<Agent, string> = {
 };
 
 /**
+ * CEO role names for execution prompts
+ */
+const CEO_ROLE_NAMES: Record<Agent, string> = {
+  gpt: 'GPT CEO',
+  claude: 'Claude CEO',
+  gemini: 'Gemini CEO',
+};
+
+/**
  * Build a Claude Code execution prompt from the last exchange.
  * Combines all successful agent responses into a structured prompt.
+ * (Legacy function - use buildCeoExecutionPrompt for CEO-only prompts)
  *
  * @param exchange - The exchange to build the prompt from
  * @returns The formatted execution prompt string, or null if no content
@@ -64,6 +74,53 @@ Key priorities:
 2. Follow the RECOMMENDATION sections
 3. Consider the RISKS mentioned
 4. Keep changes minimal and focused
+`;
+
+  return prompt;
+}
+
+/**
+ * Build a CEO-only execution prompt from the last exchange.
+ * Contains ONLY the CEO's final decision, formatted for direct Claude Code execution.
+ *
+ * @param exchange - The exchange to build the prompt from
+ * @param ceo - The CEO agent whose response to extract
+ * @returns The formatted CEO execution prompt string, or null if CEO has no response
+ */
+export function buildCeoExecutionPrompt(
+  exchange: Exchange | null,
+  ceo: Agent
+): string | null {
+  if (!exchange) {
+    return null;
+  }
+
+  const ceoResponse = exchange.responsesByAgent[ceo];
+
+  if (!ceoResponse || ceoResponse.status !== 'success' || !ceoResponse.content) {
+    return null;
+  }
+
+  const prompt = `# The Brain — CEO Execution Directive
+
+## Original Question
+${exchange.userPrompt}
+
+## ${CEO_ROLE_NAMES[ceo]} Decision
+
+${ceoResponse.content}
+
+---
+
+## Your Task
+
+Execute the CEO's directive above. This is the final decision after advisor deliberation.
+
+Key priorities:
+1. Follow the CEO's instructions precisely
+2. Implement the recommended approach
+3. Address any risks or concerns mentioned
+4. Keep changes focused and minimal
 `;
 
   return prompt;

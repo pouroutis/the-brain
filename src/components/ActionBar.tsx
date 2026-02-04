@@ -1,9 +1,10 @@
 // =============================================================================
 // The Brain — Multi-AI Sequential Chat System
-// ActionBar Component (Phase 2 — Step 5)
+// ActionBar Component (Phase 2A — CEO Authority)
 // =============================================================================
 
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useRef, useEffect } from 'react';
+import type { Agent } from '../types/brain';
 
 // -----------------------------------------------------------------------------
 // Types
@@ -22,9 +23,25 @@ interface ActionBarProps {
   projectDiscussionMode?: boolean;
   /** Callback to toggle project discussion mode */
   onToggleProjectDiscussionMode?: (enabled: boolean) => void;
-  /** Execution prompt to copy (null if not available) */
-  executionPrompt?: string | null;
+  /** CEO execution prompt to copy (null if not available) */
+  ceoExecutionPrompt?: string | null;
+  /** Current CEO agent */
+  ceo?: Agent;
+  /** Callback to change CEO */
+  onCeoChange?: (agent: Agent) => void;
+  /** Current exchange ID (for tracking prompt generation per cycle) */
+  lastExchangeId?: string | null;
 }
+
+// -----------------------------------------------------------------------------
+// Constants
+// -----------------------------------------------------------------------------
+
+const CEO_OPTIONS: { value: Agent; label: string }[] = [
+  { value: 'gpt', label: 'ChatGPT' },
+  { value: 'claude', label: 'Claude' },
+  { value: 'gemini', label: 'Gemini' },
+];
 
 // -----------------------------------------------------------------------------
 // Component
@@ -37,25 +54,77 @@ export function ActionBar({
   onCancel,
   projectDiscussionMode = false,
   onToggleProjectDiscussionMode,
-  executionPrompt,
+  ceoExecutionPrompt,
+  ceo = 'gpt',
+  onCeoChange,
+  lastExchangeId,
 }: ActionBarProps): JSX.Element {
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
 
-  const handleCopyExecutionPrompt = useCallback(async () => {
-    if (!executionPrompt) return;
+  // Track which exchange IDs have had execution prompts generated (safety)
+  const generatedForExchangeRef = useRef<Set<string>>(new Set());
+
+  // Reset tracking when exchanges are cleared
+  useEffect(() => {
+    if (!lastExchangeId) {
+      generatedForExchangeRef.current.clear();
+    }
+  }, [lastExchangeId]);
+
+  const hasGeneratedForCurrentExchange =
+    lastExchangeId !== null &&
+    lastExchangeId !== undefined &&
+    generatedForExchangeRef.current.has(lastExchangeId);
+
+  const handleGenerateCeoPrompt = useCallback(async () => {
+    if (!ceoExecutionPrompt || !lastExchangeId) return;
+
+    // Safety: Prevent multiple execution prompts per cycle
+    if (generatedForExchangeRef.current.has(lastExchangeId)) {
+      setCopyFeedback('Already generated');
+      setTimeout(() => setCopyFeedback(null), 2000);
+      return;
+    }
 
     try {
-      await navigator.clipboard.writeText(executionPrompt);
+      await navigator.clipboard.writeText(ceoExecutionPrompt);
+      generatedForExchangeRef.current.add(lastExchangeId);
       setCopyFeedback('Copied!');
       setTimeout(() => setCopyFeedback(null), 2000);
     } catch {
       setCopyFeedback('Failed to copy');
       setTimeout(() => setCopyFeedback(null), 2000);
     }
-  }, [executionPrompt]);
+  }, [ceoExecutionPrompt, lastExchangeId]);
+
+  const handleCeoChange = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      onCeoChange?.(e.target.value as Agent);
+    },
+    [onCeoChange]
+  );
 
   return (
     <div className="action-bar">
+      {/* CEO Selector */}
+      {onCeoChange && (
+        <label className="action-bar__select-label">
+          <span className="action-bar__select-text">CEO:</span>
+          <select
+            className="action-bar__select"
+            value={ceo}
+            onChange={handleCeoChange}
+            disabled={isProcessing}
+          >
+            {CEO_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
       {/* Project Discussion Mode toggle */}
       {onToggleProjectDiscussionMode && (
         <label className="action-bar__toggle">
@@ -69,14 +138,18 @@ export function ActionBar({
         </label>
       )}
 
-      {/* Copy Execution Prompt button */}
+      {/* Generate CEO Execution Prompt button */}
       <button
         className="action-bar__button action-bar__button--copy"
-        onClick={handleCopyExecutionPrompt}
-        disabled={!executionPrompt || isProcessing}
-        title="Copy a Claude Code prompt based on the last exchange"
+        onClick={handleGenerateCeoPrompt}
+        disabled={!ceoExecutionPrompt || isProcessing || hasGeneratedForCurrentExchange}
+        title={
+          hasGeneratedForCurrentExchange
+            ? 'Execution prompt already generated for this cycle'
+            : 'Generate and copy CEO execution prompt for Claude Code'
+        }
       >
-        {copyFeedback ?? 'Copy Execution Prompt'}
+        {copyFeedback ?? 'Generate CEO Execution Prompt'}
       </button>
 
       {/* Cancel button: visible only when processing */}

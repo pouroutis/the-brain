@@ -91,6 +91,29 @@ function parseGatekeepingFlags(content: string): GatekeepingFlags {
   }
 }
 
+/**
+ * Compute agent order based on CEO.
+ * CEO speaks LAST. Other advisors speak first in their natural order.
+ *
+ * Special case: When CEO=GPT, maintain backward-compatible order (GPT first)
+ * because GPT serves dual role as gatekeeper + CEO. GPT's single response
+ * contains both gatekeeping flags and the CEO decision.
+ *
+ * When CEO=gpt: gpt, claude, gemini (backward compatible, GPT is gatekeeper+CEO)
+ * When CEO=claude: gpt, gemini, claude (GPT gatekeeps, Claude CEO speaks last)
+ * When CEO=gemini: gpt, claude, gemini (GPT gatekeeps, Gemini CEO speaks last)
+ */
+function getAgentOrder(ceo: Agent): Agent[] {
+  // Special case: GPT as CEO maintains original order for backward compatibility
+  if (ceo === 'gpt') {
+    return ['gpt', 'claude', 'gemini'];
+  }
+  // For other CEOs: GPT first (gatekeeper), then other advisor, then CEO last
+  const allAgents: Agent[] = ['gpt', 'claude', 'gemini'];
+  const advisors = allAgents.filter((a) => a !== ceo);
+  return [...advisors, ceo];
+}
+
 // -----------------------------------------------------------------------------
 // Context Types
 // -----------------------------------------------------------------------------
@@ -112,6 +135,8 @@ interface BrainActions {
   setForceAllAdvisors: (enabled: boolean) => void;
   /** Toggle project discussion mode (injects project context) */
   setProjectDiscussionMode: (enabled: boolean) => void;
+  /** Set the CEO agent (speaks last, generates execution prompt) */
+  setCeo: (agent: Agent) => void;
 }
 
 /**
@@ -153,6 +178,8 @@ interface BrainSelectors {
   getForceAllAdvisors: () => boolean;
   /** Check if project discussion mode is enabled */
   getProjectDiscussionMode: () => boolean;
+  /** Get the current CEO agent */
+  getCeo: () => Agent;
 }
 
 /**
@@ -208,6 +235,20 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
   useEffect(() => {
     projectDiscussionModeRef.current = projectDiscussionMode;
   }, [projectDiscussionMode]);
+
+  // ---------------------------------------------------------------------------
+  // CEO State (Phase 2A)
+  // The CEO speaks last and is the only agent whose response becomes execution prompt
+  // ---------------------------------------------------------------------------
+
+  const [ceo, setCeoState] = useState<Agent>(env.defaultCeo);
+
+  // Ref for reading current value during async operations
+  const ceoRef = useRef<Agent>(env.defaultCeo);
+
+  useEffect(() => {
+    ceoRef.current = ceo;
+  }, [ceo]);
 
   // ---------------------------------------------------------------------------
   // Orchestrator Refs (stable across renders, avoid stale closures)
@@ -347,135 +388,46 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       }
 
       // -----------------------------------------------------------------------
-      // Single-Pass Mode (existing logic, for non-Ghost flows)
+      // Single-Pass Mode (CEO-ordered sequence)
+      // CEO speaks LAST. Gatekeeping only works when GPT is first (CEO≠GPT).
       // -----------------------------------------------------------------------
 
       let conversationContext = '';
 
-      // Capture project discussion mode at start of run
+      // Capture settings at start of run
       const useProjectContext = projectDiscussionModeRef.current;
-
-      // -----------------------------------------------------------------------
-      // Step 1: Call GPT (gatekeeping)
-      // -----------------------------------------------------------------------
-
-      if (isCancelled()) {
-        handleCancel();
-        return;
-      }
-
-      dispatch({ type: 'AGENT_STARTED', runId, agent: 'gpt' });
-
-      const gptAbortController = new AbortController();
-      // Link to sequence abort
-      sequenceAbortController.signal.addEventListener('abort', () => {
-        gptAbortController.abort();
-      });
-
-      // Set up timeout for GPT call (triggers abort after AGENT_TIMEOUT_MS)
-      const gptTimeoutId = setTimeout(() => {
-        gptAbortController.abort();
-      }, AGENT_TIMEOUT_MS);
-
-      // Increment call counter (Phase 5)
-      callIndexRef.current += 1;
-
-      const gptResponse = await callAgent(
-        'gpt',
-        userPrompt,
-        conversationContext,
-        gptAbortController,
-        {
-          runId,
-          callIndex: callIndexRef.current,
-          exchanges: state.exchanges,
-          projectDiscussionMode: useProjectContext,
-        }
-      );
-
-      // Clear timeout after call completes
-      clearTimeout(gptTimeoutId);
-
-      // Post-await cancellation check
-      if (isCancelled()) {
-        handleCancel();
-        return;
-      }
-
-      dispatch({ type: 'AGENT_COMPLETED', runId, response: gptResponse });
-
-      // Update context with GPT's response
-      if (gptResponse.status === 'success' && gptResponse.content) {
-        conversationContext += `GPT: ${gptResponse.content}\n\n`;
-      }
-
-      // -----------------------------------------------------------------------
-      // Step 2: Parse gatekeeping flags
-      // -----------------------------------------------------------------------
-
-      let flags: GatekeepingFlags;
-      if (gptResponse.status === 'success' && gptResponse.content) {
-        flags = parseGatekeepingFlags(gptResponse.content);
-      } else {
-        // GPT failed — fallback to calling all agents
-        flags = {
-          callClaude: true,
-          callGemini: true,
-          reasonTag: 'gpt_failed',
-          valid: false,
-        };
-      }
-
-      // Emit warning if parse failed
-      if (!flags.valid) {
-        dispatch({
-          type: 'SET_WARNING',
-          runId,
-          warning: {
-            type: 'context_limit',
-            message: `Gatekeeping parse failed (${flags.reasonTag}). Calling all agents.`,
-            dismissable: true,
-          },
-        });
-      }
-
-      // -----------------------------------------------------------------------
-      // Step 2.5: Check FORCE_ALL_ADVISORS override
-      // When enabled, ignore parsed flags and call all agents
-      // -----------------------------------------------------------------------
-
+      const currentCeo = ceoRef.current;
       const forceAll = forceAllAdvisorsRef.current;
 
-      // -----------------------------------------------------------------------
-      // Step 3: Call Claude (if needed or forced)
-      // -----------------------------------------------------------------------
+      // Compute agent order: advisors first, CEO last
+      const agentOrder = getAgentOrder(currentCeo);
 
-      if (forceAll || flags.callClaude || !flags.valid) {
-        if (isCancelled()) {
-          handleCancel();
-          return;
-        }
+      // Gatekeeping flags (only populated if GPT speaks first)
+      let flags: GatekeepingFlags = {
+        callClaude: true,
+        callGemini: true,
+        reasonTag: 'no_gatekeeping',
+        valid: false,
+      };
 
-        dispatch({ type: 'AGENT_STARTED', runId, agent: 'claude' });
-
-        const claudeAbortController = new AbortController();
+      // Helper to call an agent
+      const callAgentWithTimeout = async (agent: Agent): Promise<AgentResponse> => {
+        const agentAbortController = new AbortController();
         sequenceAbortController.signal.addEventListener('abort', () => {
-          claudeAbortController.abort();
+          agentAbortController.abort();
         });
 
-        // Set up timeout for Claude call
-        const claudeTimeoutId = setTimeout(() => {
-          claudeAbortController.abort();
+        const timeoutId = setTimeout(() => {
+          agentAbortController.abort();
         }, AGENT_TIMEOUT_MS);
 
-        // Increment call counter (Phase 5)
         callIndexRef.current += 1;
 
-        const claudeResponse = await callAgent(
-          'claude',
+        const response = await callAgent(
+          agent,
           userPrompt,
           conversationContext,
-          claudeAbortController,
+          agentAbortController,
           {
             runId,
             callIndex: callIndexRef.current,
@@ -484,8 +436,48 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
           }
         );
 
-        // Clear timeout after call completes
-        clearTimeout(claudeTimeoutId);
+        clearTimeout(timeoutId);
+        return response;
+      };
+
+      // Helper to check if agent should be called (gatekeeping)
+      const shouldCallAgent = (agent: Agent, isCeo: boolean): boolean => {
+        // CEO always speaks
+        if (isCeo) return true;
+        // Force all overrides gatekeeping
+        if (forceAll) return true;
+        // If flags not valid, call all
+        if (!flags.valid) return true;
+        // Check specific flags
+        if (agent === 'claude') return flags.callClaude;
+        if (agent === 'gemini') return flags.callGemini;
+        // GPT as non-CEO advisor: always call (does gatekeeping)
+        return true;
+      };
+
+      // -----------------------------------------------------------------------
+      // Call agents in CEO-ordered sequence
+      // -----------------------------------------------------------------------
+
+      for (let i = 0; i < agentOrder.length; i++) {
+        const agent = agentOrder[i];
+        const isCeoAgent = agent === currentCeo;
+        const isFirstAgent = i === 0;
+
+        // Check cancellation before each agent
+        if (isCancelled()) {
+          handleCancel();
+          return;
+        }
+
+        // Check if agent should be called (gatekeeping for non-CEO)
+        if (!shouldCallAgent(agent, isCeoAgent)) {
+          continue;
+        }
+
+        dispatch({ type: 'AGENT_STARTED', runId, agent });
+
+        const response = await callAgentWithTimeout(agent);
 
         // Post-await cancellation check
         if (isCancelled()) {
@@ -493,66 +485,53 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
           return;
         }
 
-        dispatch({ type: 'AGENT_COMPLETED', runId, response: claudeResponse });
-
-        // Update context with Claude's response
-        if (claudeResponse.status === 'success' && claudeResponse.content) {
-          conversationContext += `Claude: ${claudeResponse.content}\n\n`;
-        }
-      }
-
-      // -----------------------------------------------------------------------
-      // Step 4: Call Gemini (if needed or forced)
-      // -----------------------------------------------------------------------
-
-      if (forceAll || flags.callGemini || !flags.valid) {
-        if (isCancelled()) {
-          handleCancel();
-          return;
+        // Guard: Skip if response is undefined (malformed mock or edge case)
+        if (!response) {
+          continue;
         }
 
-        dispatch({ type: 'AGENT_STARTED', runId, agent: 'gemini' });
+        dispatch({ type: 'AGENT_COMPLETED', runId, response });
 
-        const geminiAbortController = new AbortController();
-        sequenceAbortController.signal.addEventListener('abort', () => {
-          geminiAbortController.abort();
-        });
+        // Update conversation context with proper agent labels
+        if (response.status === 'success' && response.content) {
+          const agentLabels: Record<Agent, string> = {
+            gpt: 'GPT',
+            claude: 'Claude',
+            gemini: 'Gemini',
+          };
+          conversationContext += `${agentLabels[agent]}: ${response.content}\n\n`;
+        }
 
-        // Set up timeout for Gemini call
-        const geminiTimeoutId = setTimeout(() => {
-          geminiAbortController.abort();
-        }, AGENT_TIMEOUT_MS);
-
-        // Increment call counter (Phase 5)
-        callIndexRef.current += 1;
-
-        const geminiResponse = await callAgent(
-          'gemini',
-          userPrompt,
-          conversationContext,
-          geminiAbortController,
-          {
-            runId,
-            callIndex: callIndexRef.current,
-            exchanges: state.exchanges,
-            projectDiscussionMode: useProjectContext,
+        // Parse gatekeeping flags if GPT spoke first
+        if (isFirstAgent && agent === 'gpt') {
+          if (response.status === 'success' && response.content) {
+            flags = parseGatekeepingFlags(response.content);
+          } else {
+            flags = {
+              callClaude: true,
+              callGemini: true,
+              reasonTag: 'gpt_failed',
+              valid: false,
+            };
           }
-        );
 
-        // Clear timeout after call completes
-        clearTimeout(geminiTimeoutId);
-
-        // Post-await cancellation check
-        if (isCancelled()) {
-          handleCancel();
-          return;
+          // Emit warning if parse failed
+          if (!flags.valid) {
+            dispatch({
+              type: 'SET_WARNING',
+              runId,
+              warning: {
+                type: 'context_limit',
+                message: `Gatekeeping parse failed (${flags.reasonTag}). Calling all agents.`,
+                dismissable: true,
+              },
+            });
+          }
         }
-
-        dispatch({ type: 'AGENT_COMPLETED', runId, response: geminiResponse });
       }
 
       // -----------------------------------------------------------------------
-      // Step 5: Complete sequence
+      // Complete sequence
       // -----------------------------------------------------------------------
 
       // Final safety check: only complete if not cancelled and runId still matches
@@ -631,6 +610,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
 
   const setProjectDiscussionMode = useCallback((enabled: boolean): void => {
     setProjectDiscussionModeState(enabled);
+  }, []);
+
+  const setCeo = useCallback((agent: Agent): void => {
+    setCeoState(agent);
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -742,6 +725,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     return projectDiscussionMode;
   }, [projectDiscussionMode]);
 
+  const getCeo = useCallback((): Agent => {
+    return ceo;
+  }, [ceo]);
+
   // ---------------------------------------------------------------------------
   // Memoized Context Value
   // ---------------------------------------------------------------------------
@@ -755,6 +742,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       dismissWarning,
       setForceAllAdvisors,
       setProjectDiscussionMode,
+      setCeo,
       // Selectors
       getState,
       getActiveRunId,
@@ -773,6 +761,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       canClear,
       getForceAllAdvisors,
       getProjectDiscussionMode,
+      getCeo,
     }),
     [
       submitPrompt,
@@ -781,6 +770,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       dismissWarning,
       setForceAllAdvisors,
       setProjectDiscussionMode,
+      setCeo,
       getState,
       getActiveRunId,
       getPendingExchange,
@@ -798,6 +788,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       canClear,
       getForceAllAdvisors,
       getProjectDiscussionMode,
+      getCeo,
     ]
   );
 

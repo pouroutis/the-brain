@@ -1,6 +1,6 @@
 // =============================================================================
 // The Brain — Multi-AI Sequential Chat System
-// BrainChat Container Component (Phase 2 — Step 5)
+// BrainChat Container Component (Phase 2A — CEO Authority)
 // =============================================================================
 
 import { useCallback, useMemo } from 'react';
@@ -9,7 +9,8 @@ import { ExchangeList } from './ExchangeList';
 import { PromptInput } from './PromptInput';
 import { ActionBar } from './ActionBar';
 import { WarningBanner } from './WarningBanner';
-import { buildExecutionPrompt } from '../utils/executionPromptBuilder';
+import { buildCeoExecutionPrompt } from '../utils/executionPromptBuilder';
+import type { Agent } from '../types/brain';
 
 // -----------------------------------------------------------------------------
 // Component
@@ -23,6 +24,7 @@ export function BrainChat(): JSX.Element {
     clearBoard,
     dismissWarning,
     setProjectDiscussionMode,
+    setCeo,
     // Selectors
     getState,
     canSubmit,
@@ -33,6 +35,7 @@ export function BrainChat(): JSX.Element {
     getExchanges,
     getLastExchange,
     getProjectDiscussionMode,
+    getCeo,
   } = useBrain();
 
   // ---------------------------------------------------------------------------
@@ -47,14 +50,16 @@ export function BrainChat(): JSX.Element {
   const warning = getWarning();
   const processing = isProcessing();
   const projectDiscussionMode = getProjectDiscussionMode();
+  const ceo = getCeo();
 
   // ---------------------------------------------------------------------------
-  // Execution Prompt (memoized)
+  // CEO Execution Prompt (memoized)
+  // Only contains the CEO's final decision
   // ---------------------------------------------------------------------------
 
-  const executionPrompt = useMemo(
-    () => buildExecutionPrompt(lastExchange),
-    [lastExchange]
+  const ceoExecutionPrompt = useMemo(
+    () => buildCeoExecutionPrompt(lastExchange, ceo),
+    [lastExchange, ceo]
   );
 
   // ---------------------------------------------------------------------------
@@ -95,6 +100,13 @@ export function BrainChat(): JSX.Element {
     [setProjectDiscussionMode]
   );
 
+  const handleCeoChange = useCallback(
+    (agent: Agent) => {
+      setCeo(agent);
+    },
+    [setCeo]
+  );
+
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
@@ -116,7 +128,7 @@ export function BrainChat(): JSX.Element {
       {/* Prompt Input */}
       <PromptInput canSubmit={canSubmit()} onSubmit={handleSubmit} />
 
-      {/* Action Bar (Clear + Cancel + Project Mode toggle + Copy Execution Prompt) */}
+      {/* Action Bar (CEO selector + Project Mode toggle + Generate CEO Prompt + Clear + Cancel) */}
       <ActionBar
         canClear={canClear()}
         isProcessing={processing}
@@ -124,7 +136,10 @@ export function BrainChat(): JSX.Element {
         onCancel={handleCancel}
         projectDiscussionMode={projectDiscussionMode}
         onToggleProjectDiscussionMode={handleToggleProjectDiscussionMode}
-        executionPrompt={executionPrompt}
+        ceo={ceo}
+        onCeoChange={handleCeoChange}
+        ceoExecutionPrompt={ceoExecutionPrompt}
+        lastExchangeId={lastExchange?.id ?? null}
       />
     </div>
   );
