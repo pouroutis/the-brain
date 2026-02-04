@@ -11,6 +11,7 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
   type ReactNode,
 } from 'react';
 
@@ -29,6 +30,7 @@ import type {
 import { brainReducer, initialBrainState } from '../reducer/brainReducer';
 import { callAgent } from '../api/agentClient';
 import { callGhostOrchestrator, isGhostEnabled } from '../api/ghostClient';
+import { env } from '../config/env';
 
 // -----------------------------------------------------------------------------
 // Constants
@@ -106,6 +108,8 @@ interface BrainActions {
   clearBoard: () => void;
   /** Dismiss the current warning. No-op if no active runId. */
   dismissWarning: () => void;
+  /** Toggle force all advisors mode (testing-phase override) */
+  setForceAllAdvisors: (enabled: boolean) => void;
 }
 
 /**
@@ -143,6 +147,8 @@ interface BrainSelectors {
   canSubmit: () => boolean;
   /** Check if the board can be cleared (not processing, has exchanges) */
   canClear: () => boolean;
+  /** Check if force all advisors mode is enabled */
+  getForceAllAdvisors: () => boolean;
 }
 
 /**
@@ -166,6 +172,22 @@ interface BrainProviderProps {
 
 export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
   const [state, dispatch] = useReducer(brainReducer, initialBrainState);
+
+  // ---------------------------------------------------------------------------
+  // Force All Advisors State (testing-phase override)
+  // Initialized from env, can be toggled via UI
+  // ---------------------------------------------------------------------------
+
+  const [forceAllAdvisors, setForceAllAdvisorsState] = useState<boolean>(
+    env.forceAllAdvisors
+  );
+
+  // Ref for reading current value during async operations
+  const forceAllAdvisorsRef = useRef<boolean>(env.forceAllAdvisors);
+
+  useEffect(() => {
+    forceAllAdvisorsRef.current = forceAllAdvisors;
+  }, [forceAllAdvisors]);
 
   // ---------------------------------------------------------------------------
   // Orchestrator Refs (stable across renders, avoid stale closures)
@@ -216,7 +238,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
 
     // Capture runId for this run (stable reference)
     const runId = currentRunId;
-    
+
     // Read userPrompt from state at the moment runId is observed (snapshot)
     // This is safe because runId only transitions when SUBMIT_START creates a new pendingExchange
     const userPrompt = state.pendingExchange?.userPrompt ?? '';
@@ -251,20 +273,20 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       // Ghost Mode Branch (Phase 9B)
       // Per Phase 9A: CEO mode always uses Ghost (server-side enforced)
       // -----------------------------------------------------------------------
-      
+
       if (isGhostEnabled()) {
         // Dispatch AGENT_STARTED for GPT (Ghost orchestrator is GPT-led)
         dispatch({ type: 'AGENT_STARTED', runId, agent: 'gpt' });
-        
+
         // Call Ghost orchestrator (server-side deliberation)
         const ghostResult = await callGhostOrchestrator(userPrompt, sequenceAbortController);
-        
+
         // Check for cancellation
         if (isCancelled()) {
           handleCancel();
           return;
         }
-        
+
         // Handle Ghost response
         if (ghostResult.status === 'success' && ghostResult.content) {
           // Success: dispatch as GPT response (Ghost output is GPT-authored)
@@ -292,22 +314,22 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
             },
           });
         }
-        
+
         // Complete sequence (Ghost handles all deliberation internally)
         if (!isCancelled() && activeRunIdRef.current === runId) {
           dispatch({ type: 'SEQUENCE_COMPLETED', runId });
         }
-        
+
         // Clear refs
         activeRunIdRef.current = null;
         abortControllerRef.current = null;
         return;
       }
-      
+
       // -----------------------------------------------------------------------
       // Single-Pass Mode (existing logic, for non-Ghost flows)
       // -----------------------------------------------------------------------
-      
+
       let conversationContext = '';
 
       // -----------------------------------------------------------------------
@@ -390,10 +412,17 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       }
 
       // -----------------------------------------------------------------------
-      // Step 3: Call Claude (if needed)
+      // Step 2.5: Check FORCE_ALL_ADVISORS override
+      // When enabled, ignore parsed flags and call all agents
       // -----------------------------------------------------------------------
 
-      if (flags.callClaude || !flags.valid) {
+      const forceAll = forceAllAdvisorsRef.current;
+
+      // -----------------------------------------------------------------------
+      // Step 3: Call Claude (if needed or forced)
+      // -----------------------------------------------------------------------
+
+      if (forceAll || flags.callClaude || !flags.valid) {
         if (isCancelled()) {
           handleCancel();
           return;
@@ -440,10 +469,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       }
 
       // -----------------------------------------------------------------------
-      // Step 4: Call Gemini (if needed)
+      // Step 4: Call Gemini (if needed or forced)
       // -----------------------------------------------------------------------
 
-      if (flags.callGemini || !flags.valid) {
+      if (forceAll || flags.callGemini || !flags.valid) {
         if (isCancelled()) {
           handleCancel();
           return;
@@ -558,6 +587,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     });
   }, [state.pendingExchange]);
 
+  const setForceAllAdvisors = useCallback((enabled: boolean): void => {
+    setForceAllAdvisorsState(enabled);
+  }, []);
+
   // ---------------------------------------------------------------------------
   // Selectors
   // ---------------------------------------------------------------------------
@@ -659,6 +692,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     return !state.isProcessing && state.exchanges.length > 0;
   }, [state.isProcessing, state.exchanges]);
 
+  const getForceAllAdvisors = useCallback((): boolean => {
+    return forceAllAdvisors;
+  }, [forceAllAdvisors]);
+
   // ---------------------------------------------------------------------------
   // Memoized Context Value
   // ---------------------------------------------------------------------------
@@ -670,6 +707,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       cancelSequence,
       clearBoard,
       dismissWarning,
+      setForceAllAdvisors,
       // Selectors
       getState,
       getActiveRunId,
@@ -686,12 +724,14 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       getWarning,
       canSubmit,
       canClear,
+      getForceAllAdvisors,
     }),
     [
       submitPrompt,
       cancelSequence,
       clearBoard,
       dismissWarning,
+      setForceAllAdvisors,
       getState,
       getActiveRunId,
       getPendingExchange,
@@ -707,6 +747,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       getWarning,
       canSubmit,
       canClear,
+      getForceAllAdvisors,
     ]
   );
 

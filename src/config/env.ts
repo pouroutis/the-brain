@@ -6,7 +6,7 @@
 /**
  * Environment configuration with safe fallbacks.
  * Uses Vite's import.meta.env for environment variables.
- * 
+ *
  * Required env vars (in .env or .env.local):
  *   VITE_SUPABASE_URL=https://your-project.supabase.co
  *   VITE_SUPABASE_ANON_KEY=your-anon-key (optional, not needed for Edge Functions)
@@ -26,6 +26,14 @@ const getEnvVar = (key: string, fallback?: string): string => {
   }
   console.warn(`[env] Missing environment variable: ${key}`);
   return '';
+};
+
+const getBoolEnvVar = (key: string, fallback: boolean = false): boolean => {
+  const value = import.meta.env[key];
+  if (value === undefined || value === '') {
+    return fallback;
+  }
+  return value === 'true' || value === '1';
 };
 
 // -----------------------------------------------------------------------------
@@ -53,6 +61,13 @@ export const env = {
    * Whether we're in production mode
    */
   isProd: import.meta.env.PROD,
+
+  /**
+   * Force all advisors to respond (testing-phase override)
+   * When true, ignores CALL_CLAUDE/CALL_GEMINI flags and always calls all 3 agents
+   * Default: false
+   */
+  forceAllAdvisors: getBoolEnvVar('VITE_FORCE_ALL_ADVISORS', false),
 } as const;
 
 // -----------------------------------------------------------------------------
@@ -100,11 +115,12 @@ export function validateEnv(): { valid: boolean; errors: string[] } {
  */
 export function logEnvStatus(): void {
   const { valid, errors } = validateEnv();
-  
+
   if (valid) {
     console.log('[env] Configuration valid');
     console.log(`[env] Supabase URL: ${env.supabaseUrl}`);
     console.log(`[env] Functions base: ${FUNCTIONS_BASE_URL}`);
+    console.log(`[env] Force all advisors: ${env.forceAllAdvisors}`);
   } else {
     console.error('[env] Configuration errors:', errors);
   }
