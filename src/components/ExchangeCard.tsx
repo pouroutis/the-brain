@@ -3,7 +3,7 @@
 // ExchangeCard Component (Phase 2 — Step 5, Phase 6 — Routing Telemetry)
 // =============================================================================
 
-import type { Agent, AgentResponse, Exchange, PendingExchange } from '../types/brain';
+import type { Agent, AgentResponse, BrainMode, Exchange, PendingExchange } from '../types/brain';
 import { AgentCard } from './AgentCard';
 
 // -----------------------------------------------------------------------------
@@ -63,6 +63,8 @@ interface ExchangeCardProps {
   isPending: boolean;
   /** Currently active agent (only relevant for pending exchange) */
   currentAgent: Agent | null;
+  /** Current operating mode (for content sanitization) */
+  mode: BrainMode;
 }
 
 // -----------------------------------------------------------------------------
@@ -74,6 +76,7 @@ export function ExchangeCard({
   responsesByAgent,
   isPending,
   currentAgent,
+  mode,
 }: ExchangeCardProps): JSX.Element {
   // Derive telemetry for completed exchanges (not shown during pending)
   const telemetry = !isPending ? deriveRoutingTelemetry(responsesByAgent) : null;
@@ -113,6 +116,7 @@ export function ExchangeCard({
               agent={agent}
               response={response}
               isActive={isActive}
+              mode={mode}
             />
           );
         })}
@@ -126,7 +130,8 @@ export function ExchangeCard({
 // -----------------------------------------------------------------------------
 
 export function renderCompletedExchange(
-  exchange: Exchange
+  exchange: Exchange,
+  mode: BrainMode
 ): JSX.Element {
   return (
     <ExchangeCard
@@ -135,13 +140,15 @@ export function renderCompletedExchange(
       responsesByAgent={exchange.responsesByAgent}
       isPending={false}
       currentAgent={null}
+      mode={mode}
     />
   );
 }
 
 export function renderPendingExchange(
   pending: PendingExchange,
-  currentAgent: Agent | null
+  currentAgent: Agent | null,
+  mode: BrainMode
 ): JSX.Element {
   return (
     <ExchangeCard
@@ -150,6 +157,7 @@ export function renderPendingExchange(
       responsesByAgent={pending.responsesByAgent}
       isPending={true}
       currentAgent={currentAgent}
+      mode={mode}
     />
   );
 }

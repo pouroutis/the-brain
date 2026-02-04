@@ -3,7 +3,7 @@
 // AgentCard Component (Phase 2 — Step 5)
 // =============================================================================
 
-import type { Agent, AgentResponse } from '../types/brain';
+import type { Agent, AgentResponse, BrainMode } from '../types/brain';
 
 // -----------------------------------------------------------------------------
 // Types
@@ -22,6 +22,8 @@ interface AgentCardProps {
   agent: Agent;
   response: AgentResponse | null;
   isActive: boolean;
+  /** Current operating mode (for content sanitization) */
+  mode: BrainMode;
 }
 
 // -----------------------------------------------------------------------------
@@ -91,16 +93,57 @@ function getStatusSubMessage(response: AgentResponse | null): string | null {
   }
 }
 
+/**
+ * Sanitize response content for Discussion mode.
+ * Removes internal gatekeeping flags (CALL_CLAUDE, CALL_GEMINI, REASON_TAG)
+ * and surrounding delimiter lines (---).
+ */
+function sanitizeContentForDiscussion(content: string): string {
+  // Split into lines
+  const lines = content.split('\n');
+  const sanitizedLines: string[] = [];
+  let insideFlagsBlock = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // Detect delimiter line (---) that may surround flags block
+    if (trimmed === '---') {
+      // Toggle block state, skip this line
+      insideFlagsBlock = !insideFlagsBlock;
+      continue;
+    }
+
+    // Skip lines with gatekeeping flags (even outside --- blocks)
+    if (/^CALL_CLAUDE\s*=/i.test(trimmed)) continue;
+    if (/^CALL_GEMINI\s*=/i.test(trimmed)) continue;
+    if (/^REASON_TAG\s*=/i.test(trimmed)) continue;
+
+    // Skip lines inside flags block
+    if (insideFlagsBlock) continue;
+
+    sanitizedLines.push(line);
+  }
+
+  // Trim leading/trailing empty lines and return
+  return sanitizedLines.join('\n').trim();
+}
+
 // -----------------------------------------------------------------------------
 // Component
 // -----------------------------------------------------------------------------
 
-export function AgentCard({ agent, response, isActive }: AgentCardProps): JSX.Element {
+export function AgentCard({ agent, response, isActive, mode }: AgentCardProps): JSX.Element {
   const status = getDisplayStatus(response, isActive);
   const statusLabel = getStatusLabel(status);
 
   // Extract content (available for success, and optionally for error/terminal states)
-  const content = response?.status === 'success' ? response.content : response?.content;
+  const rawContent = response?.status === 'success' ? response.content : response?.content;
+
+  // Sanitize content in Discussion mode (hide gatekeeping flags from user)
+  const content = rawContent && mode === 'discussion'
+    ? sanitizeContentForDiscussion(rawContent)
+    : rawContent;
 
   // Get contextual sub-message for terminal states
   const subMessage = getStatusSubMessage(response);

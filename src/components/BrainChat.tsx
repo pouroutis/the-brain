@@ -179,6 +179,7 @@ export function BrainChat(): JSX.Element {
         exchanges={exchanges}
         pendingExchange={pendingExchange}
         currentAgent={currentAgent}
+        mode={mode}
       />
 
       {/* Prompt Input (disabled during execution loop) */}

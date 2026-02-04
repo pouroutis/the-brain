@@ -3,7 +3,7 @@
 // ExchangeList Component (Phase 2 — Step 5)
 // =============================================================================
 
-import type { Agent, Exchange, PendingExchange } from '../types/brain';
+import type { Agent, BrainMode, Exchange, PendingExchange } from '../types/brain';
 import { renderCompletedExchange, renderPendingExchange } from './ExchangeCard';
 
 // -----------------------------------------------------------------------------
@@ -17,6 +17,8 @@ interface ExchangeListProps {
   pendingExchange: PendingExchange | null;
   /** Currently active agent (for pending exchange) */
   currentAgent: Agent | null;
+  /** Current operating mode (for content sanitization) */
+  mode: BrainMode;
 }
 
 // -----------------------------------------------------------------------------
@@ -27,6 +29,7 @@ export function ExchangeList({
   exchanges,
   pendingExchange,
   currentAgent,
+  mode,
 }: ExchangeListProps): JSX.Element {
   const hasContent = exchanges.length > 0 || pendingExchange !== null;
 
@@ -43,10 +46,10 @@ export function ExchangeList({
   return (
     <div className="exchange-list">
       {/* Render completed exchanges (historical) */}
-      {exchanges.map((exchange) => renderCompletedExchange(exchange))}
+      {exchanges.map((exchange) => renderCompletedExchange(exchange, mode))}
 
       {/* Render pending exchange (in-flight) */}
-      {pendingExchange !== null && renderPendingExchange(pendingExchange, currentAgent)}
+      {pendingExchange !== null && renderPendingExchange(pendingExchange, currentAgent, mode)}
     </div>
   );
 }
