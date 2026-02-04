@@ -10,6 +10,7 @@ import {
 } from '../utils/costConfig';
 import { buildContext } from '../utils/contextBuilder';
 import { logCalls } from '../utils/devLogger';
+import { buildProjectContextPrefix } from '../config/projectContext';
 
 // -----------------------------------------------------------------------------
 // Constants
@@ -25,6 +26,7 @@ export interface RunCoordination {
   runId: string;
   callIndex: number;
   exchanges: Exchange[];  // Historical exchanges for context building
+  projectDiscussionMode?: boolean;  // Inject project context into prompts
 }
 
 /**
@@ -109,32 +111,47 @@ interface GeminiResponse {
 // Request Builders
 // -----------------------------------------------------------------------------
 
-function buildGPTRequest(userPrompt: string, _context: string): OpenAIRequest {
+function buildGPTRequest(
+  userPrompt: string,
+  _context: string,
+  projectDiscussionMode: boolean
+): OpenAIRequest {
+  const projectPrefix = buildProjectContextPrefix('gpt', projectDiscussionMode);
   return {
     action: 'chat',
     messages: [],
-    systemPrompt: GPT_SYSTEM_PROMPT,
+    systemPrompt: projectPrefix + GPT_SYSTEM_PROMPT,
     userMessage: userPrompt,
     stream: false,
   };
 }
 
-function buildClaudeRequest(userPrompt: string, context: string): AnthropicRequest {
+function buildClaudeRequest(
+  userPrompt: string,
+  context: string,
+  projectDiscussionMode: boolean
+): AnthropicRequest {
+  const projectPrefix = buildProjectContextPrefix('claude', projectDiscussionMode);
   const fullPrompt = context
     ? `Previous responses:\n${context}\n\nUser's original question: ${userPrompt}`
     : userPrompt;
 
   return {
     action: 'chat',
-    systemPrompt: CLAUDE_SYSTEM_PROMPT,
+    systemPrompt: projectPrefix + CLAUDE_SYSTEM_PROMPT,
     prompt: fullPrompt,
     stream: false,
   };
 }
 
-function buildGeminiRequest(userPrompt: string, context: string): GeminiRequest {
-  let fullPrompt = GEMINI_PROMPT_PREFIX + userPrompt;
-  
+function buildGeminiRequest(
+  userPrompt: string,
+  context: string,
+  projectDiscussionMode: boolean
+): GeminiRequest {
+  const projectPrefix = buildProjectContextPrefix('gemini', projectDiscussionMode);
+  let fullPrompt = projectPrefix + GEMINI_PROMPT_PREFIX + userPrompt;
+
   if (context) {
     fullPrompt += `\n\nPrevious responses from other AIs:\n${context}`;
   }
@@ -193,7 +210,7 @@ function classifyError(status: number): ErrorCode {
 
 /**
  * Call an agent's API endpoint and return a normalized AgentResponse.
- * 
+ *
  * @param agent - Which agent to call ('gpt', 'claude', 'gemini')
  * @param userPrompt - The user's original question
  * @param conversationContext - Context from previous agent responses
@@ -209,7 +226,7 @@ export async function callAgent(
   coordination: RunCoordination,
   timeoutMs: number = DEFAULT_TIMEOUT_MS
 ): Promise<AgentResponse> {
-  const { runId, callIndex, exchanges } = coordination;
+  const { runId, callIndex, exchanges, projectDiscussionMode = false } = coordination;
   const timestamp = Date.now();
 
   // -------------------------------------------------------------------------
@@ -266,16 +283,16 @@ export async function callAgent(
   // -------------------------------------------------------------------------
 
   let requestBody: OpenAIRequest | AnthropicRequest | GeminiRequest;
-  
+
   switch (agent) {
     case 'gpt':
-      requestBody = buildGPTRequest(truncatedPrompt, truncatedContext);
+      requestBody = buildGPTRequest(truncatedPrompt, truncatedContext, projectDiscussionMode);
       break;
     case 'claude':
-      requestBody = buildClaudeRequest(truncatedPrompt, truncatedContext);
+      requestBody = buildClaudeRequest(truncatedPrompt, truncatedContext, projectDiscussionMode);
       break;
     case 'gemini':
-      requestBody = buildGeminiRequest(truncatedPrompt, truncatedContext);
+      requestBody = buildGeminiRequest(truncatedPrompt, truncatedContext, projectDiscussionMode);
       break;
   }
 
@@ -313,7 +330,7 @@ export async function callAgent(
 
     // Extract content based on agent
     let content: string | null;
-    
+
     switch (agent) {
       case 'gpt':
         content = parseGPTResponse(data as OpenAIResponse);

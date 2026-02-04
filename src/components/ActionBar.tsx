@@ -16,6 +16,10 @@ interface ActionBarProps {
   onClear: () => void;
   /** Callback to cancel current sequence */
   onCancel: () => void;
+  /** Whether project discussion mode is enabled */
+  projectDiscussionMode?: boolean;
+  /** Callback to toggle project discussion mode */
+  onToggleProjectDiscussionMode?: (enabled: boolean) => void;
 }
 
 // -----------------------------------------------------------------------------
@@ -27,9 +31,24 @@ export function ActionBar({
   isProcessing,
   onClear,
   onCancel,
+  projectDiscussionMode = false,
+  onToggleProjectDiscussionMode,
 }: ActionBarProps): JSX.Element {
   return (
     <div className="action-bar">
+      {/* Project Discussion Mode toggle */}
+      {onToggleProjectDiscussionMode && (
+        <label className="action-bar__toggle">
+          <input
+            type="checkbox"
+            checked={projectDiscussionMode}
+            onChange={(e) => onToggleProjectDiscussionMode(e.target.checked)}
+            disabled={isProcessing}
+          />
+          <span className="action-bar__toggle-label">Project Mode</span>
+        </label>
+      )}
+
       {/* Cancel button: visible only when processing */}
       {isProcessing && (
         <button

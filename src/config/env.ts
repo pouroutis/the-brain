@@ -68,6 +68,14 @@ export const env = {
    * Default: false
    */
   forceAllAdvisors: getBoolEnvVar('VITE_FORCE_ALL_ADVISORS', false),
+
+  /**
+   * Project Discussion Mode
+   * When true, injects project context into all agent prompts
+   * Useful for discussing The Brain's own development
+   * Default: false
+   */
+  projectDiscussionMode: getBoolEnvVar('VITE_PROJECT_DISCUSSION_MODE', false),
 } as const;
 
 // -----------------------------------------------------------------------------
@@ -121,6 +129,7 @@ export function logEnvStatus(): void {
     console.log(`[env] Supabase URL: ${env.supabaseUrl}`);
     console.log(`[env] Functions base: ${FUNCTIONS_BASE_URL}`);
     console.log(`[env] Force all advisors: ${env.forceAllAdvisors}`);
+    console.log(`[env] Project discussion mode: ${env.projectDiscussionMode}`);
   } else {
     console.error('[env] Configuration errors:', errors);
   }

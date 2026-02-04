@@ -110,6 +110,8 @@ interface BrainActions {
   dismissWarning: () => void;
   /** Toggle force all advisors mode (testing-phase override) */
   setForceAllAdvisors: (enabled: boolean) => void;
+  /** Toggle project discussion mode (injects project context) */
+  setProjectDiscussionMode: (enabled: boolean) => void;
 }
 
 /**
@@ -149,6 +151,8 @@ interface BrainSelectors {
   canClear: () => boolean;
   /** Check if force all advisors mode is enabled */
   getForceAllAdvisors: () => boolean;
+  /** Check if project discussion mode is enabled */
+  getProjectDiscussionMode: () => boolean;
 }
 
 /**
@@ -188,6 +192,22 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
   useEffect(() => {
     forceAllAdvisorsRef.current = forceAllAdvisors;
   }, [forceAllAdvisors]);
+
+  // ---------------------------------------------------------------------------
+  // Project Discussion Mode State
+  // Initialized from env, can be toggled via UI
+  // ---------------------------------------------------------------------------
+
+  const [projectDiscussionMode, setProjectDiscussionModeState] = useState<boolean>(
+    env.projectDiscussionMode
+  );
+
+  // Ref for reading current value during async operations
+  const projectDiscussionModeRef = useRef<boolean>(env.projectDiscussionMode);
+
+  useEffect(() => {
+    projectDiscussionModeRef.current = projectDiscussionMode;
+  }, [projectDiscussionMode]);
 
   // ---------------------------------------------------------------------------
   // Orchestrator Refs (stable across renders, avoid stale closures)
@@ -332,6 +352,9 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
 
       let conversationContext = '';
 
+      // Capture project discussion mode at start of run
+      const useProjectContext = projectDiscussionModeRef.current;
+
       // -----------------------------------------------------------------------
       // Step 1: Call GPT (gatekeeping)
       // -----------------------------------------------------------------------
@@ -362,7 +385,12 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
         userPrompt,
         conversationContext,
         gptAbortController,
-        { runId, callIndex: callIndexRef.current, exchanges: state.exchanges }
+        {
+          runId,
+          callIndex: callIndexRef.current,
+          exchanges: state.exchanges,
+          projectDiscussionMode: useProjectContext,
+        }
       );
 
       // Clear timeout after call completes
@@ -448,7 +476,12 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
           userPrompt,
           conversationContext,
           claudeAbortController,
-          { runId, callIndex: callIndexRef.current, exchanges: state.exchanges }
+          {
+            runId,
+            callIndex: callIndexRef.current,
+            exchanges: state.exchanges,
+            projectDiscussionMode: useProjectContext,
+          }
         );
 
         // Clear timeout after call completes
@@ -498,7 +531,12 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
           userPrompt,
           conversationContext,
           geminiAbortController,
-          { runId, callIndex: callIndexRef.current, exchanges: state.exchanges }
+          {
+            runId,
+            callIndex: callIndexRef.current,
+            exchanges: state.exchanges,
+            projectDiscussionMode: useProjectContext,
+          }
         );
 
         // Clear timeout after call completes
@@ -589,6 +627,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
 
   const setForceAllAdvisors = useCallback((enabled: boolean): void => {
     setForceAllAdvisorsState(enabled);
+  }, []);
+
+  const setProjectDiscussionMode = useCallback((enabled: boolean): void => {
+    setProjectDiscussionModeState(enabled);
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -696,6 +738,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     return forceAllAdvisors;
   }, [forceAllAdvisors]);
 
+  const getProjectDiscussionMode = useCallback((): boolean => {
+    return projectDiscussionMode;
+  }, [projectDiscussionMode]);
+
   // ---------------------------------------------------------------------------
   // Memoized Context Value
   // ---------------------------------------------------------------------------
@@ -708,6 +754,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       clearBoard,
       dismissWarning,
       setForceAllAdvisors,
+      setProjectDiscussionMode,
       // Selectors
       getState,
       getActiveRunId,
@@ -725,6 +772,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       canSubmit,
       canClear,
       getForceAllAdvisors,
+      getProjectDiscussionMode,
     }),
     [
       submitPrompt,
@@ -732,6 +780,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       clearBoard,
       dismissWarning,
       setForceAllAdvisors,
+      setProjectDiscussionMode,
       getState,
       getActiveRunId,
       getPendingExchange,
@@ -748,6 +797,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       canSubmit,
       canClear,
       getForceAllAdvisors,
+      getProjectDiscussionMode,
     ]
   );
 

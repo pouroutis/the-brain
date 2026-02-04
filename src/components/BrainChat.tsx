@@ -21,6 +21,7 @@ export function BrainChat(): JSX.Element {
     cancelSequence,
     clearBoard,
     dismissWarning,
+    setProjectDiscussionMode,
     // Selectors
     getState,
     canSubmit,
@@ -29,6 +30,7 @@ export function BrainChat(): JSX.Element {
     getWarning,
     getPendingExchange,
     getExchanges,
+    getProjectDiscussionMode,
   } = useBrain();
 
   // ---------------------------------------------------------------------------
@@ -41,6 +43,7 @@ export function BrainChat(): JSX.Element {
   const currentAgent = state.currentAgent;
   const warning = getWarning();
   const processing = isProcessing();
+  const projectDiscussionMode = getProjectDiscussionMode();
 
   // ---------------------------------------------------------------------------
   // Warning display rule (GPT mandate):
@@ -73,6 +76,13 @@ export function BrainChat(): JSX.Element {
     dismissWarning();
   }, [dismissWarning]);
 
+  const handleToggleProjectDiscussionMode = useCallback(
+    (enabled: boolean) => {
+      setProjectDiscussionMode(enabled);
+    },
+    [setProjectDiscussionMode]
+  );
+
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
@@ -94,12 +104,14 @@ export function BrainChat(): JSX.Element {
       {/* Prompt Input */}
       <PromptInput canSubmit={canSubmit()} onSubmit={handleSubmit} />
 
-      {/* Action Bar (Clear + Cancel) */}
+      {/* Action Bar (Clear + Cancel + Project Mode toggle) */}
       <ActionBar
         canClear={canClear()}
         isProcessing={processing}
         onClear={handleClear}
         onCancel={handleCancel}
+        projectDiscussionMode={projectDiscussionMode}
+        onToggleProjectDiscussionMode={handleToggleProjectDiscussionMode}
       />
     </div>
   );
