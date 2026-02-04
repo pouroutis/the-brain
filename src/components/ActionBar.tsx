@@ -3,7 +3,7 @@
 // ActionBar Component (Phase 2B — Mode Enforcement + CEO UX)
 // =============================================================================
 
-import { useCallback, useState, useRef, useEffect } from 'react';
+import { useCallback } from 'react';
 import type { Agent, BrainMode, LoopState } from '../types/brain';
 
 // -----------------------------------------------------------------------------
@@ -25,8 +25,6 @@ interface ActionBarProps {
   onModeChange: (mode: BrainMode) => void;
   /** Loop state (Phase 2C) */
   loopState: LoopState;
-  /** Callback to save result artifact */
-  onSaveResultArtifact?: (artifact: string | null) => void;
   /** Callback to start execution loop (EXECUTE) */
   onStartExecution: () => void;
   /** Callback to pause execution loop (returns to Discussion) */
@@ -35,20 +33,10 @@ interface ActionBarProps {
   onStopExecution: () => void;
   /** Callback to mark execution as DONE (Phase 2F — deterministic termination) */
   onMarkDone: () => void;
-  /** CEO execution prompt to copy (null if not available) */
-  ceoExecutionPrompt?: string | null;
   /** Current CEO agent */
   ceo?: Agent;
   /** Callback to change CEO */
   onCeoChange?: (agent: Agent) => void;
-  /** Current exchange ID (for tracking prompt generation per cycle) */
-  lastExchangeId?: string | null;
-  /** Whether CEO can generate execution prompt (Project mode + has exchanges) */
-  canGenerateExecutionPrompt?: boolean;
-  /** Latest result artifact from Claude Code (Phase 2C) */
-  resultArtifact?: string | null;
-  /** Callback when CEO execution prompt is generated (for persistence) */
-  onGenerateCeoPrompt?: (prompt: string) => void;
 }
 
 // -----------------------------------------------------------------------------
@@ -67,12 +55,6 @@ const MODE_OPTIONS: { value: BrainMode; label: string; description: string }[] =
   { value: 'project', label: 'Project', description: 'CEO controls, execution enabled' },
 ];
 
-const CEO_LABELS: Record<Agent, string> = {
-  gpt: 'ChatGPT',
-  claude: 'Claude',
-  gemini: 'Gemini',
-};
-
 // -----------------------------------------------------------------------------
 // Component
 // -----------------------------------------------------------------------------
@@ -89,66 +71,12 @@ export function ActionBar({
   onPauseExecution,
   onStopExecution,
   onMarkDone,
-  ceoExecutionPrompt,
   ceo = 'gpt',
   onCeoChange,
-  lastExchangeId,
-  canGenerateExecutionPrompt = false,
-  resultArtifact,
-  onSaveResultArtifact,
-  onGenerateCeoPrompt,
 }: ActionBarProps): JSX.Element {
   // Derived state
   const isRunning = loopState === 'running';
   const isPaused = loopState === 'paused';
-  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
-  const [resultInput, setResultInput] = useState<string>('');
-  const [showResultInput, setShowResultInput] = useState<boolean>(false);
-
-  // Track which exchange IDs have had execution prompts generated (safety)
-  const generatedForExchangeRef = useRef<Set<string>>(new Set());
-
-  // Reset tracking when exchanges are cleared
-  useEffect(() => {
-    if (!lastExchangeId) {
-      generatedForExchangeRef.current.clear();
-    }
-  }, [lastExchangeId]);
-
-  const hasGeneratedForCurrentExchange =
-    lastExchangeId !== null &&
-    lastExchangeId !== undefined &&
-    generatedForExchangeRef.current.has(lastExchangeId);
-
-  const handleGenerateCeoPrompt = useCallback(async () => {
-    // Hard block: Only CEO in Project mode can generate
-    if (mode !== 'project') {
-      setCopyFeedback('Project mode only');
-      setTimeout(() => setCopyFeedback(null), 2000);
-      return;
-    }
-
-    if (!ceoExecutionPrompt || !lastExchangeId) return;
-
-    // Safety: Prevent multiple execution prompts per cycle
-    if (generatedForExchangeRef.current.has(lastExchangeId)) {
-      setCopyFeedback('Already generated');
-      setTimeout(() => setCopyFeedback(null), 2000);
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(ceoExecutionPrompt);
-      generatedForExchangeRef.current.add(lastExchangeId);
-      // Persist the prompt for Executor Panel display
-      onGenerateCeoPrompt?.(ceoExecutionPrompt);
-      setCopyFeedback('Copied!');
-      setTimeout(() => setCopyFeedback(null), 2000);
-    } catch {
-      setCopyFeedback('Failed to copy');
-      setTimeout(() => setCopyFeedback(null), 2000);
-    }
-  }, [ceoExecutionPrompt, lastExchangeId, mode, onGenerateCeoPrompt]);
 
   const handleCeoChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -176,197 +104,133 @@ export function ActionBar({
 
   return (
     <div className="action-bar">
-      {/* Status Indicator Bar */}
-      <div className="action-bar__status">
-        <span className="action-bar__status-item">
-          <strong>Mode:</strong> {MODE_OPTIONS.find(m => m.value === mode)?.label}
-        </span>
-        {ceoActive && (
-          <span className="action-bar__status-item">
-            <strong>CEO:</strong> {CEO_LABELS[ceo]}
-          </span>
-        )}
-        {isRunning && (
-          <span className="action-bar__status-item action-bar__status-item--running">
-            <strong>RUNNING</strong>
-          </span>
-        )}
-        {isPaused && (
-          <span className="action-bar__status-item action-bar__status-item--paused">
-            <strong>PAUSED</strong>
-          </span>
-        )}
-        {resultArtifact && (
-          <span className="action-bar__status-item action-bar__status-item--result">
-            <strong>Result:</strong> {resultArtifact.length > 50 ? resultArtifact.slice(0, 50) + '...' : resultArtifact}
-          </span>
-        )}
-      </div>
+      {/* Row 1: Status Indicator (running/paused state) */}
+      {(isRunning || isPaused) && (
+        <div className="action-bar__status">
+          {isRunning && (
+            <span className="action-bar__status-item action-bar__status-item--running">
+              RUNNING
+            </span>
+          )}
+          {isPaused && (
+            <span className="action-bar__status-item action-bar__status-item--paused">
+              PAUSED
+            </span>
+          )}
+        </div>
+      )}
 
-      {/* Mode Selector */}
-      <label className="action-bar__select-label">
-        <span className="action-bar__select-text">Mode:</span>
-        <select
-          className="action-bar__select"
-          value={mode}
-          onChange={handleModeChange}
-          disabled={isProcessing || isRunning}
-          title={MODE_OPTIONS.find(m => m.value === mode)?.description}
-        >
-          {MODE_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      {/* CEO Selector (only when CEO is active) */}
-      {ceoActive && onCeoChange && (
-        <label className="action-bar__select-label">
-          <span className="action-bar__select-text">CEO:</span>
+      {/* Row 2: Controls - Mode, CEO, Execution buttons */}
+      <div className="action-bar__controls">
+        {/* Group: Mode & CEO Selectors */}
+        <div className="action-bar__group action-bar__group--selectors">
           <select
             className="action-bar__select"
-            value={ceo}
-            onChange={handleCeoChange}
+            value={mode}
+            onChange={handleModeChange}
             disabled={isProcessing || isRunning}
+            title="Select operating mode: Discussion (all AIs discuss), Decision (CEO decides), Project (CEO + execution)"
           >
-            {CEO_OPTIONS.map((opt) => (
+            {MODE_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
             ))}
           </select>
-        </label>
-      )}
 
-      {/* Execution Controls (Project mode only) */}
-      {showExecutionControls && (
-        <>
-          {loopState === 'idle' && (
-            <button
-              className="action-bar__button action-bar__button--execute"
-              onClick={onStartExecution}
-              disabled={isProcessing}
-              title="Start autonomous execution loop (CEO controls until DONE)"
+          {ceoActive && onCeoChange && (
+            <select
+              className="action-bar__select"
+              value={ceo}
+              onChange={handleCeoChange}
+              disabled={isProcessing || isRunning}
+              title="Select CEO: The AI that speaks last and makes final decisions"
             >
-              EXECUTE
-            </button>
+              {CEO_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  CEO: {opt.label}
+                </option>
+              ))}
+            </select>
           )}
-          {loopState === 'paused' && (
-            <button
-              className="action-bar__button action-bar__button--resume"
-              onClick={onStartExecution}
-              disabled={isProcessing}
-              title="Resume execution loop"
-            >
-              RESUME
-            </button>
-          )}
-          {(isRunning || isPaused) && (
-            <>
-              {isRunning && (
-                <>
-                  <button
-                    className="action-bar__button action-bar__button--done"
-                    onClick={onMarkDone}
-                    disabled={isProcessing}
-                    title="Mark execution as DONE (terminates loop, unlocks controls)"
-                  >
-                    Mark DONE
-                  </button>
-                  <button
-                    className="action-bar__button action-bar__button--pause"
-                    onClick={onPauseExecution}
-                    title="Pause execution loop, return to Discussion mode"
-                  >
-                    PAUSE
-                  </button>
-                </>
-              )}
+        </div>
+
+        {/* Group: Execution Controls (Project mode only) */}
+        {showExecutionControls && (
+          <div className="action-bar__group action-bar__group--execution">
+            {loopState === 'idle' && (
+              <button
+                className="action-bar__button action-bar__button--execute"
+                onClick={onStartExecution}
+                disabled={isProcessing}
+                title="Start autonomous execution loop. CEO controls the conversation until you click DONE."
+              >
+                EXECUTE
+              </button>
+            )}
+            {loopState === 'paused' && (
+              <button
+                className="action-bar__button action-bar__button--resume"
+                onClick={onStartExecution}
+                disabled={isProcessing}
+                title="Resume the paused execution loop from where it left off."
+              >
+                RESUME
+              </button>
+            )}
+            {isRunning && (
+              <button
+                className="action-bar__button action-bar__button--done"
+                onClick={onMarkDone}
+                disabled={isProcessing}
+                title="Mark execution as complete. Terminates the loop and unlocks all controls."
+              >
+                DONE
+              </button>
+            )}
+            {isRunning && (
+              <button
+                className="action-bar__button action-bar__button--pause"
+                onClick={onPauseExecution}
+                title="Pause execution to review progress. You can RESUME or STOP after pausing."
+              >
+                PAUSE
+              </button>
+            )}
+            {(isRunning || isPaused) && (
               <button
                 className="action-bar__button action-bar__button--stop"
                 onClick={onStopExecution}
                 disabled={isProcessing}
-                title="Stop and clear execution context (requires EXECUTE to restart)"
+                title="Stop execution and clear context. You'll need to click EXECUTE to start a new loop."
               >
                 STOP
               </button>
-            </>
-          )}
-        </>
-      )}
+            )}
+          </div>
+        )}
 
-      {/* Result Artifact Paste UI (Project mode only) */}
-      {mode === 'project' && onSaveResultArtifact && (
-        <div className="action-bar__result-input">
+        {/* Group: Board Actions */}
+        <div className="action-bar__group action-bar__group--board">
+          {isProcessing && (
+            <button
+              className="action-bar__button action-bar__button--cancel"
+              onClick={onCancel}
+              title="Cancel the current AI response. The conversation will stop mid-generation."
+            >
+              Cancel
+            </button>
+          )}
           <button
-            className="action-bar__button action-bar__button--paste"
-            onClick={() => setShowResultInput(!showResultInput)}
-            title="Paste Claude Code execution result"
+            className="action-bar__button action-bar__button--clear"
+            onClick={onClear}
+            disabled={!canClear || isRunning}
+            title="Clear all conversations from the board. Cannot be undone."
           >
-            {showResultInput ? 'Hide' : 'Paste Result'}
+            Clear Board
           </button>
-          {showResultInput && (
-            <div className="action-bar__result-input-area">
-              <textarea
-                className="action-bar__textarea"
-                placeholder="Paste Claude Code Result here..."
-                value={resultInput}
-                onChange={(e) => setResultInput(e.target.value)}
-                rows={4}
-              />
-              <button
-                className="action-bar__button action-bar__button--save"
-                onClick={() => {
-                  onSaveResultArtifact(resultInput || null);
-                  setShowResultInput(false);
-                }}
-                disabled={!resultInput.trim()}
-              >
-                Save Result
-              </button>
-            </div>
-          )}
         </div>
-      )}
-
-      {/* Generate CEO Execution Prompt button (Project mode only, CEO only) */}
-      {mode === 'project' && (
-        <button
-          className="action-bar__button action-bar__button--copy"
-          onClick={handleGenerateCeoPrompt}
-          disabled={!canGenerateExecutionPrompt || !ceoExecutionPrompt || isProcessing || hasGeneratedForCurrentExchange}
-          title={
-            hasGeneratedForCurrentExchange
-              ? 'Execution prompt already generated for this cycle'
-              : mode !== 'project'
-              ? 'Execution prompts only available in Project mode'
-              : 'Generate CEO execution prompt for Claude Code (one per cycle)'
-          }
-        >
-          {copyFeedback ?? 'Generate CEO Execution Prompt'}
-        </button>
-      )}
-
-      {/* Cancel button: visible only when processing */}
-      {isProcessing && (
-        <button
-          className="action-bar__button action-bar__button--cancel"
-          onClick={onCancel}
-        >
-          Cancel
-        </button>
-      )}
-
-      {/* Clear button: always visible, disabled when processing or execution loop running */}
-      <button
-        className="action-bar__button action-bar__button--clear"
-        onClick={onClear}
-        disabled={!canClear || isRunning}
-      >
-        Clear Board
-      </button>
+      </div>
     </div>
   );
 }

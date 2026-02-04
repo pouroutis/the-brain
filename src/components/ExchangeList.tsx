@@ -19,6 +19,8 @@ interface ExchangeListProps {
   currentAgent: Agent | null;
   /** Current operating mode (for content sanitization) */
   mode: BrainMode;
+  /** Current CEO agent (for render order in Decision/Project modes) */
+  ceo: Agent;
 }
 
 // -----------------------------------------------------------------------------
@@ -30,6 +32,7 @@ export function ExchangeList({
   pendingExchange,
   currentAgent,
   mode,
+  ceo,
 }: ExchangeListProps): JSX.Element {
   const hasContent = exchanges.length > 0 || pendingExchange !== null;
 
@@ -46,10 +49,10 @@ export function ExchangeList({
   return (
     <div className="exchange-list">
       {/* Render completed exchanges (historical) */}
-      {exchanges.map((exchange) => renderCompletedExchange(exchange, mode))}
+      {exchanges.map((exchange) => renderCompletedExchange(exchange, mode, ceo))}
 
       {/* Render pending exchange (in-flight) */}
-      {pendingExchange !== null && renderPendingExchange(pendingExchange, currentAgent, mode)}
+      {pendingExchange !== null && renderPendingExchange(pendingExchange, currentAgent, mode, ceo)}
     </div>
   );
 }

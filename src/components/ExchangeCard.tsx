@@ -10,8 +10,24 @@ import { AgentCard } from './AgentCard';
 // Constants
 // -----------------------------------------------------------------------------
 
-/** Fixed agent rendering order */
-const AGENT_ORDER: Agent[] = ['gpt', 'claude', 'gemini'];
+/** Default agent rendering order (Discussion mode) */
+const DEFAULT_AGENT_ORDER: Agent[] = ['gpt', 'claude', 'gemini'];
+
+/**
+ * Compute agent render order based on mode and CEO.
+ * - Discussion mode: fixed order (gpt, claude, gemini)
+ * - Decision/Project modes: non-CEO first, CEO last
+ */
+function getAgentRenderOrder(mode: BrainMode, ceo: Agent): Agent[] {
+  // Discussion mode: use fixed order
+  if (mode === 'discussion') {
+    return DEFAULT_AGENT_ORDER;
+  }
+  // Decision/Project modes: CEO renders LAST
+  const allAgents: Agent[] = ['gpt', 'claude', 'gemini'];
+  const nonCeoAgents = allAgents.filter((a) => a !== ceo);
+  return [...nonCeoAgents, ceo];
+}
 
 /** Agent display labels for telemetry */
 const AGENT_LABELS: Record<Agent, string> = {
@@ -34,7 +50,7 @@ function deriveRoutingTelemetry(
   const parts: string[] = [];
   let callsUsed = 0;
 
-  for (const agent of AGENT_ORDER) {
+  for (const agent of DEFAULT_AGENT_ORDER) {
     const response = responsesByAgent[agent];
     if (response === undefined || response === null) {
       parts.push(`${AGENT_LABELS[agent]}=skipped`);
@@ -65,6 +81,8 @@ interface ExchangeCardProps {
   currentAgent: Agent | null;
   /** Current operating mode (for content sanitization) */
   mode: BrainMode;
+  /** Current CEO agent (for render order in Decision/Project modes) */
+  ceo: Agent;
 }
 
 // -----------------------------------------------------------------------------
@@ -77,9 +95,13 @@ export function ExchangeCard({
   isPending,
   currentAgent,
   mode,
+  ceo,
 }: ExchangeCardProps): JSX.Element {
   // Derive telemetry for completed exchanges (not shown during pending)
   const telemetry = !isPending ? deriveRoutingTelemetry(responsesByAgent) : null;
+
+  // Compute agent render order based on mode and CEO
+  const agentRenderOrder = getAgentRenderOrder(mode, ceo);
 
   return (
     <div className={`exchange-card ${isPending ? 'exchange-card--pending' : ''}`}>
@@ -98,9 +120,9 @@ export function ExchangeCard({
         </div>
       )}
 
-      {/* Agent Responses Section (fixed order: GPT → Claude → Gemini) */}
+      {/* Agent Responses Section (order depends on mode: Discussion=fixed, Decision/Project=CEO last) */}
       <div className="exchange-card__agents">
-        {AGENT_ORDER.map((agent) => {
+        {agentRenderOrder.map((agent) => {
           const response = responsesByAgent[agent] ?? null;
           const isActive = isPending && currentAgent === agent;
 
@@ -131,7 +153,8 @@ export function ExchangeCard({
 
 export function renderCompletedExchange(
   exchange: Exchange,
-  mode: BrainMode
+  mode: BrainMode,
+  ceo: Agent
 ): JSX.Element {
   return (
     <ExchangeCard
@@ -141,6 +164,7 @@ export function renderCompletedExchange(
       isPending={false}
       currentAgent={null}
       mode={mode}
+      ceo={ceo}
     />
   );
 }
@@ -148,7 +172,8 @@ export function renderCompletedExchange(
 export function renderPendingExchange(
   pending: PendingExchange,
   currentAgent: Agent | null,
-  mode: BrainMode
+  mode: BrainMode,
+  ceo: Agent
 ): JSX.Element {
   return (
     <ExchangeCard
@@ -158,6 +183,7 @@ export function renderPendingExchange(
       isPending={true}
       currentAgent={currentAgent}
       mode={mode}
+      ceo={ceo}
     />
   );
 }

@@ -3,7 +3,7 @@
 // BrainChat Container Component (Phase 2B — Mode Enforcement + CEO UX)
 // =============================================================================
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import { useBrain } from '../context/BrainContext';
 import { ExchangeList } from './ExchangeList';
 import { PromptInput } from './PromptInput';
@@ -145,12 +145,45 @@ export function BrainChat(): JSX.Element {
     [setResultArtifact]
   );
 
-  const handleGenerateCeoPrompt = useCallback(
-    (prompt: string) => {
-      setCeoExecutionPrompt(prompt);
-    },
-    [setCeoExecutionPrompt]
-  );
+  // ---------------------------------------------------------------------------
+  // Executor Panel: Generate Prompt Logic
+  // ---------------------------------------------------------------------------
+
+  const [executorCopyFeedback, setExecutorCopyFeedback] = useState<string | null>(null);
+  const generatedForExchangeRef = useRef<Set<string>>(new Set());
+
+  // Reset tracking when exchanges are cleared
+  useEffect(() => {
+    if (!lastExchange?.id) {
+      generatedForExchangeRef.current.clear();
+    }
+  }, [lastExchange?.id]);
+
+  const hasGeneratedForCurrentExchange =
+    lastExchange?.id !== null &&
+    lastExchange?.id !== undefined &&
+    generatedForExchangeRef.current.has(lastExchange.id);
+
+  const handleExecutorGeneratePrompt = useCallback(async () => {
+    if (mode !== 'project' || !ceoExecutionPrompt || !lastExchange?.id) return;
+
+    if (generatedForExchangeRef.current.has(lastExchange.id)) {
+      setExecutorCopyFeedback('Already generated');
+      setTimeout(() => setExecutorCopyFeedback(null), 2000);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(ceoExecutionPrompt);
+      generatedForExchangeRef.current.add(lastExchange.id);
+      setCeoExecutionPrompt(ceoExecutionPrompt);
+      setExecutorCopyFeedback('Copied!');
+      setTimeout(() => setExecutorCopyFeedback(null), 2000);
+    } catch {
+      setExecutorCopyFeedback('Failed');
+      setTimeout(() => setExecutorCopyFeedback(null), 2000);
+    }
+  }, [ceoExecutionPrompt, lastExchange?.id, mode, setCeoExecutionPrompt]);
 
   const handleStartExecution = useCallback(() => {
     startExecutionLoop();
@@ -185,6 +218,7 @@ export function BrainChat(): JSX.Element {
         pendingExchange={pendingExchange}
         currentAgent={currentAgent}
         mode={mode}
+        ceo={ceo}
       />
 
       {/* Prompt Input (disabled during execution loop) */}
@@ -205,12 +239,6 @@ export function BrainChat(): JSX.Element {
         onMarkDone={handleMarkDone}
         ceo={ceo}
         onCeoChange={handleCeoChange}
-        ceoExecutionPrompt={ceoExecutionPrompt}
-        lastExchangeId={lastExchange?.id ?? null}
-        canGenerateExecutionPrompt={canGenerate}
-        resultArtifact={resultArtifact}
-        onSaveResultArtifact={handleSaveResultArtifact}
-        onGenerateCeoPrompt={handleGenerateCeoPrompt}
       />
 
       {/* Executor Panel (Project mode only) */}
@@ -219,6 +247,10 @@ export function BrainChat(): JSX.Element {
         resultArtifact={resultArtifact}
         onSaveResultArtifact={handleSaveResultArtifact}
         isProjectMode={mode === 'project'}
+        generatedPrompt={ceoExecutionPrompt}
+        onGeneratePrompt={handleExecutorGeneratePrompt}
+        canGenerate={canGenerate && !hasGeneratedForCurrentExchange}
+        copyFeedback={executorCopyFeedback}
       />
     </div>
   );
