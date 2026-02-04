@@ -23,13 +23,13 @@ export type Agent = 'gpt' | 'claude' | 'gemini';
 export type BrainMode = 'discussion' | 'decision' | 'project';
 
 /**
- * Execution loop states (Phase 2C — Project Mode only)
+ * Loop states (Phase 2C — Project Mode only)
  *
  * - idle: Not executing, controls enabled
  * - running: Autonomous execution active, controls locked
  * - paused: Temporarily paused, can resume or stop
  */
-export type ExecutionLoopState = 'idle' | 'running' | 'paused';
+export type LoopState = 'idle' | 'running' | 'paused';
 
 // -----------------------------------------------------------------------------
 // Status Types
@@ -142,8 +142,8 @@ export interface BrainState {
   clearBoardVersion: number;
   /** Current operating mode (Phase 2) */
   mode: BrainMode;
-  /** Execution loop state (Phase 2C — Project mode only) */
-  executionLoopState: ExecutionLoopState;
+  /** Loop state (Phase 2C — Project mode only) */
+  loopState: LoopState;
   /** Latest Claude Code execution result artifact (Phase 2C) */
   resultArtifact: string | null;
 }

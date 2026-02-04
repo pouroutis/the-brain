@@ -4,7 +4,7 @@
 // =============================================================================
 
 import { useCallback, useState, useRef, useEffect } from 'react';
-import type { Agent, BrainMode, ExecutionLoopState } from '../types/brain';
+import type { Agent, BrainMode, LoopState } from '../types/brain';
 
 // -----------------------------------------------------------------------------
 // Types
@@ -23,8 +23,10 @@ interface ActionBarProps {
   mode: BrainMode;
   /** Callback to change mode */
   onModeChange: (mode: BrainMode) => void;
-  /** Execution loop state (Phase 2C) */
-  executionLoopState: ExecutionLoopState;
+  /** Loop state (Phase 2C) */
+  loopState: LoopState;
+  /** Callback to save result artifact */
+  onSaveResultArtifact?: (artifact: string | null) => void;
   /** Callback to start execution loop (EXECUTE) */
   onStartExecution: () => void;
   /** Callback to pause execution loop (returns to Discussion) */
@@ -78,7 +80,7 @@ export function ActionBar({
   onCancel,
   mode,
   onModeChange,
-  executionLoopState,
+  loopState,
   onStartExecution,
   onPauseExecution,
   onStopExecution,
@@ -88,11 +90,14 @@ export function ActionBar({
   lastExchangeId,
   canGenerateExecutionPrompt = false,
   resultArtifact,
+  onSaveResultArtifact,
 }: ActionBarProps): JSX.Element {
   // Derived state
-  const isRunning = executionLoopState === 'running';
-  const isPaused = executionLoopState === 'paused';
+  const isRunning = loopState === 'running';
+  const isPaused = loopState === 'paused';
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+  const [resultInput, setResultInput] = useState<string>('');
+  const [showResultInput, setShowResultInput] = useState<boolean>(false);
 
   // Track which exchange IDs have had execution prompts generated (safety)
   const generatedForExchangeRef = useRef<Set<string>>(new Set());
@@ -230,7 +235,7 @@ export function ActionBar({
       {/* Execution Controls (Project mode only) */}
       {showExecutionControls && (
         <>
-          {executionLoopState === 'idle' && (
+          {loopState === 'idle' && (
             <button
               className="action-bar__button action-bar__button--execute"
               onClick={onStartExecution}
@@ -240,7 +245,7 @@ export function ActionBar({
               EXECUTE
             </button>
           )}
-          {executionLoopState === 'paused' && (
+          {loopState === 'paused' && (
             <button
               className="action-bar__button action-bar__button--resume"
               onClick={onStartExecution}
@@ -272,6 +277,40 @@ export function ActionBar({
             </>
           )}
         </>
+      )}
+
+      {/* Result Artifact Paste UI (Project mode only) */}
+      {mode === 'project' && onSaveResultArtifact && (
+        <div className="action-bar__result-input">
+          <button
+            className="action-bar__button action-bar__button--paste"
+            onClick={() => setShowResultInput(!showResultInput)}
+            title="Paste Claude Code execution result"
+          >
+            {showResultInput ? 'Hide' : 'Paste Result'}
+          </button>
+          {showResultInput && (
+            <div className="action-bar__result-input-area">
+              <textarea
+                className="action-bar__textarea"
+                placeholder="Paste Claude Code Result here..."
+                value={resultInput}
+                onChange={(e) => setResultInput(e.target.value)}
+                rows={4}
+              />
+              <button
+                className="action-bar__button action-bar__button--save"
+                onClick={() => {
+                  onSaveResultArtifact(resultInput || null);
+                  setShowResultInput(false);
+                }}
+                disabled={!resultInput.trim()}
+              >
+                Save Result
+              </button>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Generate CEO Execution Prompt button (Project mode only, CEO only) */}

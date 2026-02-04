@@ -22,7 +22,7 @@ import type {
   BrainMode,
   BrainState,
   Exchange,
-  ExecutionLoopState,
+  LoopState,
   PendingExchange,
   WarningState,
   ErrorCode,
@@ -194,10 +194,10 @@ interface BrainSelectors {
   getCeo: () => Agent;
   /** Get the current operating mode (Phase 2) */
   getMode: () => BrainMode;
-  /** Get the execution loop state (Phase 2C) */
-  getExecutionLoopState: () => ExecutionLoopState;
-  /** Check if execution loop is running (convenience helper) */
-  isExecutionLoopRunning: () => boolean;
+  /** Get the loop state (Phase 2C) */
+  getLoopState: () => LoopState;
+  /** Check if loop is running (convenience helper) */
+  isLoopRunning: () => boolean;
   /** Check if CEO can generate execution prompt (Project mode only) */
   canGenerateExecutionPrompt: () => boolean;
   /** Get the latest result artifact from Claude Code execution (Phase 2C) */
@@ -420,6 +420,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       const useProjectContext = projectDiscussionModeRef.current;
       const currentCeo = ceoRef.current;
       const forceAll = forceAllAdvisorsRef.current;
+      const currentMode = state.mode;
+      const currentLoopState = state.loopState;
 
       // Compute agent order: advisors first, CEO last
       const agentOrder = getAgentOrder(currentCeo);
@@ -523,8 +525,14 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
           };
           conversationContext += `${agentLabels[agent]}: ${response.content}\n\n`;
 
-          // DONE detection: If CEO outputs "DONE" keyword, end execution loop
-          if (isCeoAgent && /\bDONE\b/.test(response.content)) {
+          // DONE detection: If CEO outputs "DONE" keyword in Project mode while running
+          // Case-insensitive, word-boundary match
+          if (
+            isCeoAgent &&
+            currentMode === 'project' &&
+            currentLoopState === 'running' &&
+            /\bDONE\b/i.test(response.content)
+          ) {
             dispatch({ type: 'CEO_DONE_DETECTED' });
           }
         }
@@ -780,13 +788,13 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     return state.mode;
   }, [state.mode]);
 
-  const getExecutionLoopState = useCallback((): ExecutionLoopState => {
-    return state.executionLoopState;
-  }, [state.executionLoopState]);
+  const getLoopState = useCallback((): LoopState => {
+    return state.loopState;
+  }, [state.loopState]);
 
-  const isExecutionLoopRunning = useCallback((): boolean => {
-    return state.executionLoopState === 'running';
-  }, [state.executionLoopState]);
+  const isLoopRunning = useCallback((): boolean => {
+    return state.loopState === 'running';
+  }, [state.loopState]);
 
   const canGenerateExecutionPrompt = useCallback((): boolean => {
     // Only CEO can generate execution prompts, and only in Project mode
@@ -836,8 +844,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       getProjectDiscussionMode,
       getCeo,
       getMode,
-      getExecutionLoopState,
-      isExecutionLoopRunning,
+      getLoopState,
+      isLoopRunning,
       canGenerateExecutionPrompt,
       getResultArtifact,
     }),
@@ -873,8 +881,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       getProjectDiscussionMode,
       getCeo,
       getMode,
-      getExecutionLoopState,
-      isExecutionLoopRunning,
+      getLoopState,
+      isLoopRunning,
       canGenerateExecutionPrompt,
       getResultArtifact,
     ]

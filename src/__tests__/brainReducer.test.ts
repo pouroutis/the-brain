@@ -703,7 +703,7 @@ describe('brainReducer — CLEAR', () => {
       error: 'Some error',
       clearBoardVersion: 5,
       mode: 'discussion',
-      executionLoopState: 'idle',
+      loopState: 'idle',
       resultArtifact: null,
     };
 
@@ -727,20 +727,23 @@ describe('brainReducer — CLEAR', () => {
 // -----------------------------------------------------------------------------
 
 describe('brainReducer — State Invariants', () => {
-  it('state always has exactly 11 fields', () => {
-    const fields = Object.keys(initialBrainState);
-    expect(fields).toHaveLength(11);
-    expect(fields).toContain('exchanges');
-    expect(fields).toContain('pendingExchange');
-    expect(fields).toContain('currentAgent');
-    expect(fields).toContain('isProcessing');
-    expect(fields).toContain('userCancelled');
-    expect(fields).toContain('warningState');
-    expect(fields).toContain('error');
-    expect(fields).toContain('clearBoardVersion');
-    expect(fields).toContain('mode');
-    expect(fields).toContain('executionLoopState');
-    expect(fields).toContain('resultArtifact');
+  it('initialBrainState has expected key set', () => {
+    const expectedKeys = [
+      'exchanges',
+      'pendingExchange',
+      'currentAgent',
+      'isProcessing',
+      'userCancelled',
+      'warningState',
+      'error',
+      'clearBoardVersion',
+      'mode',
+      'loopState',
+      'resultArtifact',
+    ].sort();
+
+    const actualKeys = Object.keys(initialBrainState).sort();
+    expect(actualKeys).toEqual(expectedKeys);
   });
 
   it('responsesByAgent is keyed by Agent (not an array)', () => {

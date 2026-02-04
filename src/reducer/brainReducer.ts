@@ -25,7 +25,7 @@ export const initialBrainState: BrainState = {
   error: null,
   clearBoardVersion: 0,
   mode: 'discussion',
-  executionLoopState: 'idle',
+  loopState: 'idle',
   resultArtifact: null,
 };
 
@@ -260,16 +260,16 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         return state;
       }
 
-      // Guard: Block mode change while execution loop is running
-      if (state.executionLoopState === 'running') {
+      // Guard: Block mode change while loop is running
+      if (state.loopState === 'running') {
         return state;
       }
 
       return {
         ...state,
         mode: action.mode,
-        // Reset execution loop when mode changes
-        executionLoopState: 'idle',
+        // Reset loop state when mode changes
+        loopState: 'idle',
       };
     }
 
@@ -283,29 +283,29 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
       }
 
       // Guard: Don't start if already running
-      if (state.executionLoopState === 'running') {
+      if (state.loopState === 'running') {
         return state;
       }
 
       return {
         ...state,
-        executionLoopState: 'running',
+        loopState: 'running',
       };
     }
 
     // -------------------------------------------------------------------------
-    // PAUSE_EXECUTION_LOOP (Phase 2C — Sets paused state + Discussion mode)
+    // PAUSE_EXECUTION_LOOP (Phase 2C — Sets paused + Discussion mode)
     // -------------------------------------------------------------------------
     case 'PAUSE_EXECUTION_LOOP': {
       return {
         ...state,
-        executionLoopState: 'paused',
+        loopState: 'paused',
         mode: 'discussion',
       };
     }
 
     // -------------------------------------------------------------------------
-    // STOP_EXECUTION_LOOP (Phase 2C — Sets idle + clears context)
+    // STOP_EXECUTION_LOOP (Phase 2C — Sets idle + Discussion mode, keeps chat history)
     // -------------------------------------------------------------------------
     case 'STOP_EXECUTION_LOOP': {
       // Guard: Block if currently processing
@@ -315,10 +315,9 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
 
       return {
         ...state,
-        executionLoopState: 'idle',
+        loopState: 'idle',
         mode: 'discussion',
-        // Clear execution context - requires explicit EXECUTE to restart
-        exchanges: [],
+        // Reset loop-related state only, KEEP chat history (exchanges)
         pendingExchange: null,
         currentAgent: null,
         warningState: null,
@@ -344,7 +343,7 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
       // Transition to idle, keep history, re-enable controls
       return {
         ...state,
-        executionLoopState: 'idle',
+        loopState: 'idle',
         // Keep exchanges and resultArtifact intact
       };
     }
