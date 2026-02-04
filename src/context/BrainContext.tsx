@@ -142,7 +142,9 @@ interface BrainActions {
   setMode: (mode: BrainMode) => void;
   /** Start the autonomous execution loop (Project mode only) */
   startExecutionLoop: () => void;
-  /** Stop the autonomous execution loop */
+  /** Pause execution loop and return to Discussion mode */
+  pauseExecutionLoop: () => void;
+  /** Stop execution loop and clear context */
   stopExecutionLoop: () => void;
 }
 
@@ -637,6 +639,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     dispatch({ type: 'START_EXECUTION_LOOP' });
   }, []);
 
+  const pauseExecutionLoop = useCallback((): void => {
+    dispatch({ type: 'PAUSE_EXECUTION_LOOP' });
+  }, []);
+
   const stopExecutionLoop = useCallback((): void => {
     dispatch({ type: 'STOP_EXECUTION_LOOP' });
   }, []);
@@ -783,6 +789,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       setCeo,
       setMode,
       startExecutionLoop,
+      pauseExecutionLoop,
       stopExecutionLoop,
       // Selectors
       getState,
@@ -817,6 +824,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       setCeo,
       setMode,
       startExecutionLoop,
+      pauseExecutionLoop,
       stopExecutionLoop,
       getState,
       getActiveRunId,

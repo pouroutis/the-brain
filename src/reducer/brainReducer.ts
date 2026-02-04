@@ -293,12 +293,34 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
     }
 
     // -------------------------------------------------------------------------
-    // STOP_EXECUTION_LOOP (Phase 2 — Project Mode Only)
+    // PAUSE_EXECUTION_LOOP (Phase 2B — Returns to Discussion Mode)
     // -------------------------------------------------------------------------
-    case 'STOP_EXECUTION_LOOP': {
+    case 'PAUSE_EXECUTION_LOOP': {
       return {
         ...state,
         executionLoopActive: false,
+        mode: 'discussion',
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // STOP_EXECUTION_LOOP (Phase 2B — Clears execution context)
+    // -------------------------------------------------------------------------
+    case 'STOP_EXECUTION_LOOP': {
+      // Guard: Block if currently processing
+      if (state.isProcessing) {
+        return state;
+      }
+
+      return {
+        ...state,
+        executionLoopActive: false,
+        // Clear execution context - requires explicit EXECUTE to restart
+        exchanges: [],
+        pendingExchange: null,
+        currentAgent: null,
+        warningState: null,
+        error: null,
       };
     }
 

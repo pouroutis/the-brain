@@ -1,6 +1,6 @@
 // =============================================================================
 // The Brain — Multi-AI Sequential Chat System
-// BrainChat Container Component (Phase 2 — Modes + CEO Authority)
+// BrainChat Container Component (Phase 2B — Mode Enforcement + CEO UX)
 // =============================================================================
 
 import { useCallback, useMemo } from 'react';
@@ -26,6 +26,7 @@ export function BrainChat(): JSX.Element {
     setCeo,
     setMode,
     startExecutionLoop,
+    pauseExecutionLoop,
     stopExecutionLoop,
     // Selectors
     getState,
@@ -78,14 +79,23 @@ export function BrainChat(): JSX.Element {
   const shouldShowWarning = warning !== null && pendingExchange !== null;
 
   // ---------------------------------------------------------------------------
+  // Input Control
+  // Block advisor input during execution loop (read-only mode)
+  // ---------------------------------------------------------------------------
+
+  const canSubmitPrompt = canSubmit() && !executionLoopActive;
+
+  // ---------------------------------------------------------------------------
   // Handlers
   // ---------------------------------------------------------------------------
 
   const handleSubmit = useCallback(
     (prompt: string) => {
+      // Hard block: No input during execution loop
+      if (executionLoopActive) return;
       submitPrompt(prompt);
     },
-    [submitPrompt]
+    [submitPrompt, executionLoopActive]
   );
 
   const handleCancel = useCallback(() => {
@@ -102,21 +112,29 @@ export function BrainChat(): JSX.Element {
 
   const handleCeoChange = useCallback(
     (agent: Agent) => {
+      // Hard block: No CEO changes during execution loop
+      if (executionLoopActive) return;
       setCeo(agent);
     },
-    [setCeo]
+    [setCeo, executionLoopActive]
   );
 
   const handleModeChange = useCallback(
     (newMode: BrainMode) => {
+      // Hard block: No mode changes during execution loop
+      if (executionLoopActive) return;
       setMode(newMode);
     },
-    [setMode]
+    [setMode, executionLoopActive]
   );
 
   const handleStartExecution = useCallback(() => {
     startExecutionLoop();
   }, [startExecutionLoop]);
+
+  const handlePauseExecution = useCallback(() => {
+    pauseExecutionLoop();
+  }, [pauseExecutionLoop]);
 
   const handleStopExecution = useCallback(() => {
     stopExecutionLoop();
@@ -140,8 +158,8 @@ export function BrainChat(): JSX.Element {
         currentAgent={currentAgent}
       />
 
-      {/* Prompt Input */}
-      <PromptInput canSubmit={canSubmit()} onSubmit={handleSubmit} />
+      {/* Prompt Input (disabled during execution loop) */}
+      <PromptInput canSubmit={canSubmitPrompt} onSubmit={handleSubmit} />
 
       {/* Action Bar (Mode + CEO + Execution Controls + Clear + Cancel) */}
       <ActionBar
@@ -153,6 +171,7 @@ export function BrainChat(): JSX.Element {
         onModeChange={handleModeChange}
         executionLoopActive={executionLoopActive}
         onStartExecution={handleStartExecution}
+        onPauseExecution={handlePauseExecution}
         onStopExecution={handleStopExecution}
         ceo={ceo}
         onCeoChange={handleCeoChange}

@@ -152,7 +152,8 @@ export type BrainAction =
   | { type: 'CLEAR' }
   | { type: 'SET_MODE'; mode: BrainMode }
   | { type: 'START_EXECUTION_LOOP' }
-  | { type: 'STOP_EXECUTION_LOOP' };
+  | { type: 'STOP_EXECUTION_LOOP' }
+  | { type: 'PAUSE_EXECUTION_LOOP' };
 
 // -----------------------------------------------------------------------------
 // Brain Events (Logging / Debugging) — 6 variants, contract-locked
