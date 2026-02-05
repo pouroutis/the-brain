@@ -31,6 +31,7 @@ export function ExecutorPanel({
   isProjectMode,
 }: ExecutorPanelProps): JSX.Element | null {
   const [resultInput, setResultInput] = useState<string>('');
+  const [pasteFeedback, setPasteFeedback] = useState<string | null>(null);
 
   const handleSaveResult = useCallback(() => {
     if (resultInput.trim()) {
@@ -38,6 +39,20 @@ export function ExecutorPanel({
       setResultInput('');
     }
   }, [resultInput, onSaveResultArtifact]);
+
+  const handlePasteFromClipboard = useCallback(async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        setResultInput(text);
+        setPasteFeedback('Pasted!');
+        setTimeout(() => setPasteFeedback(null), 2000);
+      }
+    } catch {
+      setPasteFeedback('No access');
+      setTimeout(() => setPasteFeedback(null), 2000);
+    }
+  }, []);
 
   // Only show in Project mode
   if (!isProjectMode) {
@@ -61,7 +76,16 @@ export function ExecutorPanel({
 
       {/* Claude Code Result Section */}
       <div className="executor-panel__section">
-        <h4 className="executor-panel__section-title">Claude Code Result</h4>
+        <div className="executor-panel__section-header">
+          <h4 className="executor-panel__section-title">Claude Code Result</h4>
+          <button
+            className="executor-panel__button executor-panel__button--paste"
+            onClick={handlePasteFromClipboard}
+            title="Paste Claude Code output from clipboard"
+          >
+            {pasteFeedback ?? 'Paste from Clipboard'}
+          </button>
+        </div>
         <textarea
           className="executor-panel__textarea"
           value={resultInput}

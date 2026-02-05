@@ -549,13 +549,20 @@ body {
   margin-bottom: 0;
 }
 
+.executor-panel__section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
 .executor-panel__section-title {
   font-size: 0.8125rem;
   font-weight: 500;
   color: #aaa;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  margin: 0 0 8px 0;
+  margin: 0;
 }
 
 .executor-panel__textarea {
@@ -627,6 +634,16 @@ body {
 
 .executor-panel__button--copy {
   border-color: #555;
+}
+
+.executor-panel__button--paste {
+  border-color: #7b1fa2;
+  color: #ce93d8;
+}
+
+.executor-panel__button--paste:hover:not(:disabled) {
+  background-color: #3a1a4a;
+  border-color: #ce93d8;
 }
 
 .executor-panel__button--save {
