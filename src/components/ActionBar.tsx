@@ -47,6 +47,14 @@ interface ActionBarProps {
   onFinishDiscussion?: () => void;
   /** Whether export is available (has transcript) */
   canExport?: boolean;
+  /** Callback to switch from Discussion to Project mode (Task 5.3) */
+  onSwitchToProject?: () => void;
+  /** Callback to return from Project to Discussion mode (Task 5.3) */
+  onReturnToDiscussion?: () => void;
+  /** Whether there is an active discussion session to return to (Task 5.3) */
+  hasActiveDiscussion?: boolean;
+  /** Whether there are exchanges (for Switch to Project button) */
+  hasExchanges?: boolean;
 }
 
 // -----------------------------------------------------------------------------
@@ -88,6 +96,10 @@ export function ActionBar({
   generateFeedback,
   onFinishDiscussion,
   canExport = false,
+  onSwitchToProject,
+  onReturnToDiscussion,
+  hasActiveDiscussion = false,
+  hasExchanges = false,
 }: ActionBarProps): JSX.Element {
   // Derived state
   const isRunning = loopState === 'running';
@@ -235,16 +247,42 @@ export function ActionBar({
           </div>
         )}
 
-        {/* Group: Discussion Export (Discussion mode only) */}
-        {mode === 'discussion' && onFinishDiscussion && (
+        {/* Group: Discussion Export + Switch to Project (Discussion mode only) */}
+        {mode === 'discussion' && (
           <div className="action-bar__group action-bar__group--export">
+            {onFinishDiscussion && (
+              <button
+                className="action-bar__button action-bar__button--export"
+                onClick={onFinishDiscussion}
+                disabled={!canExport || isProcessing}
+                title="Export full discussion transcript"
+              >
+                Finish Discussion
+              </button>
+            )}
+            {onSwitchToProject && (
+              <button
+                className="action-bar__button action-bar__button--switch-project"
+                onClick={onSwitchToProject}
+                disabled={isProcessing || !hasExchanges}
+                title="Switch to Project mode with discussion context"
+              >
+                Switch to Project
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Group: Back to Discussion (Project mode only, when active discussion exists) */}
+        {mode === 'project' && hasActiveDiscussion && onReturnToDiscussion && (
+          <div className="action-bar__group action-bar__group--return">
             <button
-              className="action-bar__button action-bar__button--export"
-              onClick={onFinishDiscussion}
-              disabled={!canExport || isProcessing}
-              title="Export full discussion transcript"
+              className="action-bar__button action-bar__button--return"
+              onClick={onReturnToDiscussion}
+              disabled={isProcessing || isRunning}
+              title="Return to Discussion mode"
             >
-              Finish Discussion
+              Back to Discussion
             </button>
           </div>
         )}

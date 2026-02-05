@@ -37,6 +37,8 @@ export function BrainChat(): JSX.Element {
     markDone,
     setResultArtifact,
     setCeoExecutionPrompt,
+    switchToProject,
+    returnToDiscussion,
     // Selectors
     getState,
     canSubmit,
@@ -54,6 +56,7 @@ export function BrainChat(): JSX.Element {
     getResultArtifact,
     getCeoExecutionPrompt,
     getSystemMessages,
+    hasActiveDiscussion,
   } = useBrain();
 
   // ---------------------------------------------------------------------------
@@ -75,6 +78,7 @@ export function BrainChat(): JSX.Element {
   const resultArtifact = getResultArtifact();
   const persistedCeoPrompt = getCeoExecutionPrompt();
   const systemMessages = getSystemMessages();
+  const activeDiscussion = hasActiveDiscussion();
 
   // ---------------------------------------------------------------------------
   // CEO Execution Prompt (memoized)
@@ -208,6 +212,18 @@ export function BrainChat(): JSX.Element {
     markDone();
   }, [markDone]);
 
+  const handleSwitchToProject = useCallback(() => {
+    // Hard block: No mode switch during execution loop
+    if (loopRunning) return;
+    switchToProject();
+  }, [switchToProject, loopRunning]);
+
+  const handleReturnToDiscussion = useCallback(() => {
+    // Hard block: No mode switch during execution loop
+    if (loopRunning) return;
+    returnToDiscussion();
+  }, [returnToDiscussion, loopRunning]);
+
   // ---------------------------------------------------------------------------
   // Discussion Export: Finish Discussion (JSON + Markdown)
   // ---------------------------------------------------------------------------
@@ -277,6 +293,10 @@ export function BrainChat(): JSX.Element {
         generateFeedback={executorCopyFeedback}
         onFinishDiscussion={handleFinishDiscussion}
         canExport={canExportDiscussion}
+        onSwitchToProject={handleSwitchToProject}
+        onReturnToDiscussion={handleReturnToDiscussion}
+        hasActiveDiscussion={activeDiscussion}
+        hasExchanges={exchanges.length > 0}
       />
 
       {/* Executor Panel (Project mode only) */}

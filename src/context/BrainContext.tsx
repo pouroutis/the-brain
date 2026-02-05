@@ -161,6 +161,10 @@ interface BrainActions {
   setResultArtifact: (artifact: string | null) => void;
   /** Set the CEO execution prompt (Phase 2D — Executor Panel) */
   setCeoExecutionPrompt: (prompt: string | null) => void;
+  /** Switch from Discussion to Project mode with carryover (Task 5.3) */
+  switchToProject: () => void;
+  /** Return from Project to Discussion mode (Task 5.3) */
+  returnToDiscussion: () => void;
 }
 
 /**
@@ -220,6 +224,8 @@ interface BrainSelectors {
   getKeyNotes: () => KeyNotes | null;
   /** Get system messages for inline notifications */
   getSystemMessages: () => SystemMessage[];
+  /** Check if there is an active discussion session (Task 5.3) */
+  hasActiveDiscussion: () => boolean;
 }
 
 /**
@@ -901,6 +907,20 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     dispatch({ type: 'SET_CEO_EXECUTION_PROMPT', prompt });
   }, []);
 
+  const switchToProject = useCallback((): void => {
+    // Task 5.3: Switch from Discussion to Project mode
+    // 1. Attempt to create carryover (best-effort; may no-op due to guards)
+    dispatch({ type: 'CREATE_CARRYOVER_FROM_DISCUSSION' });
+    // 2. Always switch to project mode
+    dispatch({ type: 'SET_MODE', mode: 'project' });
+  }, []);
+
+  const returnToDiscussion = useCallback((): void => {
+    // Task 5.3: Return from Project to Discussion mode
+    // Do NOT clear carryover — preserve for potential re-entry
+    dispatch({ type: 'SET_MODE', mode: 'discussion' });
+  }, []);
+
   // ---------------------------------------------------------------------------
   // Selectors
   // ---------------------------------------------------------------------------
@@ -1047,6 +1067,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     return state.systemMessages;
   }, [state.systemMessages]);
 
+  const hasActiveDiscussion = useCallback((): boolean => {
+    return state.discussionSession !== null;
+  }, [state.discussionSession]);
+
   // ---------------------------------------------------------------------------
   // Memoized Context Value
   // ---------------------------------------------------------------------------
@@ -1068,6 +1092,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       markDone,
       setResultArtifact,
       setCeoExecutionPrompt,
+      switchToProject,
+      returnToDiscussion,
       // Selectors
       getState,
       getActiveRunId,
@@ -1095,6 +1121,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       getCeoExecutionPrompt,
       getKeyNotes,
       getSystemMessages,
+      hasActiveDiscussion,
     }),
     [
       submitPrompt,
@@ -1111,6 +1138,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       markDone,
       setResultArtifact,
       setCeoExecutionPrompt,
+      switchToProject,
+      returnToDiscussion,
       getState,
       getActiveRunId,
       getPendingExchange,
@@ -1137,6 +1166,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       getCeoExecutionPrompt,
       getKeyNotes,
       getSystemMessages,
+      hasActiveDiscussion,
     ]
   );
 
