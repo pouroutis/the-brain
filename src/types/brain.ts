@@ -193,6 +193,27 @@ export interface SystemMessage {
 }
 
 // -----------------------------------------------------------------------------
+// Carryover (Discussion → Project Transfer)
+// -----------------------------------------------------------------------------
+
+/**
+ * Carryover data from Discussion to Project mode.
+ * Contains keyNotes + last 10 exchanges for context continuity.
+ */
+export interface Carryover {
+  /** Schema version for migration support */
+  schemaVersion: 1;
+  /** Source discussion session ID */
+  fromSessionId: string;
+  /** Key-notes from discussion (may be null if no compaction occurred) */
+  keyNotes: KeyNotes | null;
+  /** Last 10 exchanges from discussion (strict slice) */
+  last10Exchanges: Exchange[];
+  /** Timestamp when carryover was created */
+  createdAt: number;
+}
+
+// -----------------------------------------------------------------------------
 // Brain State (Phase 2 — Mode + Execution Loop)
 // -----------------------------------------------------------------------------
 
@@ -221,6 +242,8 @@ export interface BrainState {
   keyNotes: KeyNotes | null;
   /** System messages for inline notifications */
   systemMessages: SystemMessage[];
+  /** Carryover data from Discussion to Project mode */
+  carryover: Carryover | null;
 }
 
 // -----------------------------------------------------------------------------
@@ -244,7 +267,9 @@ export type BrainAction =
   | { type: 'CEO_DONE_DETECTED' }
   | { type: 'SET_CEO_EXECUTION_PROMPT'; prompt: string | null }
   | { type: 'REHYDRATE_DISCUSSION'; session: DiscussionSession; exchanges: Exchange[]; transcript: TranscriptEntry[]; keyNotes: KeyNotes | null }
-  | { type: 'COMPACTION_COMPLETED'; keyNotes: KeyNotes; trimmedExchanges: Exchange[] };
+  | { type: 'COMPACTION_COMPLETED'; keyNotes: KeyNotes; trimmedExchanges: Exchange[] }
+  | { type: 'CREATE_CARRYOVER_FROM_DISCUSSION' }
+  | { type: 'CLEAR_CARRYOVER' };
 
 // -----------------------------------------------------------------------------
 // Brain Events (Logging / Debugging) — 6 variants, contract-locked

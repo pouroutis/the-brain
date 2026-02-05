@@ -7,6 +7,7 @@ import type {
   Agent,
   BrainState,
   BrainAction,
+  Carryover,
   DiscussionSession,
   Exchange,
   PendingExchange,
@@ -36,6 +37,7 @@ export const initialBrainState: BrainState = {
   transcript: [],
   keyNotes: null,
   systemMessages: [],
+  carryover: null,
 };
 
 // -----------------------------------------------------------------------------
@@ -531,6 +533,57 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         exchanges: action.trimmedExchanges,
         keyNotes: action.keyNotes,
         systemMessages: [...state.systemMessages, createCompactionMessage()],
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // CREATE_CARRYOVER_FROM_DISCUSSION (Task 5.1 — Discussion→Project transfer)
+    // -------------------------------------------------------------------------
+    case 'CREATE_CARRYOVER_FROM_DISCUSSION': {
+      // Guard: Only allowed in discussion mode
+      if (state.mode !== 'discussion') {
+        return state;
+      }
+
+      // Guard: Block if currently processing
+      if (state.isProcessing) {
+        return state;
+      }
+
+      // Guard: Require valid discussion session
+      if (state.discussionSession === null) {
+        return state;
+      }
+
+      // Guard: Require at least one exchange
+      if (state.exchanges.length === 0) {
+        return state;
+      }
+
+      // Create carryover with last 10 exchanges (strict slice)
+      const last10Exchanges = state.exchanges.slice(-10);
+      const carryover: Carryover = {
+        schemaVersion: 1,
+        fromSessionId: state.discussionSession.id,
+        keyNotes: state.keyNotes,
+        last10Exchanges,
+        createdAt: Date.now(),
+      };
+
+      return {
+        ...state,
+        carryover,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // CLEAR_CARRYOVER (Task 5.1 — Idempotent carryover clear)
+    // -------------------------------------------------------------------------
+    case 'CLEAR_CARRYOVER': {
+      // Always succeeds (idempotent)
+      return {
+        ...state,
+        carryover: null,
       };
     }
 

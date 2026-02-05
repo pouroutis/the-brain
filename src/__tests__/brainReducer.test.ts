@@ -710,6 +710,7 @@ describe('brainReducer — CLEAR', () => {
       transcript: [],
       keyNotes: null,
       systemMessages: [],
+      carryover: null,
     };
 
     const action: BrainAction = { type: 'CLEAR' };
@@ -750,6 +751,7 @@ describe('brainReducer — State Invariants', () => {
       'transcript',
       'keyNotes',
       'systemMessages',
+      'carryover',
     ].sort();
 
     const actualKeys = Object.keys(initialBrainState).sort();
