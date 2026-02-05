@@ -37,6 +37,12 @@ interface ActionBarProps {
   ceo?: Agent;
   /** Callback to change CEO */
   onCeoChange?: (agent: Agent) => void;
+  /** Callback to generate CEO execution prompt (Project mode) */
+  onGeneratePrompt?: () => void;
+  /** Whether generate button should be enabled */
+  canGenerate?: boolean;
+  /** Feedback text for generate button */
+  generateFeedback?: string | null;
 }
 
 // -----------------------------------------------------------------------------
@@ -73,6 +79,9 @@ export function ActionBar({
   onMarkDone,
   ceo = 'gpt',
   onCeoChange,
+  onGeneratePrompt,
+  canGenerate = false,
+  generateFeedback,
 }: ActionBarProps): JSX.Element {
   // Derived state
   const isRunning = loopState === 'running';
@@ -104,23 +113,7 @@ export function ActionBar({
 
   return (
     <div className="action-bar">
-      {/* Row 1: Status Indicator (running/paused state) */}
-      {(isRunning || isPaused) && (
-        <div className="action-bar__status">
-          {isRunning && (
-            <span className="action-bar__status-item action-bar__status-item--running">
-              RUNNING
-            </span>
-          )}
-          {isPaused && (
-            <span className="action-bar__status-item action-bar__status-item--paused">
-              PAUSED
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Row 2: Controls - Mode, CEO, Execution buttons */}
+      {/* Single Control Row: Selectors | Execution | Artifacts | Board */}
       <div className="action-bar__controls">
         {/* Group: Mode & CEO Selectors */}
         <div className="action-bar__group action-bar__group--selectors">
@@ -129,7 +122,7 @@ export function ActionBar({
             value={mode}
             onChange={handleModeChange}
             disabled={isProcessing || isRunning}
-            title="Select operating mode: Discussion (all AIs discuss), Decision (CEO decides), Project (CEO + execution)"
+            title="Choose how AIs collaborate: Discussion, Decision, or Project mode"
           >
             {MODE_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -144,7 +137,7 @@ export function ActionBar({
               value={ceo}
               onChange={handleCeoChange}
               disabled={isProcessing || isRunning}
-              title="Select CEO: The AI that speaks last and makes final decisions"
+              title="Pick which AI leads and makes final decisions"
             >
               {CEO_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -152,6 +145,18 @@ export function ActionBar({
                 </option>
               ))}
             </select>
+          )}
+
+          {/* Status badge inline with selectors */}
+          {isRunning && (
+            <span className="action-bar__status-badge action-bar__status-badge--running">
+              RUNNING
+            </span>
+          )}
+          {isPaused && (
+            <span className="action-bar__status-badge action-bar__status-badge--paused">
+              PAUSED
+            </span>
           )}
         </div>
 
@@ -163,9 +168,9 @@ export function ActionBar({
                 className="action-bar__button action-bar__button--execute"
                 onClick={onStartExecution}
                 disabled={isProcessing}
-                title="Start autonomous execution loop. CEO controls the conversation until you click DONE."
+                title="Start the autonomous execution loop"
               >
-                EXECUTE
+                Execute
               </button>
             )}
             {loopState === 'paused' && (
@@ -173,28 +178,18 @@ export function ActionBar({
                 className="action-bar__button action-bar__button--resume"
                 onClick={onStartExecution}
                 disabled={isProcessing}
-                title="Resume the paused execution loop from where it left off."
+                title="Continue the paused execution"
               >
-                RESUME
-              </button>
-            )}
-            {isRunning && (
-              <button
-                className="action-bar__button action-bar__button--done"
-                onClick={onMarkDone}
-                disabled={isProcessing}
-                title="Mark execution as complete. Terminates the loop and unlocks all controls."
-              >
-                DONE
+                Resume
               </button>
             )}
             {isRunning && (
               <button
                 className="action-bar__button action-bar__button--pause"
                 onClick={onPauseExecution}
-                title="Pause execution to review progress. You can RESUME or STOP after pausing."
+                title="Pause to review progress"
               >
-                PAUSE
+                Pause
               </button>
             )}
             {(isRunning || isPaused) && (
@@ -202,11 +197,35 @@ export function ActionBar({
                 className="action-bar__button action-bar__button--stop"
                 onClick={onStopExecution}
                 disabled={isProcessing}
-                title="Stop execution and clear context. You'll need to click EXECUTE to start a new loop."
+                title="Stop and reset the execution loop"
               >
-                STOP
+                Stop
               </button>
             )}
+            {isRunning && (
+              <button
+                className="action-bar__button action-bar__button--done"
+                onClick={onMarkDone}
+                disabled={isProcessing}
+                title="Mark the task as complete"
+              >
+                Mark DONE
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Group: Artifacts (Project mode only) */}
+        {showExecutionControls && onGeneratePrompt && (
+          <div className="action-bar__group action-bar__group--artifacts">
+            <button
+              className="action-bar__button action-bar__button--generate"
+              onClick={onGeneratePrompt}
+              disabled={!canGenerate}
+              title="Copy the CEO's instructions for Claude Code"
+            >
+              {generateFeedback ?? 'Generate Prompt'}
+            </button>
           </div>
         )}
 
@@ -216,7 +235,7 @@ export function ActionBar({
             <button
               className="action-bar__button action-bar__button--cancel"
               onClick={onCancel}
-              title="Cancel the current AI response. The conversation will stop mid-generation."
+              title="Stop the current AI response"
             >
               Cancel
             </button>
@@ -225,7 +244,7 @@ export function ActionBar({
             className="action-bar__button action-bar__button--clear"
             onClick={onClear}
             disabled={!canClear || isRunning}
-            title="Clear all conversations from the board. Cannot be undone."
+            title="Remove all conversations from the board"
           >
             Clear Board
           </button>

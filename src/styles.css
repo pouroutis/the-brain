@@ -26,9 +26,9 @@ body {
    ----------------------------------------------------------------------------- */
 
 .brain-app {
-  max-width: 900px;
+  max-width: 1280px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 20px 32px;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -353,33 +353,26 @@ body {
 
 .action-bar {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
   margin-bottom: 16px;
 }
 
-.action-bar__status {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-}
-
-.action-bar__status-item {
-  padding: 4px 12px;
+.action-bar__status-badge {
+  padding: 4px 10px;
   border-radius: 4px;
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  margin-left: 8px;
 }
 
-.action-bar__status-item--running {
+.action-bar__status-badge--running {
   background-color: #1b4332;
   color: #52b788;
   animation: pulse 1.5s infinite;
 }
 
-.action-bar__status-item--paused {
+.action-bar__status-badge--paused {
   background-color: #4a3215;
   color: #ffb74d;
 }
@@ -389,7 +382,8 @@ body {
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  width: 100%;
 }
 
 .action-bar__group {
@@ -399,17 +393,23 @@ body {
 }
 
 .action-bar__group--selectors {
-  padding-right: 8px;
-  border-right: 1px solid #333;
+  padding-right: 12px;
+  border-right: 1px solid #444;
 }
 
 .action-bar__group--execution {
-  padding-right: 8px;
-  border-right: 1px solid #333;
+  padding: 0 12px;
+  border-right: 1px solid #444;
+}
+
+.action-bar__group--artifacts {
+  padding: 0 12px;
+  border-right: 1px solid #444;
 }
 
 .action-bar__group--board {
-  padding-left: 4px;
+  padding-left: 8px;
+  margin-left: auto;
 }
 
 .action-bar__select {
@@ -518,6 +518,16 @@ body {
   border-color: #555;
 }
 
+.action-bar__button--generate {
+  border-color: #1976d2;
+  color: #64b5f6;
+}
+
+.action-bar__button--generate:hover:not(:disabled) {
+  background-color: #1a3a5c;
+  border-color: #64b5f6;
+}
+
 /* -----------------------------------------------------------------------------
    Executor Panel (Project Mode)
    ----------------------------------------------------------------------------- */
@@ -526,70 +536,26 @@ body {
   background-color: #1e1e2e;
   border: 1px solid #333;
   border-radius: 8px;
-  padding: 16px;
+  padding: 20px;
   margin-top: 16px;
-}
-
-.executor-panel__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #333;
-}
-
-.executor-panel__title {
-  font-size: 1rem;
-  font-weight: 600;
-  color: #fff;
-  margin: 0;
-}
-
-.executor-panel__help {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  background-color: #333;
-  border-radius: 50%;
-  color: #888;
-  font-size: 0.75rem;
-  cursor: help;
-}
-
-.executor-panel__help:hover {
-  background-color: #444;
-  color: #fff;
+  width: 100%;
 }
 
 .executor-panel__section {
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 .executor-panel__section:last-child {
   margin-bottom: 0;
 }
 
-.executor-panel__section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.executor-panel__section-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.executor-panel__label {
+.executor-panel__section-title {
   font-size: 0.8125rem;
   font-weight: 500;
   color: #aaa;
   text-transform: uppercase;
   letter-spacing: 0.03em;
+  margin: 0 0 8px 0;
 }
 
 .executor-panel__textarea {
@@ -623,8 +589,9 @@ body {
 .executor-panel__section-footer {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 12px;
-  margin-top: 8px;
+  margin-top: 10px;
 }
 
 .executor-panel__button {
@@ -678,21 +645,28 @@ body {
 }
 
 /* Responsive: wrap controls on smaller screens */
-@media (max-width: 768px) {
-  .action-bar__controls {
-    flex-direction: column;
+@media (max-width: 900px) {
+  .brain-app {
+    padding: 16px;
   }
 
-  .action-bar__group {
-    width: 100%;
+  .action-bar__controls {
+    flex-wrap: wrap;
     justify-content: center;
   }
 
+  .action-bar__group {
+    justify-content: center;
+  }
+
+  .action-bar__group--board {
+    margin-left: 0;
+  }
+
   .action-bar__group--selectors,
-  .action-bar__group--execution {
+  .action-bar__group--execution,
+  .action-bar__group--artifacts {
     border-right: none;
-    padding-right: 0;
-    padding-bottom: 8px;
-    border-bottom: 1px solid #333;
+    padding: 4px 0;
   }
 }

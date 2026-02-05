@@ -224,7 +224,7 @@ export function BrainChat(): JSX.Element {
       {/* Prompt Input (disabled during execution loop) */}
       <PromptInput canSubmit={canSubmitPrompt} onSubmit={handleSubmit} />
 
-      {/* Action Bar (Mode + CEO + Execution Controls + Clear + Cancel) */}
+      {/* Action Bar (Mode + CEO + Execution Controls + Artifacts + Clear) */}
       <ActionBar
         canClear={canClear()}
         isProcessing={processing}
@@ -239,6 +239,9 @@ export function BrainChat(): JSX.Element {
         onMarkDone={handleMarkDone}
         ceo={ceo}
         onCeoChange={handleCeoChange}
+        onGeneratePrompt={handleExecutorGeneratePrompt}
+        canGenerate={canGenerate && !hasGeneratedForCurrentExchange && !!ceoExecutionPrompt}
+        generateFeedback={executorCopyFeedback}
       />
 
       {/* Executor Panel (Project mode only) */}
@@ -247,10 +250,6 @@ export function BrainChat(): JSX.Element {
         resultArtifact={resultArtifact}
         onSaveResultArtifact={handleSaveResultArtifact}
         isProjectMode={mode === 'project'}
-        generatedPrompt={ceoExecutionPrompt}
-        onGeneratePrompt={handleExecutorGeneratePrompt}
-        canGenerate={canGenerate && !hasGeneratedForCurrentExchange}
-        copyFeedback={executorCopyFeedback}
       />
     </div>
   );
