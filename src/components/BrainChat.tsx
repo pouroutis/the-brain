@@ -144,9 +144,14 @@ export function BrainChat(): JSX.Element {
     (newMode: BrainMode) => {
       // Hard block: No mode changes during execution loop
       if (loopRunning) return;
-      setMode(newMode);
+      // When switching TO project mode, use switchToProject to create carryover
+      if (newMode === 'project' && mode !== 'project') {
+        switchToProject();
+      } else {
+        setMode(newMode);
+      }
     },
-    [setMode, loopRunning]
+    [setMode, switchToProject, loopRunning, mode]
   );
 
   const handleSaveResultArtifact = useCallback(
