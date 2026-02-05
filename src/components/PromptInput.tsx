@@ -67,11 +67,13 @@ export function PromptInput({ canSubmit, onSubmit }: PromptInputProps): JSX.Elem
         placeholder="Ask the AI board..."
         disabled={isDisabled}
         rows={1}
+        title="Type your question here. Press Enter to send."
       />
       <button
         type="submit"
         className="prompt-input__submit"
         disabled={isSubmitDisabled}
+        title="Send your question to all AIs"
       >
         Send
       </button>

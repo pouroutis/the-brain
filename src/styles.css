@@ -120,25 +120,28 @@ body {
 
 .exchange-card__prompt {
   background-color: #2d2d44;
-  padding: 12px 16px;
-  border-bottom: 1px solid #333;
+  padding: 14px 20px;
+  border-bottom: 1px solid #3a3a4a;
 }
 
 .exchange-card__prompt-label {
   font-size: 0.75rem;
   color: #888;
   text-transform: uppercase;
-  margin-bottom: 4px;
+  letter-spacing: 0.03em;
+  margin-bottom: 6px;
 }
 
 .exchange-card__prompt-text {
   color: #fff;
-  font-size: 0.9375rem;
+  font-size: 1rem;
+  line-height: 1.5;
 }
 
 .exchange-card__agents {
   display: flex;
   flex-direction: column;
+  gap: 0;
 }
 
 /* -----------------------------------------------------------------------------
@@ -149,9 +152,9 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
+  padding: 8px 20px;
   background-color: #1e1e2e;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid #3a3a4a;
   font-size: 0.75rem;
   font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', monospace;
 }
@@ -179,8 +182,8 @@ body {
    ----------------------------------------------------------------------------- */
 
 .agent-card {
-  padding: 16px;
-  border-bottom: 1px solid #333;
+  padding: 16px 20px;
+  border-bottom: 1px solid #3a3a4a;
 }
 
 .agent-card:last-child {
@@ -190,13 +193,13 @@ body {
 .agent-card__header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 .agent-card__name {
   font-weight: 600;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
 }
 
 .agent-card__name--gpt {
@@ -260,8 +263,9 @@ body {
 }
 
 .agent-card__content {
-  color: #ddd;
+  color: #e0e0e0;
   font-size: 0.9375rem;
+  line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
 }
