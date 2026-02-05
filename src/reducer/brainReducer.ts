@@ -11,10 +11,15 @@ import type {
   DiscussionSession,
   Exchange,
   PendingExchange,
+  ProjectRun,
+  ProjectInterrupt,
   SystemMessage,
   TranscriptEntry,
   TranscriptRole,
 } from '../types/brain';
+
+// Re-export constant for use in reducer
+const MAX_REVISIONS = 2;
 
 // -----------------------------------------------------------------------------
 // Initial State
@@ -41,6 +46,7 @@ export const initialBrainState: BrainState = {
   projectError: null,
   lastProjectIntent: null,
   ghostOutput: null,
+  projectRun: null,
 };
 
 // -----------------------------------------------------------------------------
@@ -49,6 +55,32 @@ export const initialBrainState: BrainState = {
 
 function generateSessionId(): string {
   return `session-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+// -----------------------------------------------------------------------------
+// Helper: Generate Interrupt ID
+// -----------------------------------------------------------------------------
+
+function generateInterruptId(): string {
+  return `int-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+// -----------------------------------------------------------------------------
+// Helper: Create Initial Project Run
+// -----------------------------------------------------------------------------
+
+function createInitialProjectRun(intent: string, epochId: number = 1): ProjectRun {
+  return {
+    phase: 'INTENT_RECEIVED',
+    epochId,
+    microEpochId: 1,
+    revisionCount: 0,
+    interrupts: [],
+    lastIntent: intent,
+    ceoPromptArtifact: null,
+    executorOutput: null,
+    error: null,
+  };
 }
 
 // -----------------------------------------------------------------------------
@@ -392,6 +424,7 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
           projectError: null,
           ghostOutput: null,
           lastProjectIntent: null,
+          projectRun: null,
         }),
       };
     }
@@ -417,6 +450,8 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         loopState: 'idle',
         // Clear project error when switching modes
         projectError: null,
+        // Clear projectRun when leaving project mode
+        ...(action.mode !== 'project' && { projectRun: null }),
       };
     }
 
@@ -634,6 +669,235 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         ...state,
         projectError: null,
         loopState: 'idle',
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // PROJECT_START_EPOCH — Start a new epoch with user intent
+    // -------------------------------------------------------------------------
+    case 'PROJECT_START_EPOCH': {
+      // Guard: Only in project mode
+      if (state.mode !== 'project') {
+        return state;
+      }
+
+      const nextEpochId = state.projectRun ? state.projectRun.epochId + 1 : 1;
+      const newRun = createInitialProjectRun(action.intent, nextEpochId);
+
+      return {
+        ...state,
+        projectRun: newRun,
+        loopState: 'running',
+        projectError: null,
+        lastProjectIntent: action.intent,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // PROJECT_SET_PHASE — Transition to a new phase (orchestrator only)
+    // -------------------------------------------------------------------------
+    case 'PROJECT_SET_PHASE': {
+      // Guard: Require active projectRun
+      if (!state.projectRun) {
+        return state;
+      }
+
+      return {
+        ...state,
+        projectRun: {
+          ...state.projectRun,
+          phase: action.phase,
+        },
+        // Update loopState based on terminal phases
+        ...(action.phase === 'DONE' && { loopState: 'completed' as const }),
+        ...(action.phase === 'FAILED_REQUIRES_USER_DIRECTION' && { loopState: 'failed' as const }),
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // PROJECT_ADD_INTERRUPT — Add a structured interrupt
+    // -------------------------------------------------------------------------
+    case 'PROJECT_ADD_INTERRUPT': {
+      // Guard: Require active projectRun
+      if (!state.projectRun) {
+        return state;
+      }
+
+      const newInterrupt: ProjectInterrupt = {
+        id: generateInterruptId(),
+        message: action.interrupt.message,
+        severity: action.interrupt.severity,
+        scope: action.interrupt.scope,
+        timestamp: Date.now(),
+        processed: false,
+      };
+
+      // Blocker: Immediate pause
+      if (action.interrupt.severity === 'blocker') {
+        return {
+          ...state,
+          loopState: 'paused',
+          projectRun: {
+            ...state.projectRun,
+            interrupts: [...state.projectRun.interrupts, newInterrupt],
+          },
+        };
+      }
+
+      // Improvement: Queue only
+      return {
+        ...state,
+        projectRun: {
+          ...state.projectRun,
+          interrupts: [...state.projectRun.interrupts, newInterrupt],
+        },
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // PROJECT_PROCESS_BLOCKER — Restart as new micro-epoch after blocker
+    // -------------------------------------------------------------------------
+    case 'PROJECT_PROCESS_BLOCKER': {
+      // Guard: Require active projectRun
+      if (!state.projectRun) {
+        return state;
+      }
+
+      // Check revision cap
+      const newRevisionCount = state.projectRun.revisionCount + 1;
+      if (newRevisionCount > MAX_REVISIONS) {
+        // Exceeded cap: terminal failure
+        return {
+          ...state,
+          loopState: 'failed',
+          projectRun: {
+            ...state.projectRun,
+            phase: 'FAILED_REQUIRES_USER_DIRECTION',
+            revisionCount: newRevisionCount,
+            error: `Revision cap exceeded (max ${MAX_REVISIONS} per epoch)`,
+          },
+        };
+      }
+
+      // Mark all unprocessed blockers as processed, restart micro-epoch
+      const processedInterrupts = state.projectRun.interrupts.map((int) =>
+        int.severity === 'blocker' && !int.processed
+          ? { ...int, processed: true }
+          : int
+      );
+
+      return {
+        ...state,
+        loopState: 'running',
+        projectRun: {
+          ...state.projectRun,
+          phase: 'INTENT_RECEIVED',
+          microEpochId: state.projectRun.microEpochId + 1,
+          revisionCount: newRevisionCount,
+          interrupts: processedInterrupts,
+        },
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // PROJECT_SET_CEO_ARTIFACT — Store CEO-generated Claude Code prompt
+    // -------------------------------------------------------------------------
+    case 'PROJECT_SET_CEO_ARTIFACT': {
+      // Guard: Require active projectRun
+      if (!state.projectRun) {
+        return state;
+      }
+
+      return {
+        ...state,
+        projectRun: {
+          ...state.projectRun,
+          ceoPromptArtifact: action.artifact,
+        },
+        ceoExecutionPrompt: action.artifact,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // PROJECT_SET_EXECUTOR_OUTPUT — Store executor output artifact
+    // -------------------------------------------------------------------------
+    case 'PROJECT_SET_EXECUTOR_OUTPUT': {
+      // Guard: Require active projectRun
+      if (!state.projectRun) {
+        return state;
+      }
+
+      return {
+        ...state,
+        projectRun: {
+          ...state.projectRun,
+          executorOutput: action.output,
+        },
+        resultArtifact: action.output,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // PROJECT_NEW_DIRECTION — Start fresh epoch after DONE or FAILED
+    // -------------------------------------------------------------------------
+    case 'PROJECT_NEW_DIRECTION': {
+      // Guard: Only in project mode
+      if (state.mode !== 'project') {
+        return state;
+      }
+
+      const nextEpochId = state.projectRun ? state.projectRun.epochId + 1 : 1;
+      const newRun = createInitialProjectRun(action.intent, nextEpochId);
+
+      return {
+        ...state,
+        projectRun: newRun,
+        loopState: 'running',
+        projectError: null,
+        lastProjectIntent: action.intent,
+        // Clear previous artifacts
+        ghostOutput: null,
+        resultArtifact: null,
+        ceoExecutionPrompt: null,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // PROJECT_MARK_DONE — User marks project as done
+    // -------------------------------------------------------------------------
+    case 'PROJECT_MARK_DONE': {
+      // Guard: Require active projectRun
+      if (!state.projectRun) {
+        return state;
+      }
+
+      return {
+        ...state,
+        loopState: 'completed',
+        projectRun: {
+          ...state.projectRun,
+          phase: 'DONE',
+        },
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // PROJECT_FORCE_FAIL — Force terminal failure (Stop button)
+    // -------------------------------------------------------------------------
+    case 'PROJECT_FORCE_FAIL': {
+      // Guard: Require active projectRun
+      if (!state.projectRun) {
+        return state;
+      }
+
+      return {
+        ...state,
+        loopState: 'failed',
+        projectRun: {
+          ...state.projectRun,
+          phase: 'FAILED_REQUIRES_USER_DIRECTION',
+          error: 'Stopped by user',
+        },
       };
     }
 

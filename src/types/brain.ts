@@ -34,6 +34,77 @@ export type BrainMode = 'discussion' | 'decision' | 'project';
 export type LoopState = 'idle' | 'running' | 'paused' | 'completed' | 'failed';
 
 // -----------------------------------------------------------------------------
+// Project Phase Machine (Next Layer MVP)
+// -----------------------------------------------------------------------------
+
+/**
+ * Project mode phase states — orchestrator transitions only.
+ * AI text must never directly move state.
+ */
+export type ProjectPhase =
+  | 'INTENT_RECEIVED'
+  | 'DELIBERATION'
+  | 'CONSENSUS_DRAFT'
+  | 'CEO_GATE'
+  | 'CLAUDE_CODE_EXECUTION'
+  | 'REVIEW'
+  | 'USER_BUILD_GATE'
+  | 'DONE'
+  | 'FAILED_REQUIRES_USER_DIRECTION';
+
+/**
+ * Interrupt severity levels for Request Change
+ */
+export type InterruptSeverity = 'blocker' | 'improvement';
+
+/**
+ * Interrupt scope categories
+ */
+export type InterruptScope = 'ui' | 'api' | 'tests' | 'other';
+
+/**
+ * Structured interrupt from user during project execution
+ */
+export interface ProjectInterrupt {
+  id: string;
+  message: string;
+  severity: InterruptSeverity;
+  scope: InterruptScope;
+  timestamp: number;
+  /** Whether this interrupt has been processed */
+  processed: boolean;
+}
+
+/**
+ * Project execution run state
+ */
+export interface ProjectRun {
+  /** Current phase in the phase machine */
+  phase: ProjectPhase;
+  /** Unique epoch identifier (increments on new user direction) */
+  epochId: number;
+  /** Micro-epoch counter within an epoch (increments on blocker restart) */
+  microEpochId: number;
+  /** Revision count within current epoch (max 2) */
+  revisionCount: number;
+  /** Pending and processed interrupts */
+  interrupts: ProjectInterrupt[];
+  /** The user's intent for this epoch */
+  lastIntent: string | null;
+  /** CEO-generated prompt artifact for Claude Code */
+  ceoPromptArtifact: string | null;
+  /** Executor output artifact placeholder */
+  executorOutput: string | null;
+  /** Project-specific error message */
+  error: string | null;
+}
+
+/**
+ * Maximum revisions per epoch before terminal failure
+ */
+export const MAX_REVISIONS_PER_EPOCH = 2;
+
+// -----------------------------------------------------------------------------
 // Status Types
 // -----------------------------------------------------------------------------
 
@@ -252,6 +323,8 @@ export interface BrainState {
   lastProjectIntent: string | null;
   /** Project mode: Ghost orchestrator output (STEP 3-4) */
   ghostOutput: string | null;
+  /** Project mode: Full run state (phase machine) */
+  projectRun: ProjectRun | null;
 }
 
 // -----------------------------------------------------------------------------
@@ -280,7 +353,17 @@ export type BrainAction =
   | { type: 'CLEAR_CARRYOVER' }
   | { type: 'PROJECT_GHOST_SUCCESS'; content: string }
   | { type: 'PROJECT_GHOST_FAILED'; error: string }
-  | { type: 'PROJECT_RESET_ERROR' };
+  | { type: 'PROJECT_RESET_ERROR' }
+  // Project Phase Machine Actions
+  | { type: 'PROJECT_START_EPOCH'; intent: string }
+  | { type: 'PROJECT_SET_PHASE'; phase: ProjectPhase }
+  | { type: 'PROJECT_ADD_INTERRUPT'; interrupt: Omit<ProjectInterrupt, 'id' | 'timestamp' | 'processed'> }
+  | { type: 'PROJECT_PROCESS_BLOCKER' }
+  | { type: 'PROJECT_SET_CEO_ARTIFACT'; artifact: string }
+  | { type: 'PROJECT_SET_EXECUTOR_OUTPUT'; output: string }
+  | { type: 'PROJECT_NEW_DIRECTION'; intent: string }
+  | { type: 'PROJECT_MARK_DONE' }
+  | { type: 'PROJECT_FORCE_FAIL' };
 
 // -----------------------------------------------------------------------------
 // Brain Events (Logging / Debugging) — 6 variants, contract-locked

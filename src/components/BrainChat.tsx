@@ -10,13 +10,14 @@ import { PromptInput } from './PromptInput';
 import { ActionBar } from './ActionBar';
 import { WarningBanner } from './WarningBanner';
 import { ExecutorPanel } from './ExecutorPanel';
+import { ProjectModeLayout } from './ProjectModeLayout';
 import { buildCeoExecutionPrompt } from '../utils/executionPromptBuilder';
 import {
   exportTranscriptAsJson,
   exportTranscriptAsMarkdown,
   downloadFile,
 } from '../utils/discussionPersistence';
-import type { Agent, BrainMode } from '../types/brain';
+import type { Agent, BrainMode, InterruptSeverity, InterruptScope } from '../types/brain';
 
 // -----------------------------------------------------------------------------
 // Component
@@ -40,6 +41,10 @@ export function BrainChat(): JSX.Element {
     switchToProject,
     returnToDiscussion,
     retryExecution,
+    // Project phase actions
+    addProjectInterrupt,
+    markProjectDone,
+    forceProjectFail,
     // Selectors
     getState,
     canSubmit,
@@ -60,6 +65,7 @@ export function BrainChat(): JSX.Element {
     hasActiveDiscussion,
     getProjectError,
     getGhostOutput,
+    getProjectRun,
   } = useBrain();
 
   // ---------------------------------------------------------------------------
@@ -84,6 +90,7 @@ export function BrainChat(): JSX.Element {
   const activeDiscussion = hasActiveDiscussion();
   const projectError = getProjectError();
   const ghostOutput = getGhostOutput();
+  const projectRun = getProjectRun();
 
   // ---------------------------------------------------------------------------
   // CEO Execution Prompt (memoized)
@@ -215,12 +222,22 @@ export function BrainChat(): JSX.Element {
   }, [pauseExecutionLoop]);
 
   const handleStopExecution = useCallback(() => {
-    stopExecutionLoop();
-  }, [stopExecutionLoop]);
+    // Use forceProjectFail for phase machine if projectRun exists
+    if (projectRun) {
+      forceProjectFail();
+    } else {
+      stopExecutionLoop();
+    }
+  }, [stopExecutionLoop, forceProjectFail, projectRun]);
 
   const handleMarkDone = useCallback(() => {
-    markDone();
-  }, [markDone]);
+    // Use markProjectDone for phase machine if projectRun exists
+    if (projectRun) {
+      markProjectDone();
+    } else {
+      markDone();
+    }
+  }, [markDone, markProjectDone, projectRun]);
 
   const handleSwitchToProject = useCallback(() => {
     // Hard block: No mode switch during execution loop
@@ -237,6 +254,21 @@ export function BrainChat(): JSX.Element {
   const handleRetryExecution = useCallback(() => {
     retryExecution();
   }, [retryExecution]);
+
+  // ---------------------------------------------------------------------------
+  // Project Phase Machine Handlers
+  // ---------------------------------------------------------------------------
+
+  const handleRequestChange = useCallback(
+    (message: string, severity: InterruptSeverity, scope: InterruptScope) => {
+      addProjectInterrupt(message, severity, scope);
+    },
+    [addProjectInterrupt]
+  );
+
+  const handleCopyPrompt = useCallback(() => {
+    // Placeholder for tracking copy action
+  }, []);
 
   // ---------------------------------------------------------------------------
   // Discussion Export: Finish Discussion (JSON + Markdown)
@@ -267,6 +299,65 @@ export function BrainChat(): JSX.Element {
   // Render
   // ---------------------------------------------------------------------------
 
+  // Project mode: Use two-pane layout
+  if (mode === 'project') {
+    return (
+      <div className="brain-chat brain-chat--project">
+        {/* Warning Banner (runId-scoped display) */}
+        {shouldShowWarning && (
+          <WarningBanner warning={warning} onDismiss={handleDismissWarning} />
+        )}
+
+        {/* Two-Pane Project Layout */}
+        <ProjectModeLayout
+          exchanges={exchanges}
+          pendingExchange={pendingExchange}
+          currentAgent={currentAgent}
+          mode={mode}
+          ceo={ceo}
+          systemMessages={systemMessages}
+          ceoPromptArtifact={projectRun?.ceoPromptArtifact ?? persistedCeoPrompt}
+          executorOutput={projectRun?.executorOutput ?? resultArtifact}
+          projectError={projectRun?.error ?? projectError}
+          loopState={loopState}
+          projectRun={projectRun}
+          onRequestChange={handleRequestChange}
+          onCopyPrompt={handleCopyPrompt}
+        />
+
+        {/* Prompt Input (disabled during execution loop) */}
+        <PromptInput canSubmit={canSubmitPrompt} onSubmit={handleSubmit} />
+
+        {/* Action Bar (Project Mode Controls) */}
+        <ActionBar
+          canClear={canClear()}
+          isProcessing={processing}
+          onClear={handleClear}
+          onCancel={handleCancel}
+          mode={mode}
+          onModeChange={handleModeChange}
+          loopState={loopState}
+          onStartExecution={handleStartExecution}
+          onPauseExecution={handlePauseExecution}
+          onStopExecution={handleStopExecution}
+          onMarkDone={handleMarkDone}
+          ceo={ceo}
+          onCeoChange={handleCeoChange}
+          onGeneratePrompt={handleExecutorGeneratePrompt}
+          canGenerate={canGenerate && !hasGeneratedForCurrentExchange && !!ceoExecutionPrompt}
+          generateFeedback={executorCopyFeedback}
+          onFinishDiscussion={handleFinishDiscussion}
+          canExport={canExportDiscussion}
+          onSwitchToProject={handleSwitchToProject}
+          onReturnToDiscussion={handleReturnToDiscussion}
+          hasActiveDiscussion={activeDiscussion}
+          hasExchanges={exchanges.length > 0}
+        />
+      </div>
+    );
+  }
+
+  // Discussion/Decision mode: Original layout
   return (
     <div className="brain-chat">
       {/* Warning Banner (runId-scoped display) */}
@@ -313,12 +404,12 @@ export function BrainChat(): JSX.Element {
         hasExchanges={exchanges.length > 0}
       />
 
-      {/* Executor Panel (Project mode only) */}
+      {/* Executor Panel (Project mode only - hidden in discussion mode) */}
       <ExecutorPanel
         ceoExecutionPrompt={persistedCeoPrompt}
         resultArtifact={resultArtifact}
         onSaveResultArtifact={handleSaveResultArtifact}
-        isProjectMode={mode === 'project'}
+        isProjectMode={false}
         loopState={loopState}
         projectError={projectError}
         ghostOutput={ghostOutput}

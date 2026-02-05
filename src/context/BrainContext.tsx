@@ -25,10 +25,13 @@ import type {
   KeyNotes,
   LoopState,
   PendingExchange,
+  ProjectRun,
   SystemMessage,
   WarningState,
   ErrorCode,
   GatekeepingFlags,
+  InterruptSeverity,
+  InterruptScope,
 } from '../types/brain';
 
 import { brainReducer, initialBrainState } from '../reducer/brainReducer';
@@ -168,6 +171,18 @@ interface BrainActions {
   returnToDiscussion: () => void;
   /** Retry ghost orchestrator call after failure (STEP 3-4) */
   retryExecution: () => void;
+  /** Start a new project epoch with user intent */
+  startProjectEpoch: (intent: string) => void;
+  /** Add a structured interrupt to project */
+  addProjectInterrupt: (message: string, severity: InterruptSeverity, scope: InterruptScope) => void;
+  /** Process pending blocker and restart micro-epoch */
+  processBlocker: () => void;
+  /** Start a new direction/epoch after DONE or FAILED */
+  newProjectDirection: (intent: string) => void;
+  /** Mark project as done */
+  markProjectDone: () => void;
+  /** Force project to failed state */
+  forceProjectFail: () => void;
 }
 
 /**
@@ -235,6 +250,8 @@ interface BrainSelectors {
   getGhostOutput: () => string | null;
   /** Get last project intent (STEP 3-4) */
   getLastProjectIntent: () => string | null;
+  /** Get project run state */
+  getProjectRun: () => ProjectRun | null;
 }
 
 /**
@@ -1010,6 +1027,33 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     dispatch({ type: 'START_EXECUTION_LOOP', intent: state.lastProjectIntent ?? undefined });
   }, [state.lastProjectIntent]);
 
+  const startProjectEpoch = useCallback((intent: string): void => {
+    dispatch({ type: 'PROJECT_START_EPOCH', intent });
+  }, []);
+
+  const addProjectInterrupt = useCallback(
+    (message: string, severity: InterruptSeverity, scope: InterruptScope): void => {
+      dispatch({ type: 'PROJECT_ADD_INTERRUPT', interrupt: { message, severity, scope } });
+    },
+    []
+  );
+
+  const processBlocker = useCallback((): void => {
+    dispatch({ type: 'PROJECT_PROCESS_BLOCKER' });
+  }, []);
+
+  const newProjectDirection = useCallback((intent: string): void => {
+    dispatch({ type: 'PROJECT_NEW_DIRECTION', intent });
+  }, []);
+
+  const markProjectDone = useCallback((): void => {
+    dispatch({ type: 'PROJECT_MARK_DONE' });
+  }, []);
+
+  const forceProjectFail = useCallback((): void => {
+    dispatch({ type: 'PROJECT_FORCE_FAIL' });
+  }, []);
+
   // ---------------------------------------------------------------------------
   // Selectors
   // ---------------------------------------------------------------------------
@@ -1172,6 +1216,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     return state.lastProjectIntent;
   }, [state.lastProjectIntent]);
 
+  const getProjectRun = useCallback((): ProjectRun | null => {
+    return state.projectRun;
+  }, [state.projectRun]);
+
   // ---------------------------------------------------------------------------
   // Memoized Context Value
   // ---------------------------------------------------------------------------
@@ -1196,6 +1244,12 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       switchToProject,
       returnToDiscussion,
       retryExecution,
+      startProjectEpoch,
+      addProjectInterrupt,
+      processBlocker,
+      newProjectDirection,
+      markProjectDone,
+      forceProjectFail,
       // Selectors
       getState,
       getActiveRunId,
@@ -1227,6 +1281,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       getProjectError,
       getGhostOutput,
       getLastProjectIntent,
+      getProjectRun,
     }),
     [
       submitPrompt,
@@ -1246,6 +1301,12 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       switchToProject,
       returnToDiscussion,
       retryExecution,
+      startProjectEpoch,
+      addProjectInterrupt,
+      processBlocker,
+      newProjectDirection,
+      markProjectDone,
+      forceProjectFail,
       getState,
       getActiveRunId,
       getPendingExchange,
@@ -1276,6 +1337,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       getProjectError,
       getGhostOutput,
       getLastProjectIntent,
+      getProjectRun,
     ]
   );
 
