@@ -47,7 +47,7 @@ import {
   parseKeyNotes,
   mergeKeyNotes,
 } from '../utils/compaction';
-import { buildDiscussionMemoryBlock } from '../utils/contextBuilder';
+import { buildDiscussionMemoryBlock, buildCarryoverMemoryBlock } from '../utils/contextBuilder';
 
 // -----------------------------------------------------------------------------
 // Constants
@@ -623,6 +623,19 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
         });
         if (memoryBlock) {
           promptWithMemory = memoryBlock + userPrompt;
+        }
+      }
+
+      // -----------------------------------------------------------------------
+      // Task 5.2: Project Carryover Injection (Project mode ONLY)
+      // Build carryover block containing discussion context
+      // Prepend to userPrompt so all agents receive context
+      // -----------------------------------------------------------------------
+
+      if (currentMode === 'project' && state.carryover) {
+        const carryoverBlock = buildCarryoverMemoryBlock(state.carryover);
+        if (carryoverBlock) {
+          promptWithMemory = carryoverBlock + promptWithMemory;
         }
       }
 

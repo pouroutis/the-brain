@@ -4,8 +4,8 @@
 // =============================================================================
 
 import { describe, it, expect } from 'vitest';
-import { buildDiscussionMemoryBlock } from '../utils/contextBuilder';
-import type { Exchange, KeyNotes } from '../types/brain';
+import { buildDiscussionMemoryBlock, buildCarryoverMemoryBlock } from '../utils/contextBuilder';
+import type { Carryover, Exchange, KeyNotes } from '../types/brain';
 
 // -----------------------------------------------------------------------------
 // Test Fixtures
@@ -242,5 +242,159 @@ describe('Discussion memory isolation', () => {
     // Mode filtering is handled by the caller
     expect(result).toBeTruthy();
     expect(result).toContain('DISCUSSION MEMORY');
+  });
+});
+
+// -----------------------------------------------------------------------------
+// Carryover Fixtures
+// -----------------------------------------------------------------------------
+
+function createMockCarryover(overrides: Partial<Carryover> = {}): Carryover {
+  return {
+    schemaVersion: 1,
+    fromSessionId: 'session-test-123',
+    keyNotes: createMockKeyNotes(),
+    last10Exchanges: createMockExchanges(5),
+    createdAt: 1700000000000,
+    ...overrides,
+  };
+}
+
+// -----------------------------------------------------------------------------
+// buildCarryoverMemoryBlock Tests (Task 5.2)
+// -----------------------------------------------------------------------------
+
+describe('buildCarryoverMemoryBlock', () => {
+  describe('header and footer markers', () => {
+    it('includes header with version', () => {
+      const carryover = createMockCarryover();
+      const result = buildCarryoverMemoryBlock(carryover);
+
+      expect(result).toContain('=== DISCUSSION CARRYOVER (v1) ===');
+    });
+
+    it('includes footer marker', () => {
+      const carryover = createMockCarryover();
+      const result = buildCarryoverMemoryBlock(carryover);
+
+      expect(result).toContain('=== END DISCUSSION CARRYOVER ===');
+    });
+
+    it('includes CURRENT PROMPT marker', () => {
+      const carryover = createMockCarryover();
+      const result = buildCarryoverMemoryBlock(carryover);
+
+      expect(result).toContain('--- CURRENT PROMPT ---');
+    });
+  });
+
+  describe('metadata inclusion', () => {
+    it('includes fromSessionId', () => {
+      const carryover = createMockCarryover({ fromSessionId: 'session-abc-789' });
+      const result = buildCarryoverMemoryBlock(carryover);
+
+      expect(result).toContain('fromSessionId: session-abc-789');
+    });
+
+    it('includes createdAt as ISO timestamp', () => {
+      const carryover = createMockCarryover({ createdAt: 1700000000000 });
+      const result = buildCarryoverMemoryBlock(carryover);
+
+      // 1700000000000 = 2023-11-14T22:13:20.000Z
+      expect(result).toContain('createdAt: 2023-11-14');
+    });
+  });
+
+  describe('keyNotes handling', () => {
+    it('includes keyNotes as JSON when present', () => {
+      const carryover = createMockCarryover({ keyNotes: createMockKeyNotes() });
+      const result = buildCarryoverMemoryBlock(carryover);
+
+      expect(result).toContain('--- KEY NOTES ---');
+      expect(result).toContain('Decision 1');
+      expect(result).toContain('Decision 2');
+      expect(result).toContain('reasoningChains');
+    });
+
+    it('omits KEY NOTES section when keyNotes is null', () => {
+      const carryover = createMockCarryover({ keyNotes: null });
+      const result = buildCarryoverMemoryBlock(carryover);
+
+      expect(result).not.toContain('--- KEY NOTES ---');
+      expect(result).toContain('--- RECENT EXCHANGES');
+    });
+
+    it('omits KEY NOTES section when keyNotes is empty', () => {
+      const carryover = createMockCarryover({ keyNotes: createEmptyKeyNotes() });
+      const result = buildCarryoverMemoryBlock(carryover);
+
+      expect(result).not.toContain('--- KEY NOTES ---');
+      expect(result).toContain('--- RECENT EXCHANGES');
+    });
+  });
+
+  describe('exchanges handling', () => {
+    it('includes serialized exchanges when present', () => {
+      const carryover = createMockCarryover({ last10Exchanges: createMockExchanges(3) });
+      const result = buildCarryoverMemoryBlock(carryover);
+
+      expect(result).toContain('--- RECENT EXCHANGES (3) ---');
+      expect(result).toContain('User: Prompt 0');
+      expect(result).toContain('User: Prompt 2');
+      expect(result).toContain('GPT: GPT response to: Prompt 0');
+    });
+
+    it('handles exactly 10 exchanges', () => {
+      const carryover = createMockCarryover({ last10Exchanges: createMockExchanges(10) });
+      const result = buildCarryoverMemoryBlock(carryover);
+
+      expect(result).toContain('--- RECENT EXCHANGES (10) ---');
+      expect(result).toContain('Prompt 0');
+      expect(result).toContain('Prompt 9');
+    });
+
+    it('handles fewer than 10 exchanges', () => {
+      const carryover = createMockCarryover({ last10Exchanges: createMockExchanges(2) });
+      const result = buildCarryoverMemoryBlock(carryover);
+
+      expect(result).toContain('--- RECENT EXCHANGES (2) ---');
+      expect(result).toContain('Prompt 0');
+      expect(result).toContain('Prompt 1');
+    });
+
+    it('omits RECENT EXCHANGES section when exchanges empty', () => {
+      const carryover = createMockCarryover({ last10Exchanges: [] });
+      const result = buildCarryoverMemoryBlock(carryover);
+
+      expect(result).not.toContain('--- RECENT EXCHANGES');
+      expect(result).toContain('--- KEY NOTES ---');
+    });
+  });
+
+  describe('empty content handling', () => {
+    it('returns empty string when keyNotes null and exchanges empty', () => {
+      const carryover = createMockCarryover({ keyNotes: null, last10Exchanges: [] });
+      const result = buildCarryoverMemoryBlock(carryover);
+
+      expect(result).toBe('');
+    });
+
+    it('returns empty string when keyNotes empty and exchanges empty', () => {
+      const carryover = createMockCarryover({ keyNotes: createEmptyKeyNotes(), last10Exchanges: [] });
+      const result = buildCarryoverMemoryBlock(carryover);
+
+      expect(result).toBe('');
+    });
+  });
+
+  describe('determinism', () => {
+    it('produces same output for same inputs', () => {
+      const carryover = createMockCarryover();
+
+      const result1 = buildCarryoverMemoryBlock(carryover);
+      const result2 = buildCarryoverMemoryBlock(carryover);
+
+      expect(result1).toBe(result2);
+    });
   });
 });

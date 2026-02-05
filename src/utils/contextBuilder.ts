@@ -2,7 +2,7 @@
 // The Brain — Context Builder (Phase 5)
 // =============================================================================
 
-import type { Agent, AgentResponse, Exchange, KeyNotes } from '../types/brain';
+import type { Agent, AgentResponse, Carryover, Exchange, KeyNotes } from '../types/brain';
 import {
   MAX_CONTEXT_CHARS,
   MAX_EXCHANGES,
@@ -341,4 +341,69 @@ function hasKeyNotesContent(keyNotes: KeyNotes): boolean {
     keyNotes.constraints.length > 0 ||
     keyNotes.openQuestions.length > 0
   );
+}
+
+// -----------------------------------------------------------------------------
+// Carryover Memory Block Builder (Task 5.2 — Project Mode Only)
+// -----------------------------------------------------------------------------
+
+/** Schema version for carryover memory format */
+const CARRYOVER_SCHEMA_VERSION = 1;
+
+/**
+ * Build carryover memory block for context injection (Project mode only).
+ *
+ * This creates a deterministic text block containing discussion context
+ * that was carried over from Discussion mode to Project mode:
+ * 1. Source session ID and creation timestamp
+ * 2. Key-notes memory (structured JSON) if present
+ * 3. Last 10 exchanges from the discussion
+ *
+ * The block is designed to be prepended to the user prompt for all agents.
+ *
+ * @param carryover - Carryover data from state
+ * @returns Formatted memory block string (empty string if no content)
+ */
+export function buildCarryoverMemoryBlock(carryover: Carryover): string {
+  const { keyNotes, last10Exchanges, fromSessionId, createdAt } = carryover;
+
+  // Check if keyNotes has actual content
+  const hasKeyNotes = keyNotes && hasKeyNotesContent(keyNotes);
+
+  // If no content to inject, return empty
+  if (!hasKeyNotes && last10Exchanges.length === 0) {
+    return '';
+  }
+
+  const sections: string[] = [];
+
+  // Header with schema version
+  sections.push(`=== DISCUSSION CARRYOVER (v${CARRYOVER_SCHEMA_VERSION}) ===`);
+  sections.push(`fromSessionId: ${fromSessionId}`);
+  sections.push(`createdAt: ${new Date(createdAt).toISOString()}`);
+
+  // Key-notes section (if present and non-empty)
+  if (hasKeyNotes) {
+    sections.push('');
+    sections.push('--- KEY NOTES ---');
+    sections.push(JSON.stringify(keyNotes, null, 2));
+  }
+
+  // Exchanges section (if present)
+  if (last10Exchanges.length > 0) {
+    sections.push('');
+    sections.push(`--- RECENT EXCHANGES (${last10Exchanges.length}) ---`);
+    for (let i = 0; i < last10Exchanges.length; i++) {
+      sections.push('');
+      sections.push(serializeExchangeForMemory(last10Exchanges[i], i));
+    }
+  }
+
+  sections.push('');
+  sections.push('=== END DISCUSSION CARRYOVER ===');
+  sections.push('');
+  sections.push('--- CURRENT PROMPT ---');
+  sections.push('');
+
+  return sections.join('\n');
 }
