@@ -190,6 +190,23 @@ body {
   border-bottom: none;
 }
 
+.agent-card--ceo {
+  background-color: #1a2a3a;
+  border-left: 3px solid #64b5f6;
+  margin-top: 4px;
+}
+
+.agent-card__final-badge {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background-color: #1565c0;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .agent-card__header {
   display: flex;
   align-items: center;

@@ -24,6 +24,8 @@ interface AgentCardProps {
   isActive: boolean;
   /** Current operating mode (for content sanitization) */
   mode: BrainMode;
+  /** Whether this agent is the CEO (Decision/Project modes) */
+  isCeo?: boolean;
 }
 
 // -----------------------------------------------------------------------------
@@ -133,7 +135,7 @@ function sanitizeGatekeepingFlags(content: string): string {
 // Component
 // -----------------------------------------------------------------------------
 
-export function AgentCard({ agent, response, isActive, mode: _mode }: AgentCardProps): JSX.Element {
+export function AgentCard({ agent, response, isActive, mode, isCeo = false }: AgentCardProps): JSX.Element {
   const status = getDisplayStatus(response, isActive);
   const statusLabel = getStatusLabel(status);
 
@@ -148,12 +150,22 @@ export function AgentCard({ agent, response, isActive, mode: _mode }: AgentCardP
   // Get contextual sub-message for terminal states
   const subMessage = getStatusSubMessage(response);
 
+  // Show FINAL DECISION badge in Decision mode for CEO with completed response
+  const showFinalBadge = isCeo && mode === 'decision' && status === 'success';
+
+  // Build class names
+  const cardClasses = ['agent-card'];
+  if (isCeo) cardClasses.push('agent-card--ceo');
+
   return (
-    <div className="agent-card">
+    <div className={cardClasses.join(' ')}>
       <div className="agent-card__header">
         <span className={`agent-card__name agent-card__name--${agent}`}>
           {AGENT_LABELS[agent]}
         </span>
+        {showFinalBadge && (
+          <span className="agent-card__final-badge">FINAL DECISION</span>
+        )}
         <span className={`agent-card__status agent-card__status--${status}`}>
           {statusLabel}
         </span>

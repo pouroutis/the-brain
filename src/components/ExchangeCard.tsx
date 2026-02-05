@@ -132,6 +132,9 @@ export function ExchangeCard({
             return null;
           }
 
+          // Mark CEO agent in Decision/Project modes
+          const isCeo = (mode === 'decision' || mode === 'project') && agent === ceo;
+
           return (
             <AgentCard
               key={agent}
@@ -139,6 +142,7 @@ export function ExchangeCard({
               response={response}
               isActive={isActive}
               mode={mode}
+              isCeo={isCeo}
             />
           );
         })}
