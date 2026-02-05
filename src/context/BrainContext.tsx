@@ -319,6 +319,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
   // ---------------------------------------------------------------------------
 
   const hasRehydratedRef = useRef(false);
+  const didLoadDataRef = useRef(false); // Track if we actually loaded data
 
   useEffect(() => {
     // Only rehydrate once on mount
@@ -327,6 +328,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
 
     const persisted = loadDiscussionState();
     if (persisted) {
+      didLoadDataRef.current = true; // Mark that we loaded existing data
       dispatch({
         type: 'REHYDRATE_DISCUSSION',
         session: persisted.session,
@@ -354,11 +356,15 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     // Skip during processing (mid-sequence)
     if (state.isProcessing) return;
 
-    // Skip if this is the initial rehydration (exchanges length matches what was loaded)
-    // This prevents re-saving immediately after rehydration
+    // Initialize tracking ref on first valid run
+    // Only skip save if we actually loaded data (prevents re-saving immediately after rehydration)
     if (prevExchangesLengthRef.current === null) {
       prevExchangesLengthRef.current = state.exchanges.length;
-      return;
+      // If we loaded data, skip this first run to avoid re-saving
+      // If fresh start (no data loaded), continue to save
+      if (didLoadDataRef.current) {
+        return;
+      }
     }
 
     // Save if exchange count changed (SEQUENCE_COMPLETED or CLEAR)
