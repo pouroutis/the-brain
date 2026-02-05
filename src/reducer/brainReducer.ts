@@ -38,6 +38,9 @@ export const initialBrainState: BrainState = {
   keyNotes: null,
   systemMessages: [],
   carryover: null,
+  projectError: null,
+  lastProjectIntent: null,
+  ghostOutput: null,
 };
 
 // -----------------------------------------------------------------------------
@@ -384,6 +387,12 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         transcript: clearedTranscript,
         keyNotes: clearedKeyNotes,
         systemMessages: clearedSystemMessages,
+        // Clear project-specific state when in project mode
+        ...(state.mode === 'project' && {
+          projectError: null,
+          ghostOutput: null,
+          lastProjectIntent: null,
+        }),
       };
     }
 
@@ -406,6 +415,8 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         mode: action.mode,
         // Reset loop state when mode changes
         loopState: 'idle',
+        // Clear project error when switching modes
+        projectError: null,
       };
     }
 
@@ -426,6 +437,8 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
       return {
         ...state,
         loopState: 'running',
+        projectError: null,
+        lastProjectIntent: action.intent ?? state.lastProjectIntent,
       };
     }
 
@@ -459,6 +472,8 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         warningState: null,
         error: null,
         resultArtifact: null,
+        projectError: null,
+        ghostOutput: null,
       };
     }
 
@@ -584,6 +599,41 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
       return {
         ...state,
         carryover: null,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // PROJECT_GHOST_SUCCESS (STEP 3-4 — Ghost orchestrator succeeded)
+    // -------------------------------------------------------------------------
+    case 'PROJECT_GHOST_SUCCESS': {
+      return {
+        ...state,
+        loopState: 'completed',
+        ghostOutput: action.content,
+        projectError: null,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // PROJECT_GHOST_FAILED (STEP 3-4 — Ghost orchestrator failed)
+    // -------------------------------------------------------------------------
+    case 'PROJECT_GHOST_FAILED': {
+      return {
+        ...state,
+        loopState: 'failed',
+        projectError: action.error,
+        ghostOutput: null,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // PROJECT_RESET_ERROR (STEP 3-4 — Clear error for retry)
+    // -------------------------------------------------------------------------
+    case 'PROJECT_RESET_ERROR': {
+      return {
+        ...state,
+        projectError: null,
+        loopState: 'idle',
       };
     }
 

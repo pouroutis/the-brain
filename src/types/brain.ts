@@ -28,8 +28,10 @@ export type BrainMode = 'discussion' | 'decision' | 'project';
  * - idle: Not executing, controls enabled
  * - running: Autonomous execution active, controls locked
  * - paused: Temporarily paused, can resume or stop
+ * - completed: Ghost orchestrator finished successfully
+ * - failed: Ghost orchestrator failed, retry available
  */
-export type LoopState = 'idle' | 'running' | 'paused';
+export type LoopState = 'idle' | 'running' | 'paused' | 'completed' | 'failed';
 
 // -----------------------------------------------------------------------------
 // Status Types
@@ -244,6 +246,12 @@ export interface BrainState {
   systemMessages: SystemMessage[];
   /** Carryover data from Discussion to Project mode */
   carryover: Carryover | null;
+  /** Project mode: Error message from ghost orchestrator (STEP 3-4) */
+  projectError: string | null;
+  /** Project mode: Last user intent sent to ghost orchestrator (STEP 3-4) */
+  lastProjectIntent: string | null;
+  /** Project mode: Ghost orchestrator output (STEP 3-4) */
+  ghostOutput: string | null;
 }
 
 // -----------------------------------------------------------------------------
@@ -260,7 +268,7 @@ export type BrainAction =
   | { type: 'SET_WARNING'; runId: string; warning: WarningState | null }
   | { type: 'CLEAR' }
   | { type: 'SET_MODE'; mode: BrainMode }
-  | { type: 'START_EXECUTION_LOOP' }
+  | { type: 'START_EXECUTION_LOOP'; intent?: string }
   | { type: 'STOP_EXECUTION_LOOP' }
   | { type: 'PAUSE_EXECUTION_LOOP' }
   | { type: 'SET_RESULT_ARTIFACT'; artifact: string | null }
@@ -269,7 +277,10 @@ export type BrainAction =
   | { type: 'REHYDRATE_DISCUSSION'; session: DiscussionSession; exchanges: Exchange[]; transcript: TranscriptEntry[]; keyNotes: KeyNotes | null }
   | { type: 'COMPACTION_COMPLETED'; keyNotes: KeyNotes; trimmedExchanges: Exchange[] }
   | { type: 'CREATE_CARRYOVER_FROM_DISCUSSION' }
-  | { type: 'CLEAR_CARRYOVER' };
+  | { type: 'CLEAR_CARRYOVER' }
+  | { type: 'PROJECT_GHOST_SUCCESS'; content: string }
+  | { type: 'PROJECT_GHOST_FAILED'; error: string }
+  | { type: 'PROJECT_RESET_ERROR' };
 
 // -----------------------------------------------------------------------------
 // Brain Events (Logging / Debugging) — 6 variants, contract-locked

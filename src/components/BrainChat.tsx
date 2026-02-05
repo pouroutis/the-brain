@@ -39,6 +39,7 @@ export function BrainChat(): JSX.Element {
     setCeoExecutionPrompt,
     switchToProject,
     returnToDiscussion,
+    retryExecution,
     // Selectors
     getState,
     canSubmit,
@@ -57,6 +58,8 @@ export function BrainChat(): JSX.Element {
     getCeoExecutionPrompt,
     getSystemMessages,
     hasActiveDiscussion,
+    getProjectError,
+    getGhostOutput,
   } = useBrain();
 
   // ---------------------------------------------------------------------------
@@ -79,6 +82,8 @@ export function BrainChat(): JSX.Element {
   const persistedCeoPrompt = getCeoExecutionPrompt();
   const systemMessages = getSystemMessages();
   const activeDiscussion = hasActiveDiscussion();
+  const projectError = getProjectError();
+  const ghostOutput = getGhostOutput();
 
   // ---------------------------------------------------------------------------
   // CEO Execution Prompt (memoized)
@@ -229,6 +234,10 @@ export function BrainChat(): JSX.Element {
     returnToDiscussion();
   }, [returnToDiscussion, loopRunning]);
 
+  const handleRetryExecution = useCallback(() => {
+    retryExecution();
+  }, [retryExecution]);
+
   // ---------------------------------------------------------------------------
   // Discussion Export: Finish Discussion (JSON + Markdown)
   // ---------------------------------------------------------------------------
@@ -310,6 +319,10 @@ export function BrainChat(): JSX.Element {
         resultArtifact={resultArtifact}
         onSaveResultArtifact={handleSaveResultArtifact}
         isProjectMode={mode === 'project'}
+        loopState={loopState}
+        projectError={projectError}
+        ghostOutput={ghostOutput}
+        onRetry={handleRetryExecution}
       />
     </div>
   );

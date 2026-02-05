@@ -33,7 +33,8 @@ import type {
 
 import { brainReducer, initialBrainState } from '../reducer/brainReducer';
 import { callAgent } from '../api/agentClient';
-import { callGhostOrchestrator } from '../api/ghostClient';
+import { callGhostOrchestrator, getGhostErrorMessage } from '../api/ghostClient';
+import type { GhostErrorCode } from '../types/ghost';
 import { env } from '../config/env';
 import {
   loadDiscussionState,
@@ -150,7 +151,7 @@ interface BrainActions {
   /** Set the operating mode (Phase 2) */
   setMode: (mode: BrainMode) => void;
   /** Start the autonomous execution loop (Project mode only) */
-  startExecutionLoop: () => void;
+  startExecutionLoop: (intent?: string) => void;
   /** Pause execution loop and return to Discussion mode */
   pauseExecutionLoop: () => void;
   /** Stop execution loop and clear context */
@@ -165,6 +166,8 @@ interface BrainActions {
   switchToProject: () => void;
   /** Return from Project to Discussion mode (Task 5.3) */
   returnToDiscussion: () => void;
+  /** Retry ghost orchestrator call after failure (STEP 3-4) */
+  retryExecution: () => void;
 }
 
 /**
@@ -226,6 +229,12 @@ interface BrainSelectors {
   getSystemMessages: () => SystemMessage[];
   /** Check if there is an active discussion session (Task 5.3) */
   hasActiveDiscussion: () => boolean;
+  /** Get project error message (STEP 3-4) */
+  getProjectError: () => string | null;
+  /** Get ghost orchestrator output (STEP 3-4) */
+  getGhostOutput: () => string | null;
+  /** Get last project intent (STEP 3-4) */
+  getLastProjectIntent: () => string | null;
 }
 
 /**
@@ -311,6 +320,9 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
 
   /** Run-scoped call counter for cost control (Phase 5) */
   const callIndexRef = useRef<number>(0);
+
+  /** Ghost orchestrator AbortController for Project mode (STEP 3-4) */
+  const ghostAbortControllerRef = useRef<AbortController | null>(null);
 
   // ---------------------------------------------------------------------------
   // Sync userCancelled state to ref (for reading during async operations)
@@ -824,6 +836,75 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
   }, [currentRunId]);
 
   // ---------------------------------------------------------------------------
+  // STEP 3-4: Ghost Orchestrator Effect for Project Mode
+  // Triggered when loopState transitions to 'running' in project mode
+  // ---------------------------------------------------------------------------
+
+  useEffect(() => {
+    // Only trigger in project mode when running
+    if (state.mode !== 'project' || state.loopState !== 'running') {
+      return;
+    }
+
+    // Skip if already processing (prevents re-trigger)
+    if (ghostAbortControllerRef.current) {
+      return;
+    }
+
+    // Create abort controller for ghost call
+    const ghostAbortController = new AbortController();
+    ghostAbortControllerRef.current = ghostAbortController;
+
+    const runGhostOrchestrator = async () => {
+      try {
+        // Build effective prompt with carryover injection
+        let effectivePrompt = state.lastProjectIntent ?? '';
+
+        // Inject carryover context if available
+        if (state.carryover) {
+          const carryoverBlock = buildCarryoverMemoryBlock(state.carryover);
+          if (carryoverBlock) {
+            effectivePrompt = carryoverBlock + effectivePrompt;
+          }
+        }
+
+        // Call ghost orchestrator
+        const result = await callGhostOrchestrator(effectivePrompt, ghostAbortController);
+
+        // Check if aborted
+        if (ghostAbortController.signal.aborted) {
+          return;
+        }
+
+        // Handle result
+        if (result.status === 'success' && result.content) {
+          dispatch({ type: 'PROJECT_GHOST_SUCCESS', content: result.content });
+        } else {
+          // Map error code to user-friendly message
+          const errorMessage = result.errorCode
+            ? getGhostErrorMessage(result.errorCode as GhostErrorCode)
+            : result.error ?? 'Ghost orchestration failed';
+          dispatch({ type: 'PROJECT_GHOST_FAILED', error: errorMessage });
+        }
+      } catch (error) {
+        // Handle unexpected errors
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        dispatch({ type: 'PROJECT_GHOST_FAILED', error: errorMessage });
+      } finally {
+        ghostAbortControllerRef.current = null;
+      }
+    };
+
+    runGhostOrchestrator();
+
+    // Cleanup: abort on unmount or mode change
+    return () => {
+      ghostAbortController.abort();
+      ghostAbortControllerRef.current = null;
+    };
+  }, [state.mode, state.loopState, state.lastProjectIntent, state.carryover]);
+
+  // ---------------------------------------------------------------------------
   // Action Creators
   // ---------------------------------------------------------------------------
 
@@ -881,8 +962,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     dispatch({ type: 'SET_MODE', mode });
   }, []);
 
-  const startExecutionLoop = useCallback((): void => {
-    dispatch({ type: 'START_EXECUTION_LOOP' });
+  const startExecutionLoop = useCallback((intent?: string): void => {
+    dispatch({ type: 'START_EXECUTION_LOOP', intent });
   }, []);
 
   const pauseExecutionLoop = useCallback((): void => {
@@ -920,6 +1001,14 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     // Do NOT clear carryover — preserve for potential re-entry
     dispatch({ type: 'SET_MODE', mode: 'discussion' });
   }, []);
+
+  const retryExecution = useCallback((): void => {
+    // STEP 3-4: Retry ghost orchestrator call
+    // Reset error and re-trigger execution
+    dispatch({ type: 'PROJECT_RESET_ERROR' });
+    // Re-start with the same intent
+    dispatch({ type: 'START_EXECUTION_LOOP', intent: state.lastProjectIntent ?? undefined });
+  }, [state.lastProjectIntent]);
 
   // ---------------------------------------------------------------------------
   // Selectors
@@ -1071,6 +1160,18 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     return state.discussionSession !== null;
   }, [state.discussionSession]);
 
+  const getProjectError = useCallback((): string | null => {
+    return state.projectError;
+  }, [state.projectError]);
+
+  const getGhostOutput = useCallback((): string | null => {
+    return state.ghostOutput;
+  }, [state.ghostOutput]);
+
+  const getLastProjectIntent = useCallback((): string | null => {
+    return state.lastProjectIntent;
+  }, [state.lastProjectIntent]);
+
   // ---------------------------------------------------------------------------
   // Memoized Context Value
   // ---------------------------------------------------------------------------
@@ -1094,6 +1195,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       setCeoExecutionPrompt,
       switchToProject,
       returnToDiscussion,
+      retryExecution,
       // Selectors
       getState,
       getActiveRunId,
@@ -1122,6 +1224,9 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       getKeyNotes,
       getSystemMessages,
       hasActiveDiscussion,
+      getProjectError,
+      getGhostOutput,
+      getLastProjectIntent,
     }),
     [
       submitPrompt,
@@ -1140,6 +1245,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       setCeoExecutionPrompt,
       switchToProject,
       returnToDiscussion,
+      retryExecution,
       getState,
       getActiveRunId,
       getPendingExchange,
@@ -1167,6 +1273,9 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       getKeyNotes,
       getSystemMessages,
       hasActiveDiscussion,
+      getProjectError,
+      getGhostOutput,
+      getLastProjectIntent,
     ]
   );
 

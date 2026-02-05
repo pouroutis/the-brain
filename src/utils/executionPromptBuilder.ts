@@ -95,6 +95,8 @@ const LOOP_STATE_NAMES: Record<LoopState, string> = {
   idle: 'Idle',
   running: 'Running',
   paused: 'Paused',
+  completed: 'Completed',
+  failed: 'Failed',
 };
 
 /**
