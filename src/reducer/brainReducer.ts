@@ -47,6 +47,7 @@ export const initialBrainState: BrainState = {
   lastProjectIntent: null,
   ghostOutput: null,
   projectRun: null,
+  discussionCeoPromptArtifact: null,
 };
 
 // -----------------------------------------------------------------------------
@@ -404,6 +405,7 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
       // Clear keyNotes and systemMessages in discussion mode
       const clearedKeyNotes = state.mode === 'discussion' ? null : state.keyNotes;
       const clearedSystemMessages: SystemMessage[] = state.mode === 'discussion' ? [] : state.systemMessages;
+      const clearedCeoPromptArtifact = state.mode === 'discussion' ? null : state.discussionCeoPromptArtifact;
 
       return {
         ...state,
@@ -419,6 +421,7 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         transcript: clearedTranscript,
         keyNotes: clearedKeyNotes,
         systemMessages: clearedSystemMessages,
+        discussionCeoPromptArtifact: clearedCeoPromptArtifact,
         // Clear project-specific state when in project mode
         ...(state.mode === 'project' && {
           projectError: null,
@@ -898,6 +901,21 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
           phase: 'FAILED_REQUIRES_USER_DIRECTION',
           error: 'Stopped by user',
         },
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // SET_DISCUSSION_CEO_PROMPT_ARTIFACT — Store CEO prompt artifact (Discussion mode)
+    // -------------------------------------------------------------------------
+    case 'SET_DISCUSSION_CEO_PROMPT_ARTIFACT': {
+      // Guard: Only in discussion mode
+      if (state.mode !== 'discussion') {
+        return state;
+      }
+
+      return {
+        ...state,
+        discussionCeoPromptArtifact: action.artifact,
       };
     }
 

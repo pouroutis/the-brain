@@ -21,6 +21,7 @@ import type {
   AgentStatus,
   BrainMode,
   BrainState,
+  CeoPromptArtifact,
   Exchange,
   KeyNotes,
   LoopState,
@@ -183,6 +184,8 @@ interface BrainActions {
   markProjectDone: () => void;
   /** Force project to failed state */
   forceProjectFail: () => void;
+  /** Set the discussion mode CEO prompt artifact */
+  setDiscussionCeoPromptArtifact: (artifact: CeoPromptArtifact) => void;
 }
 
 /**
@@ -252,6 +255,8 @@ interface BrainSelectors {
   getLastProjectIntent: () => string | null;
   /** Get project run state */
   getProjectRun: () => ProjectRun | null;
+  /** Get discussion mode CEO prompt artifact */
+  getDiscussionCeoPromptArtifact: () => CeoPromptArtifact | null;
 }
 
 /**
@@ -1054,6 +1059,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     dispatch({ type: 'PROJECT_FORCE_FAIL' });
   }, []);
 
+  const setDiscussionCeoPromptArtifact = useCallback((artifact: CeoPromptArtifact): void => {
+    dispatch({ type: 'SET_DISCUSSION_CEO_PROMPT_ARTIFACT', artifact });
+  }, []);
+
   // ---------------------------------------------------------------------------
   // Selectors
   // ---------------------------------------------------------------------------
@@ -1220,6 +1229,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     return state.projectRun;
   }, [state.projectRun]);
 
+  const getDiscussionCeoPromptArtifact = useCallback((): CeoPromptArtifact | null => {
+    return state.discussionCeoPromptArtifact;
+  }, [state.discussionCeoPromptArtifact]);
+
   // ---------------------------------------------------------------------------
   // Memoized Context Value
   // ---------------------------------------------------------------------------
@@ -1250,6 +1263,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       newProjectDirection,
       markProjectDone,
       forceProjectFail,
+      setDiscussionCeoPromptArtifact,
       // Selectors
       getState,
       getActiveRunId,
@@ -1282,6 +1296,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       getGhostOutput,
       getLastProjectIntent,
       getProjectRun,
+      getDiscussionCeoPromptArtifact,
     }),
     [
       submitPrompt,
@@ -1307,6 +1322,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       newProjectDirection,
       markProjectDone,
       forceProjectFail,
+      setDiscussionCeoPromptArtifact,
       getState,
       getActiveRunId,
       getPendingExchange,
@@ -1338,6 +1354,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       getGhostOutput,
       getLastProjectIntent,
       getProjectRun,
+      getDiscussionCeoPromptArtifact,
     ]
   );
 

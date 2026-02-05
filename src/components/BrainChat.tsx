@@ -11,12 +11,14 @@ import { ActionBar } from './ActionBar';
 import { WarningBanner } from './WarningBanner';
 import { ExecutorPanel } from './ExecutorPanel';
 import { ProjectModeLayout } from './ProjectModeLayout';
+import { DiscussionModeLayout } from './DiscussionModeLayout';
 import { buildCeoExecutionPrompt } from '../utils/executionPromptBuilder';
 import {
   exportTranscriptAsJson,
   exportTranscriptAsMarkdown,
   downloadFile,
 } from '../utils/discussionPersistence';
+import { parseCeoControlBlock, createCeoPromptArtifact } from '../utils/ceoControlBlockParser';
 import type { Agent, BrainMode, InterruptSeverity, InterruptScope } from '../types/brain';
 
 // -----------------------------------------------------------------------------
@@ -66,6 +68,8 @@ export function BrainChat(): JSX.Element {
     getProjectError,
     getGhostOutput,
     getProjectRun,
+    getDiscussionCeoPromptArtifact,
+    setDiscussionCeoPromptArtifact,
   } = useBrain();
 
   // ---------------------------------------------------------------------------
@@ -91,6 +95,7 @@ export function BrainChat(): JSX.Element {
   const projectError = getProjectError();
   const ghostOutput = getGhostOutput();
   const projectRun = getProjectRun();
+  const discussionCeoPromptArtifact = getDiscussionCeoPromptArtifact();
 
   // ---------------------------------------------------------------------------
   // CEO Execution Prompt (memoized)
@@ -186,6 +191,41 @@ export function BrainChat(): JSX.Element {
       generatedForExchangeRef.current.clear();
     }
   }, [lastExchange?.id]);
+
+  // ---------------------------------------------------------------------------
+  // Discussion Mode: Parse CEO responses for FINALIZE_PROMPT control blocks
+  // ---------------------------------------------------------------------------
+
+  const lastParsedExchangeRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    // Only in discussion mode
+    if (mode !== 'discussion') return;
+
+    // Only when not processing (sequence completed)
+    if (processing) return;
+
+    // Need a last exchange with CEO response
+    if (!lastExchange?.id) return;
+
+    // Skip if already parsed this exchange
+    if (lastParsedExchangeRef.current === lastExchange.id) return;
+
+    // Get CEO's response
+    const ceoResponse = lastExchange.responsesByAgent[ceo];
+    if (!ceoResponse || ceoResponse.status !== 'success' || !ceoResponse.content) return;
+
+    // Mark as parsed
+    lastParsedExchangeRef.current = lastExchange.id;
+
+    // Parse for control block
+    const parsed = parseCeoControlBlock(ceoResponse.content);
+    if (parsed.hasPromptArtifact && parsed.promptText) {
+      // Create new artifact with incremented version
+      const newArtifact = createCeoPromptArtifact(parsed.promptText, discussionCeoPromptArtifact);
+      setDiscussionCeoPromptArtifact(newArtifact);
+    }
+  }, [mode, processing, lastExchange, ceo, discussionCeoPromptArtifact, setDiscussionCeoPromptArtifact]);
 
   const hasGeneratedForCurrentExchange =
     lastExchange?.id !== null &&
@@ -283,14 +323,14 @@ export function BrainChat(): JSX.Element {
     // Generate timestamp for filenames
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 
-    // Export as JSON
-    const jsonContent = exportTranscriptAsJson(session, transcript);
+    // Export as JSON (include CEO prompt artifact)
+    const jsonContent = exportTranscriptAsJson(session, transcript, discussionCeoPromptArtifact);
     downloadFile(jsonContent, `brain-transcript-${timestamp}.json`, 'application/json');
 
-    // Export as Markdown
-    const mdContent = exportTranscriptAsMarkdown(session, transcript);
+    // Export as Markdown (include CEO prompt artifact)
+    const mdContent = exportTranscriptAsMarkdown(session, transcript, discussionCeoPromptArtifact);
     downloadFile(mdContent, `brain-transcript-${timestamp}.md`, 'text/markdown');
-  }, [state.discussionSession, state.transcript]);
+  }, [state.discussionSession, state.transcript, discussionCeoPromptArtifact]);
 
   // Can export if in discussion mode with transcript
   const canExportDiscussion = mode === 'discussion' && state.transcript.length > 0;
@@ -357,7 +397,59 @@ export function BrainChat(): JSX.Element {
     );
   }
 
-  // Discussion/Decision mode: Original layout
+  // Discussion mode: Two-pane layout with CEO Prompt Panel
+  if (mode === 'discussion') {
+    return (
+      <div className="brain-chat brain-chat--discussion">
+        {/* Warning Banner (runId-scoped display) */}
+        {shouldShowWarning && (
+          <WarningBanner warning={warning} onDismiss={handleDismissWarning} />
+        )}
+
+        {/* Two-Pane Discussion Layout */}
+        <DiscussionModeLayout
+          exchanges={exchanges}
+          pendingExchange={pendingExchange}
+          currentAgent={currentAgent}
+          mode={mode}
+          ceo={ceo}
+          systemMessages={systemMessages}
+          ceoPromptArtifact={discussionCeoPromptArtifact}
+        />
+
+        {/* Prompt Input */}
+        <PromptInput canSubmit={canSubmitPrompt} onSubmit={handleSubmit} />
+
+        {/* Action Bar */}
+        <ActionBar
+          canClear={canClear()}
+          isProcessing={processing}
+          onClear={handleClear}
+          onCancel={handleCancel}
+          mode={mode}
+          onModeChange={handleModeChange}
+          loopState={loopState}
+          onStartExecution={handleStartExecution}
+          onPauseExecution={handlePauseExecution}
+          onStopExecution={handleStopExecution}
+          onMarkDone={handleMarkDone}
+          ceo={ceo}
+          onCeoChange={handleCeoChange}
+          onGeneratePrompt={handleExecutorGeneratePrompt}
+          canGenerate={canGenerate && !hasGeneratedForCurrentExchange && !!ceoExecutionPrompt}
+          generateFeedback={executorCopyFeedback}
+          onFinishDiscussion={handleFinishDiscussion}
+          canExport={canExportDiscussion}
+          onSwitchToProject={handleSwitchToProject}
+          onReturnToDiscussion={handleReturnToDiscussion}
+          hasActiveDiscussion={activeDiscussion}
+          hasExchanges={exchanges.length > 0}
+        />
+      </div>
+    );
+  }
+
+  // Decision mode: Original layout (no two-pane)
   return (
     <div className="brain-chat">
       {/* Warning Banner (runId-scoped display) */}

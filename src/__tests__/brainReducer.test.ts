@@ -715,6 +715,7 @@ describe('brainReducer — CLEAR', () => {
       lastProjectIntent: null,
       ghostOutput: null,
       projectRun: null,
+      discussionCeoPromptArtifact: null,
     };
 
     const action: BrainAction = { type: 'CLEAR' };
@@ -760,6 +761,7 @@ describe('brainReducer — State Invariants', () => {
       'lastProjectIntent',
       'ghostOutput',
       'projectRun',
+      'discussionCeoPromptArtifact',
     ].sort();
 
     const actualKeys = Object.keys(initialBrainState).sort();

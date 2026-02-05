@@ -201,6 +201,23 @@ export interface GatekeepingFlags {
 }
 
 // -----------------------------------------------------------------------------
+// CEO Prompt Artifact (Discussion Mode)
+// -----------------------------------------------------------------------------
+
+/**
+ * CEO's finalized Claude Code prompt artifact.
+ * Published via JSON control block: {"ceo_action": "FINALIZE_PROMPT", "claude_code_prompt": "..."}
+ */
+export interface CeoPromptArtifact {
+  /** The prompt text for Claude Code */
+  text: string;
+  /** Version counter (increments each time CEO publishes) */
+  version: number;
+  /** ISO timestamp when artifact was created/updated */
+  createdAt: string;
+}
+
+// -----------------------------------------------------------------------------
 // Discussion Session (Persistence)
 // -----------------------------------------------------------------------------
 
@@ -325,6 +342,8 @@ export interface BrainState {
   ghostOutput: string | null;
   /** Project mode: Full run state (phase machine) */
   projectRun: ProjectRun | null;
+  /** Discussion mode: CEO's finalized Claude Code prompt artifact */
+  discussionCeoPromptArtifact: CeoPromptArtifact | null;
 }
 
 // -----------------------------------------------------------------------------
@@ -363,7 +382,9 @@ export type BrainAction =
   | { type: 'PROJECT_SET_EXECUTOR_OUTPUT'; output: string }
   | { type: 'PROJECT_NEW_DIRECTION'; intent: string }
   | { type: 'PROJECT_MARK_DONE' }
-  | { type: 'PROJECT_FORCE_FAIL' };
+  | { type: 'PROJECT_FORCE_FAIL' }
+  // Discussion Mode CEO Prompt Artifact
+  | { type: 'SET_DISCUSSION_CEO_PROMPT_ARTIFACT'; artifact: CeoPromptArtifact };
 
 // -----------------------------------------------------------------------------
 // Brain Events (Logging / Debugging) — 6 variants, contract-locked
