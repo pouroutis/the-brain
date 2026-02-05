@@ -356,18 +356,22 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     // Skip during processing (mid-sequence)
     if (state.isProcessing) return;
 
-    // Initialize tracking ref on first valid run
-    // Only skip save if we actually loaded data (prevents re-saving immediately after rehydration)
+    // First valid run: initialize tracking
     if (prevExchangesLengthRef.current === null) {
       prevExchangesLengthRef.current = state.exchanges.length;
-      // If we loaded data, skip this first run to avoid re-saving
-      // If fresh start (no data loaded), continue to save
+      // If we rehydrated data, skip save (data already in localStorage)
+      // If fresh start, save immediately (first exchange needs to persist)
       if (didLoadDataRef.current) {
         return;
       }
+      // Fresh start with exchanges → save now
+      if (state.exchanges.length > 0) {
+        saveDiscussionState(state.discussionSession, state.exchanges, state.transcript, state.keyNotes);
+      }
+      return;
     }
 
-    // Save if exchange count changed (SEQUENCE_COMPLETED or CLEAR)
+    // Subsequent runs: save if exchange count changed
     if (prevExchangesLengthRef.current !== state.exchanges.length) {
       prevExchangesLengthRef.current = state.exchanges.length;
       saveDiscussionState(state.discussionSession, state.exchanges, state.transcript, state.keyNotes);

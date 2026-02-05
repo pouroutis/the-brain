@@ -90,11 +90,31 @@ function wrapper({ children }: { children: React.ReactNode }) {
 }
 
 // -----------------------------------------------------------------------------
+// Mock localStorage (prevents state leakage between tests)
+// -----------------------------------------------------------------------------
+
+const localStorageMock = (() => {
+  let store: Record<string, string> = {};
+  return {
+    getItem: (key: string) => store[key] ?? null,
+    setItem: (key: string, value: string) => { store[key] = value; },
+    removeItem: (key: string) => { delete store[key]; },
+    clear: () => { store = {}; },
+  };
+})();
+
+Object.defineProperty(globalThis, 'localStorage', {
+  value: localStorageMock,
+  writable: true,
+});
+
+// -----------------------------------------------------------------------------
 // Setup / Teardown (Real Timers by Default)
 // -----------------------------------------------------------------------------
 
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorageMock.clear(); // Clear localStorage between tests
   // Default: Ghost disabled (most tests expect client-side orchestration)
   mockIsGhostEnabled.mockReturnValue(false);
 });
