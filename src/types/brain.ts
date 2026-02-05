@@ -128,6 +128,71 @@ export interface GatekeepingFlags {
 }
 
 // -----------------------------------------------------------------------------
+// Discussion Session (Persistence)
+// -----------------------------------------------------------------------------
+
+export interface DiscussionSession {
+  /** Unique session identifier */
+  id: string;
+  /** Creation timestamp */
+  createdAt: number;
+  /** Last update timestamp */
+  lastUpdatedAt: number;
+  /** Number of exchanges in session */
+  exchangeCount: number;
+  /** Schema version for migration support */
+  schemaVersion: 1;
+}
+
+// -----------------------------------------------------------------------------
+// Transcript (Append-Only Record)
+// -----------------------------------------------------------------------------
+
+export type TranscriptRole = 'user' | 'gpt' | 'claude' | 'gemini';
+
+export interface TranscriptEntry {
+  /** Reference to the exchange this entry belongs to */
+  exchangeId: string;
+  /** Role of the speaker */
+  role: TranscriptRole;
+  /** Exact verbatim content */
+  content: string;
+  /** Timestamp when this entry was created */
+  timestamp: number;
+}
+
+// -----------------------------------------------------------------------------
+// Key-Notes (Compaction Memory)
+// -----------------------------------------------------------------------------
+
+/**
+ * Structured memory from compacted exchanges.
+ * Preserves reasoning, decisions, and context across compaction cycles.
+ */
+export interface KeyNotes {
+  /** Key decisions made during discussion */
+  decisions: string[];
+  /** Reasoning chains and thought processes */
+  reasoningChains: string[];
+  /** Points of agreement between participants */
+  agreements: string[];
+  /** Constraints and limitations identified */
+  constraints: string[];
+  /** Unresolved questions for future discussion */
+  openQuestions: string[];
+}
+
+/**
+ * System message for inline notifications (compaction, etc.)
+ */
+export interface SystemMessage {
+  id: string;
+  type: 'compaction';
+  message: string;
+  timestamp: number;
+}
+
+// -----------------------------------------------------------------------------
 // Brain State (Phase 2 — Mode + Execution Loop)
 // -----------------------------------------------------------------------------
 
@@ -148,6 +213,14 @@ export interface BrainState {
   resultArtifact: string | null;
   /** Persisted CEO execution prompt for Executor Panel (Phase 2D) */
   ceoExecutionPrompt: string | null;
+  /** Discussion session metadata (persistence) */
+  discussionSession: DiscussionSession | null;
+  /** Full transcript (append-only, Discussion mode) */
+  transcript: TranscriptEntry[];
+  /** Key-notes memory from compacted exchanges (Discussion mode) */
+  keyNotes: KeyNotes | null;
+  /** System messages for inline notifications */
+  systemMessages: SystemMessage[];
 }
 
 // -----------------------------------------------------------------------------
@@ -169,7 +242,9 @@ export type BrainAction =
   | { type: 'PAUSE_EXECUTION_LOOP' }
   | { type: 'SET_RESULT_ARTIFACT'; artifact: string | null }
   | { type: 'CEO_DONE_DETECTED' }
-  | { type: 'SET_CEO_EXECUTION_PROMPT'; prompt: string | null };
+  | { type: 'SET_CEO_EXECUTION_PROMPT'; prompt: string | null }
+  | { type: 'REHYDRATE_DISCUSSION'; session: DiscussionSession; exchanges: Exchange[]; transcript: TranscriptEntry[]; keyNotes: KeyNotes | null }
+  | { type: 'COMPACTION_COMPLETED'; keyNotes: KeyNotes; trimmedExchanges: Exchange[] };
 
 // -----------------------------------------------------------------------------
 // Brain Events (Logging / Debugging) — 6 variants, contract-locked

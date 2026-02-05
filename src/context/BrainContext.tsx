@@ -22,8 +22,10 @@ import type {
   BrainMode,
   BrainState,
   Exchange,
+  KeyNotes,
   LoopState,
   PendingExchange,
+  SystemMessage,
   WarningState,
   ErrorCode,
   GatekeepingFlags,
@@ -33,6 +35,19 @@ import { brainReducer, initialBrainState } from '../reducer/brainReducer';
 import { callAgent } from '../api/agentClient';
 import { callGhostOrchestrator } from '../api/ghostClient';
 import { env } from '../config/env';
+import {
+  loadDiscussionState,
+  saveDiscussionState,
+} from '../utils/discussionPersistence';
+import {
+  shouldCompact,
+  getExchangesToCompact,
+  getExchangesToKeep,
+  buildCompactionPrompt,
+  parseKeyNotes,
+  mergeKeyNotes,
+} from '../utils/compaction';
+import { buildDiscussionMemoryBlock } from '../utils/contextBuilder';
 
 // -----------------------------------------------------------------------------
 // Constants
@@ -201,6 +216,10 @@ interface BrainSelectors {
   getResultArtifact: () => string | null;
   /** Get the persisted CEO execution prompt (Phase 2D — Executor Panel) */
   getCeoExecutionPrompt: () => string | null;
+  /** Get keyNotes from compacted exchanges (Discussion mode) */
+  getKeyNotes: () => KeyNotes | null;
+  /** Get system messages for inline notifications */
+  getSystemMessages: () => SystemMessage[];
 }
 
 /**
@@ -294,6 +313,160 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
   useEffect(() => {
     userCancelledRef.current = state.userCancelled;
   }, [state.userCancelled]);
+
+  // ---------------------------------------------------------------------------
+  // Discussion Persistence: Rehydration on mount
+  // ---------------------------------------------------------------------------
+
+  const hasRehydratedRef = useRef(false);
+
+  useEffect(() => {
+    // Only rehydrate once on mount
+    if (hasRehydratedRef.current) return;
+    hasRehydratedRef.current = true;
+
+    const persisted = loadDiscussionState();
+    if (persisted) {
+      dispatch({
+        type: 'REHYDRATE_DISCUSSION',
+        session: persisted.session,
+        exchanges: persisted.exchanges,
+        transcript: persisted.transcript,
+        keyNotes: persisted.keyNotes,
+      });
+    }
+  }, []);
+
+  // ---------------------------------------------------------------------------
+  // Discussion Persistence: Save on SEQUENCE_COMPLETED or CLEAR
+  // Triggered by changes to discussionSession (only updates after those actions)
+  // ---------------------------------------------------------------------------
+
+  const prevExchangesLengthRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    // Skip if not in discussion mode
+    if (state.mode !== 'discussion') return;
+
+    // Skip if no session yet (initial state or non-discussion mode)
+    if (!state.discussionSession) return;
+
+    // Skip during processing (mid-sequence)
+    if (state.isProcessing) return;
+
+    // Skip if this is the initial rehydration (exchanges length matches what was loaded)
+    // This prevents re-saving immediately after rehydration
+    if (prevExchangesLengthRef.current === null) {
+      prevExchangesLengthRef.current = state.exchanges.length;
+      return;
+    }
+
+    // Save if exchange count changed (SEQUENCE_COMPLETED or CLEAR)
+    if (prevExchangesLengthRef.current !== state.exchanges.length) {
+      prevExchangesLengthRef.current = state.exchanges.length;
+      saveDiscussionState(state.discussionSession, state.exchanges, state.transcript, state.keyNotes);
+    }
+  }, [state.discussionSession, state.exchanges, state.transcript, state.keyNotes, state.mode, state.isProcessing]);
+
+  // ---------------------------------------------------------------------------
+  // Discussion Compaction: Trigger after SEQUENCE_COMPLETED when threshold met
+  // ---------------------------------------------------------------------------
+
+  const compactionInProgressRef = useRef(false);
+  const lastCompactedCountRef = useRef<number>(0);
+
+  useEffect(() => {
+    // Skip if not in discussion mode
+    if (state.mode !== 'discussion') return;
+
+    // Skip during processing (mid-sequence)
+    if (state.isProcessing) return;
+
+    // Skip if no exchanges
+    if (state.exchanges.length === 0) return;
+
+    // Skip if compaction already in progress
+    if (compactionInProgressRef.current) return;
+
+    // Check if compaction is due
+    const exchangeCount = state.discussionSession?.exchangeCount ?? state.exchanges.length;
+    if (!shouldCompact(exchangeCount)) return;
+
+    // Skip if already compacted at this count
+    if (lastCompactedCountRef.current === exchangeCount) return;
+
+    // Get exchanges to compact
+    const toCompact = getExchangesToCompact(state.exchanges);
+    if (toCompact.length === 0) return;
+
+    // Mark compaction in progress
+    compactionInProgressRef.current = true;
+
+    // Run compaction asynchronously
+    const runCompaction = async () => {
+      try {
+        // Get current CEO for summarization
+        const currentCeo = ceoRef.current;
+
+        // Build summarization prompt
+        const prompt = buildCompactionPrompt(toCompact, state.keyNotes);
+
+        // Create abort controller for compaction call
+        const compactionAbortController = new AbortController();
+
+        // Call CEO agent with summarization prompt
+        const response = await callAgent(
+          currentCeo,
+          prompt,
+          '', // No conversation context for summarization
+          compactionAbortController,
+          {
+            runId: `compaction-${Date.now()}`,
+            callIndex: 1,
+            exchanges: [], // No history for summarization
+            projectDiscussionMode: false,
+          }
+        );
+
+        // Check for success
+        if (response.status !== 'success' || !response.content) {
+          // Summarization failed — do NOT compact, retry on next sequence
+          compactionInProgressRef.current = false;
+          return;
+        }
+
+        // Parse keyNotes from response
+        const parsedKeyNotes = parseKeyNotes(response.content);
+        if (!parsedKeyNotes) {
+          // Parse failed — do NOT compact, retry on next sequence
+          compactionInProgressRef.current = false;
+          return;
+        }
+
+        // Merge with existing keyNotes
+        const mergedKeyNotes = mergeKeyNotes(state.keyNotes, parsedKeyNotes);
+
+        // Get exchanges to keep
+        const toKeep = getExchangesToKeep(state.exchanges);
+
+        // Mark this count as compacted
+        lastCompactedCountRef.current = exchangeCount;
+
+        // Dispatch compaction completed
+        dispatch({
+          type: 'COMPACTION_COMPLETED',
+          keyNotes: mergedKeyNotes,
+          trimmedExchanges: toKeep,
+        });
+      } catch {
+        // Error during compaction — do NOT compact, retry on next sequence
+      } finally {
+        compactionInProgressRef.current = false;
+      }
+    };
+
+    runCompaction();
+  }, [state.mode, state.isProcessing, state.exchanges, state.discussionSession, state.keyNotes]);
 
   // ---------------------------------------------------------------------------
   // Orchestrator: Main Sequence Effect
@@ -426,6 +599,23 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       const currentLoopState = state.loopState;
       // Note: forceAllAdvisorsRef removed — Phase 2F force-all makes it obsolete
 
+      // -----------------------------------------------------------------------
+      // Task 4: Discussion Memory Injection (Discussion mode ONLY)
+      // Build memory block containing keyNotes + last 10 exchanges
+      // Prepend to userPrompt so all agents receive context
+      // -----------------------------------------------------------------------
+
+      let promptWithMemory = userPrompt;
+      if (currentMode === 'discussion') {
+        const memoryBlock = buildDiscussionMemoryBlock({
+          keyNotes: state.keyNotes,
+          exchanges: state.exchanges,
+        });
+        if (memoryBlock) {
+          promptWithMemory = memoryBlock + userPrompt;
+        }
+      }
+
       // Compute agent order: advisors first, CEO last
       const agentOrder = getAgentOrder(currentCeo);
 
@@ -450,9 +640,11 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
 
         callIndexRef.current += 1;
 
+        // Use promptWithMemory for Discussion mode (includes memory block)
+        // Use original userPrompt for Project/Decision modes
         const response = await callAgent(
           agent,
-          userPrompt,
+          promptWithMemory,
           conversationContext,
           agentAbortController,
           {
@@ -824,6 +1016,14 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     return state.ceoExecutionPrompt;
   }, [state.ceoExecutionPrompt]);
 
+  const getKeyNotes = useCallback((): KeyNotes | null => {
+    return state.keyNotes;
+  }, [state.keyNotes]);
+
+  const getSystemMessages = useCallback((): SystemMessage[] => {
+    return state.systemMessages;
+  }, [state.systemMessages]);
+
   // ---------------------------------------------------------------------------
   // Memoized Context Value
   // ---------------------------------------------------------------------------
@@ -870,6 +1070,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       canGenerateExecutionPrompt,
       getResultArtifact,
       getCeoExecutionPrompt,
+      getKeyNotes,
+      getSystemMessages,
     }),
     [
       submitPrompt,
@@ -910,6 +1112,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       canGenerateExecutionPrompt,
       getResultArtifact,
       getCeoExecutionPrompt,
+      getKeyNotes,
+      getSystemMessages,
     ]
   );
 

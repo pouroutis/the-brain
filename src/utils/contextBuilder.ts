@@ -2,7 +2,7 @@
 // The Brain — Context Builder (Phase 5)
 // =============================================================================
 
-import type { Agent, AgentResponse, Exchange } from '../types/brain';
+import type { Agent, AgentResponse, Exchange, KeyNotes } from '../types/brain';
 import {
   MAX_CONTEXT_CHARS,
   MAX_EXCHANGES,
@@ -212,7 +212,7 @@ export function buildContext(
 export function buildGPTContext(userPrompt: string): ContextBuildResult {
   let promptTruncated = false;
   let finalPrompt = userPrompt;
-  
+
   if (userPrompt.length > MAX_PROMPT_CHARS) {
     finalPrompt = truncateWithMarker(userPrompt, MAX_PROMPT_CHARS);
     promptTruncated = true;
@@ -229,4 +229,116 @@ export function buildGPTContext(userPrompt: string): ContextBuildResult {
     exchangesDropped: 0,
     historyTruncated: false,
   };
+}
+
+// -----------------------------------------------------------------------------
+// Discussion Memory Block Builder (Task 4 — Discussion Mode Only)
+// -----------------------------------------------------------------------------
+
+/** Maximum exchanges to include in discussion memory */
+const DISCUSSION_MEMORY_MAX_EXCHANGES = 10;
+
+/** Schema version for discussion memory format */
+const DISCUSSION_MEMORY_SCHEMA_VERSION = 1;
+
+/**
+ * Input parameters for building discussion memory block.
+ */
+export interface DiscussionMemoryParams {
+  /** Key-notes from compacted exchanges (may be null/empty) */
+  keyNotes: KeyNotes | null;
+  /** All current exchanges (will be sliced to last 10) */
+  exchanges: Exchange[];
+}
+
+/**
+ * Serialize an exchange for discussion memory (includes timestamps).
+ */
+function serializeExchangeForMemory(exchange: Exchange, index: number): string {
+  const parts: string[] = [];
+  const timestamp = new Date(exchange.timestamp).toISOString();
+
+  parts.push(`[Exchange ${index + 1} - ${timestamp}]`);
+  parts.push(`User: ${exchange.userPrompt}`);
+
+  // Agent responses in fixed order
+  const agentOrder: Agent[] = ['gpt', 'claude', 'gemini'];
+  for (const agent of agentOrder) {
+    const response = exchange.responsesByAgent[agent];
+    if (response && response.status === 'success' && response.content) {
+      parts.push(`${agent.toUpperCase()}: ${response.content}`);
+    }
+  }
+
+  return parts.join('\n');
+}
+
+/**
+ * Build discussion memory block for context injection (Discussion mode only).
+ *
+ * This creates a deterministic text block containing:
+ * 1. Key-notes memory (structured JSON) if present
+ * 2. Last 10 exchanges in full with timestamps
+ *
+ * The block is designed to be prepended to the user prompt for all agents.
+ *
+ * @param params - keyNotes and exchanges from state
+ * @returns Formatted memory block string (empty string if no memory)
+ */
+export function buildDiscussionMemoryBlock(params: DiscussionMemoryParams): string {
+  const { keyNotes, exchanges } = params;
+
+  // Get last 10 exchanges only
+  const last10 = exchanges.slice(-DISCUSSION_MEMORY_MAX_EXCHANGES);
+
+  // Check if keyNotes has actual content
+  const hasKeyNotes = keyNotes && hasKeyNotesContent(keyNotes);
+
+  // If no memory to inject, return empty
+  if (!hasKeyNotes && last10.length === 0) {
+    return '';
+  }
+
+  const sections: string[] = [];
+
+  // Header with schema version
+  sections.push(`=== DISCUSSION MEMORY (v${DISCUSSION_MEMORY_SCHEMA_VERSION}) ===`);
+
+  // Key-notes section (if present and non-empty)
+  if (hasKeyNotes) {
+    sections.push('');
+    sections.push('--- KEY-NOTES (Compacted History) ---');
+    sections.push(JSON.stringify(keyNotes, null, 2));
+  }
+
+  // Last 10 exchanges section
+  if (last10.length > 0) {
+    sections.push('');
+    sections.push(`--- RECENT EXCHANGES (Last ${last10.length}) ---`);
+    for (let i = 0; i < last10.length; i++) {
+      sections.push('');
+      sections.push(serializeExchangeForMemory(last10[i], i));
+    }
+  }
+
+  sections.push('');
+  sections.push('=== END DISCUSSION MEMORY ===');
+  sections.push('');
+  sections.push('--- CURRENT PROMPT ---');
+  sections.push('');
+
+  return sections.join('\n');
+}
+
+/**
+ * Check if keyNotes has any actual content.
+ */
+function hasKeyNotesContent(keyNotes: KeyNotes): boolean {
+  return (
+    keyNotes.decisions.length > 0 ||
+    keyNotes.reasoningChains.length > 0 ||
+    keyNotes.agreements.length > 0 ||
+    keyNotes.constraints.length > 0 ||
+    keyNotes.openQuestions.length > 0
+  );
 }

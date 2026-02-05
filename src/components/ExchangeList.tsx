@@ -3,7 +3,7 @@
 // ExchangeList Component (Phase 2 — Step 5)
 // =============================================================================
 
-import type { Agent, BrainMode, Exchange, PendingExchange } from '../types/brain';
+import type { Agent, BrainMode, Exchange, PendingExchange, SystemMessage } from '../types/brain';
 import { renderCompletedExchange, renderPendingExchange } from './ExchangeCard';
 
 // -----------------------------------------------------------------------------
@@ -21,6 +21,8 @@ interface ExchangeListProps {
   mode: BrainMode;
   /** Current CEO agent (for render order in Decision/Project modes) */
   ceo: Agent;
+  /** System messages for inline notifications */
+  systemMessages?: SystemMessage[];
 }
 
 // -----------------------------------------------------------------------------
@@ -33,8 +35,9 @@ export function ExchangeList({
   currentAgent,
   mode,
   ceo,
+  systemMessages = [],
 }: ExchangeListProps): JSX.Element {
-  const hasContent = exchanges.length > 0 || pendingExchange !== null;
+  const hasContent = exchanges.length > 0 || pendingExchange !== null || systemMessages.length > 0;
 
   if (!hasContent) {
     return (
@@ -48,6 +51,14 @@ export function ExchangeList({
 
   return (
     <div className="exchange-list">
+      {/* Render system messages (compaction notifications) */}
+      {systemMessages.map((msg) => (
+        <div key={msg.id} className="exchange-list__system-message">
+          <span className="exchange-list__system-icon">&#9432;</span>
+          {msg.message}
+        </div>
+      ))}
+
       {/* Render completed exchanges (historical) */}
       {exchanges.map((exchange) => renderCompletedExchange(exchange, mode, ceo))}
 

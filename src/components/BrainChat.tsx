@@ -11,6 +11,11 @@ import { ActionBar } from './ActionBar';
 import { WarningBanner } from './WarningBanner';
 import { ExecutorPanel } from './ExecutorPanel';
 import { buildCeoExecutionPrompt } from '../utils/executionPromptBuilder';
+import {
+  exportTranscriptAsJson,
+  exportTranscriptAsMarkdown,
+  downloadFile,
+} from '../utils/discussionPersistence';
 import type { Agent, BrainMode } from '../types/brain';
 
 // -----------------------------------------------------------------------------
@@ -48,6 +53,7 @@ export function BrainChat(): JSX.Element {
     canGenerateExecutionPrompt,
     getResultArtifact,
     getCeoExecutionPrompt,
+    getSystemMessages,
   } = useBrain();
 
   // ---------------------------------------------------------------------------
@@ -68,6 +74,7 @@ export function BrainChat(): JSX.Element {
   const canGenerate = canGenerateExecutionPrompt();
   const resultArtifact = getResultArtifact();
   const persistedCeoPrompt = getCeoExecutionPrompt();
+  const systemMessages = getSystemMessages();
 
   // ---------------------------------------------------------------------------
   // CEO Execution Prompt (memoized)
@@ -202,6 +209,31 @@ export function BrainChat(): JSX.Element {
   }, [markDone]);
 
   // ---------------------------------------------------------------------------
+  // Discussion Export: Finish Discussion (JSON + Markdown)
+  // ---------------------------------------------------------------------------
+
+  const handleFinishDiscussion = useCallback(() => {
+    const session = state.discussionSession;
+    const transcript = state.transcript;
+
+    if (!session || transcript.length === 0) return;
+
+    // Generate timestamp for filenames
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+
+    // Export as JSON
+    const jsonContent = exportTranscriptAsJson(session, transcript);
+    downloadFile(jsonContent, `brain-transcript-${timestamp}.json`, 'application/json');
+
+    // Export as Markdown
+    const mdContent = exportTranscriptAsMarkdown(session, transcript);
+    downloadFile(mdContent, `brain-transcript-${timestamp}.md`, 'text/markdown');
+  }, [state.discussionSession, state.transcript]);
+
+  // Can export if in discussion mode with transcript
+  const canExportDiscussion = mode === 'discussion' && state.transcript.length > 0;
+
+  // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
 
@@ -212,19 +244,20 @@ export function BrainChat(): JSX.Element {
         <WarningBanner warning={warning} onDismiss={handleDismissWarning} />
       )}
 
-      {/* Exchange List (completed + pending) */}
+      {/* Exchange List (completed + pending + system messages) */}
       <ExchangeList
         exchanges={exchanges}
         pendingExchange={pendingExchange}
         currentAgent={currentAgent}
         mode={mode}
         ceo={ceo}
+        systemMessages={systemMessages}
       />
 
       {/* Prompt Input (disabled during execution loop) */}
       <PromptInput canSubmit={canSubmitPrompt} onSubmit={handleSubmit} />
 
-      {/* Action Bar (Mode + CEO + Execution Controls + Artifacts + Clear) */}
+      {/* Action Bar (Mode + CEO + Execution Controls + Artifacts + Export + Clear) */}
       <ActionBar
         canClear={canClear()}
         isProcessing={processing}
@@ -242,6 +275,8 @@ export function BrainChat(): JSX.Element {
         onGeneratePrompt={handleExecutorGeneratePrompt}
         canGenerate={canGenerate && !hasGeneratedForCurrentExchange && !!ceoExecutionPrompt}
         generateFeedback={executorCopyFeedback}
+        onFinishDiscussion={handleFinishDiscussion}
+        canExport={canExportDiscussion}
       />
 
       {/* Executor Panel (Project mode only) */}

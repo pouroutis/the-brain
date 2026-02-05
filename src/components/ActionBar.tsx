@@ -43,6 +43,10 @@ interface ActionBarProps {
   canGenerate?: boolean;
   /** Feedback text for generate button */
   generateFeedback?: string | null;
+  /** Callback to export transcript (Discussion mode) */
+  onFinishDiscussion?: () => void;
+  /** Whether export is available (has transcript) */
+  canExport?: boolean;
 }
 
 // -----------------------------------------------------------------------------
@@ -82,6 +86,8 @@ export function ActionBar({
   onGeneratePrompt,
   canGenerate = false,
   generateFeedback,
+  onFinishDiscussion,
+  canExport = false,
 }: ActionBarProps): JSX.Element {
   // Derived state
   const isRunning = loopState === 'running';
@@ -225,6 +231,20 @@ export function ActionBar({
               title="Copy the CEO's instructions for Claude Code"
             >
               {generateFeedback ?? 'Generate Prompt'}
+            </button>
+          </div>
+        )}
+
+        {/* Group: Discussion Export (Discussion mode only) */}
+        {mode === 'discussion' && onFinishDiscussion && (
+          <div className="action-bar__group action-bar__group--export">
+            <button
+              className="action-bar__button action-bar__button--export"
+              onClick={onFinishDiscussion}
+              disabled={!canExport || isProcessing}
+              title="Export full discussion transcript"
+            >
+              Finish Discussion
             </button>
           </div>
         )}

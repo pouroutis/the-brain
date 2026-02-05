@@ -7,8 +7,12 @@ import type {
   Agent,
   BrainState,
   BrainAction,
+  DiscussionSession,
   Exchange,
   PendingExchange,
+  SystemMessage,
+  TranscriptEntry,
+  TranscriptRole,
 } from '../types/brain';
 
 // -----------------------------------------------------------------------------
@@ -28,7 +32,44 @@ export const initialBrainState: BrainState = {
   loopState: 'idle',
   resultArtifact: null,
   ceoExecutionPrompt: null,
+  discussionSession: null,
+  transcript: [],
+  keyNotes: null,
+  systemMessages: [],
 };
+
+// -----------------------------------------------------------------------------
+// Helper: Generate Session ID
+// -----------------------------------------------------------------------------
+
+function generateSessionId(): string {
+  return `session-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+// -----------------------------------------------------------------------------
+// Helper: Create or Update Discussion Session
+// -----------------------------------------------------------------------------
+
+function createOrUpdateSession(
+  existing: DiscussionSession | null,
+  exchangeCount: number
+): DiscussionSession {
+  const now = Date.now();
+  if (existing) {
+    return {
+      ...existing,
+      lastUpdatedAt: now,
+      exchangeCount,
+    };
+  }
+  return {
+    id: generateSessionId(),
+    createdAt: now,
+    lastUpdatedAt: now,
+    exchangeCount,
+    schemaVersion: 1,
+  };
+}
 
 // -----------------------------------------------------------------------------
 // Helper: Generate Exchange ID
@@ -36,6 +77,59 @@ export const initialBrainState: BrainState = {
 
 function generateExchangeId(): string {
   return `ex-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+// -----------------------------------------------------------------------------
+// Helper: Generate System Message ID
+// -----------------------------------------------------------------------------
+
+function generateSystemMessageId(): string {
+  return `sys-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+// -----------------------------------------------------------------------------
+// Helper: Create Compaction System Message
+// -----------------------------------------------------------------------------
+
+function createCompactionMessage(): SystemMessage {
+  return {
+    id: generateSystemMessageId(),
+    type: 'compaction',
+    message: 'Older messages compacted. Full history preserved.',
+    timestamp: Date.now(),
+  };
+}
+
+// -----------------------------------------------------------------------------
+// Helper: Convert Exchange to Transcript Entries (Append-Only)
+// -----------------------------------------------------------------------------
+
+function exchangeToTranscriptEntries(exchange: Exchange): TranscriptEntry[] {
+  const entries: TranscriptEntry[] = [];
+
+  // Add user prompt first
+  entries.push({
+    exchangeId: exchange.id,
+    role: 'user',
+    content: exchange.userPrompt,
+    timestamp: exchange.timestamp,
+  });
+
+  // Add agent responses in order: gpt, claude, gemini
+  const agentOrder: TranscriptRole[] = ['gpt', 'claude', 'gemini'];
+  for (const agent of agentOrder) {
+    const response = exchange.responsesByAgent[agent as Agent];
+    if (response && response.status === 'success' && response.content) {
+      entries.push({
+        exchangeId: exchange.id,
+        role: agent,
+        content: response.content,
+        timestamp: response.timestamp,
+      });
+    }
+  }
+
+  return entries;
 }
 
 // -----------------------------------------------------------------------------
@@ -160,15 +254,31 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
       }
 
       const finalizedExchange = finalizePendingExchange(state.pendingExchange);
+      const newExchanges = [...state.exchanges, finalizedExchange];
+
+      // Update discussion session metadata (Discussion mode only)
+      const updatedSession =
+        state.mode === 'discussion'
+          ? createOrUpdateSession(state.discussionSession, newExchanges.length)
+          : state.discussionSession;
+
+      // Append to transcript (Discussion mode only, append-only)
+      const newTranscriptEntries =
+        state.mode === 'discussion'
+          ? exchangeToTranscriptEntries(finalizedExchange)
+          : [];
+      const updatedTranscript = [...state.transcript, ...newTranscriptEntries];
 
       return {
         ...state,
-        exchanges: [...state.exchanges, finalizedExchange],
+        exchanges: newExchanges,
         pendingExchange: null,
         currentAgent: null,
         isProcessing: false,
         userCancelled: false,
         warningState: null,
+        discussionSession: updatedSession,
+        transcript: updatedTranscript,
       };
     }
 
@@ -239,6 +349,25 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         return state;
       }
 
+      // Reset discussion session (start fresh)
+      const clearedSession: DiscussionSession | null =
+        state.mode === 'discussion'
+          ? {
+              id: generateSessionId(),
+              createdAt: Date.now(),
+              lastUpdatedAt: Date.now(),
+              exchangeCount: 0,
+              schemaVersion: 1,
+            }
+          : state.discussionSession;
+
+      // Clear transcript in discussion mode (new session = new transcript)
+      const clearedTranscript = state.mode === 'discussion' ? [] : state.transcript;
+
+      // Clear keyNotes and systemMessages in discussion mode
+      const clearedKeyNotes = state.mode === 'discussion' ? null : state.keyNotes;
+      const clearedSystemMessages: SystemMessage[] = state.mode === 'discussion' ? [] : state.systemMessages;
+
       return {
         ...state,
         exchanges: [],
@@ -249,6 +378,10 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         warningState: null,
         error: null,
         clearBoardVersion: state.clearBoardVersion + 1,
+        discussionSession: clearedSession,
+        transcript: clearedTranscript,
+        keyNotes: clearedKeyNotes,
+        systemMessages: clearedSystemMessages,
       };
     }
 
@@ -356,6 +489,48 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
       return {
         ...state,
         ceoExecutionPrompt: action.prompt,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // REHYDRATE_DISCUSSION (Persistence — restore from localStorage)
+    // -------------------------------------------------------------------------
+    case 'REHYDRATE_DISCUSSION': {
+      // Guard: Block if currently processing
+      if (state.isProcessing) {
+        return state;
+      }
+
+      return {
+        ...state,
+        exchanges: action.exchanges,
+        discussionSession: action.session,
+        transcript: action.transcript,
+        keyNotes: action.keyNotes,
+        // Ensure we're in discussion mode after rehydration
+        mode: 'discussion',
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // COMPACTION_COMPLETED (Discussion mode — trim exchanges, update keyNotes)
+    // -------------------------------------------------------------------------
+    case 'COMPACTION_COMPLETED': {
+      // Guard: Only in discussion mode
+      if (state.mode !== 'discussion') {
+        return state;
+      }
+
+      // Guard: Block if currently processing
+      if (state.isProcessing) {
+        return state;
+      }
+
+      return {
+        ...state,
+        exchanges: action.trimmedExchanges,
+        keyNotes: action.keyNotes,
+        systemMessages: [...state.systemMessages, createCompactionMessage()],
       };
     }
 

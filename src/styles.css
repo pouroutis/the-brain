@@ -103,6 +103,24 @@ body {
   font-size: 0.875rem;
 }
 
+.exchange-list__system-message {
+  background-color: #2a2a4a;
+  border: 1px solid #4a4a6a;
+  border-radius: 6px;
+  padding: 10px 16px;
+  margin-bottom: 12px;
+  font-size: 0.875rem;
+  color: #a0a0c0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.exchange-list__system-icon {
+  font-size: 1rem;
+  color: #6a6aaa;
+}
+
 /* -----------------------------------------------------------------------------
    Exchange Card
    ----------------------------------------------------------------------------- */
@@ -547,6 +565,21 @@ body {
 .action-bar__button--generate:hover:not(:disabled) {
   background-color: #1a3a5c;
   border-color: #64b5f6;
+}
+
+.action-bar__group--export {
+  padding: 0 12px;
+  border-right: 1px solid #444;
+}
+
+.action-bar__button--export {
+  border-color: #7b1fa2;
+  color: #ce93d8;
+}
+
+.action-bar__button--export:hover:not(:disabled) {
+  background-color: #3a1a4a;
+  border-color: #ce93d8;
 }
 
 /* -----------------------------------------------------------------------------
