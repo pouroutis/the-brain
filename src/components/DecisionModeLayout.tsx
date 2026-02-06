@@ -1,11 +1,12 @@
 // =============================================================================
 // The Brain — Multi-AI Sequential Chat System
-// Decision Mode Layout (Two-Pane: Thread + CEO Prompt + Clarification)
+// Decision Mode Layout (Three-Pane: Sidebar + Thread + CEO Prompt + Clarification)
 // =============================================================================
 
 import { ExchangeList } from './ExchangeList';
 import { CeoPromptPanel } from './CeoPromptPanel';
 import { CeoClarificationPanel } from './CeoClarificationPanel';
+import { ProjectSidebar } from './ProjectSidebar';
 import type {
   Agent,
   BrainMode,
@@ -14,6 +15,7 @@ import type {
   DecisionBlockingState,
   Exchange,
   PendingExchange,
+  ProjectState,
   SystemMessage,
 } from '../types/brain';
 
@@ -48,6 +50,16 @@ interface DecisionModeLayoutProps {
   lastCeoQuestions: string[];
   /** Callback to retry CEO call in clarification (after timeout/error) */
   onRetryCeoClarification: () => void;
+  /** All saved projects for sidebar */
+  projects: ProjectState[];
+  /** Currently active project ID */
+  activeProjectId: string | null;
+  /** Callback when user selects a project */
+  onSelectProject: (projectId: string) => void;
+  /** Callback when user clicks New Project */
+  onNewProject: () => void;
+  /** Callback when user deletes a project */
+  onDeleteProject: (projectId: string) => void;
 }
 
 // -----------------------------------------------------------------------------
@@ -73,6 +85,11 @@ export function DecisionModeLayout({
   onToggleCeoOnlyMode,
   lastCeoQuestions,
   onRetryCeoClarification,
+  projects,
+  activeProjectId,
+  onSelectProject,
+  onNewProject,
+  onDeleteProject,
 }: DecisionModeLayoutProps): JSX.Element {
   const isBlocked = blockingState?.isBlocked ?? false;
 
@@ -108,8 +125,17 @@ export function DecisionModeLayout({
         </div>
       )}
 
-      {/* Left Pane: Discussion Thread */}
-      <div className="decision-mode-layout__left">
+      {/* Left Rail: Project Sidebar */}
+      <ProjectSidebar
+        projects={projects}
+        activeProjectId={activeProjectId}
+        onSelectProject={onSelectProject}
+        onNewProject={onNewProject}
+        onDeleteProject={onDeleteProject}
+      />
+
+      {/* Center Pane: Discussion Thread */}
+      <div className="decision-mode-layout__center">
         <ExchangeList
           exchanges={exchanges}
           pendingExchange={pendingExchange}

@@ -3,7 +3,7 @@
 // Decision/Project Persistence Utilities (localStorage)
 // =============================================================================
 
-import type { ProjectState, DecisionRecord, ProjectStatus } from '../types/brain';
+import type { ProjectState, DecisionRecord, ProjectStatus, KeyNotes } from '../types/brain';
 
 // -----------------------------------------------------------------------------
 // Constants
@@ -22,6 +22,35 @@ const CURRENT_SCHEMA_VERSION = 1;
 // Validation
 // -----------------------------------------------------------------------------
 
+/**
+ * Validate KeyNotes structure (minimal safe checks)
+ */
+function isValidKeyNotes(keyNotes: unknown): keyNotes is KeyNotes {
+  if (keyNotes === null) return true;
+  if (!keyNotes || typeof keyNotes !== 'object') return false;
+  const k = keyNotes as Record<string, unknown>;
+
+  const requiredArrays = ['decisions', 'reasoningChains', 'agreements', 'constraints', 'openQuestions'];
+  for (const key of requiredArrays) {
+    if (!Array.isArray(k[key])) return false;
+  }
+
+  return true;
+}
+
+/**
+ * Validate projectMemory structure
+ */
+function isValidProjectMemory(pm: unknown): pm is { recentExchanges: unknown[]; keyNotes: KeyNotes | null } {
+  if (!pm || typeof pm !== 'object') return false;
+  const mem = pm as Record<string, unknown>;
+
+  if (!Array.isArray(mem.recentExchanges)) return false;
+  if (mem.keyNotes !== null && !isValidKeyNotes(mem.keyNotes)) return false;
+
+  return true;
+}
+
 function isValidProjectState(data: unknown): data is ProjectState {
   if (!data || typeof data !== 'object') return false;
   const p = data as Record<string, unknown>;
@@ -33,8 +62,11 @@ function isValidProjectState(data: unknown): data is ProjectState {
   if (typeof p.status !== 'string') return false;
   if (!['active', 'blocked', 'done'].includes(p.status as string)) return false;
   if (!Array.isArray(p.decisions)) return false;
-  if (!Array.isArray(p.projectMemory)) return false;
   if (p.schemaVersion !== CURRENT_SCHEMA_VERSION) return false;
+
+  // Validate projectMemory (must be object, not array)
+  // Migration safety: if old string[] format, treat as invalid and let caller handle
+  if (!isValidProjectMemory(p.projectMemory)) return false;
 
   // Optional fields
   if (p.title !== undefined && typeof p.title !== 'string') return false;
@@ -80,15 +112,19 @@ export function generateDecisionId(): string {
 // Helper: Create Initial Project State
 // -----------------------------------------------------------------------------
 
-export function createInitialProjectState(projectId: string): ProjectState {
+export function createInitialProjectState(projectId: string, title?: string): ProjectState {
   const now = Date.now();
   return {
     id: projectId,
     createdAt: now,
     updatedAt: now,
+    title,
     status: 'active',
     decisions: [],
-    projectMemory: [],
+    projectMemory: {
+      recentExchanges: [],
+      keyNotes: null,
+    },
     schemaVersion: 1,
   };
 }
@@ -261,6 +297,45 @@ export function updateProjectTitle(
 
   saveProject(updated);
   return updated;
+}
+
+// -----------------------------------------------------------------------------
+// Public API: List All Projects
+// -----------------------------------------------------------------------------
+
+/**
+ * List all saved projects from localStorage.
+ * Returns an array of ProjectState sorted by updatedAt descending (most recent first).
+ */
+export function listProjects(): ProjectState[] {
+  const projects: ProjectState[] = [];
+
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(PROJECT_KEY_PREFIX)) {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (isValidProjectState(parsed)) {
+              projects.push(parsed);
+            }
+          } catch {
+            // Skip invalid JSON
+          }
+        }
+      }
+    }
+  } catch {
+    // localStorage unavailable
+    return [];
+  }
+
+  // Sort by updatedAt descending (most recent first)
+  projects.sort((a, b) => b.updatedAt - a.updatedAt);
+
+  return projects;
 }
 
 // -----------------------------------------------------------------------------

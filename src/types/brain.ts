@@ -331,8 +331,11 @@ export interface ProjectState {
   lastDecisionId?: string;
   /** Append-only decision history */
   decisions: DecisionRecord[];
-  /** Project-level memory/notes (future use) */
-  projectMemory: string[];
+  /** Project-level memory (recent exchanges + keyNotes snapshot) */
+  projectMemory: {
+    recentExchanges: Exchange[];
+    keyNotes: KeyNotes | null;
+  };
   /** Schema version for migration support */
   schemaVersion: 1;
 }
@@ -557,7 +560,7 @@ export type BrainAction =
   // Decision Mode CEO-Only Toggle
   | { type: 'SET_CEO_ONLY_MODE'; enabled: boolean }
   // ProjectState Persistence
-  | { type: 'CREATE_PROJECT'; projectId: string }
+  | { type: 'CREATE_PROJECT'; projectId: string; title?: string }
   | { type: 'REHYDRATE_PROJECT'; project: ProjectState }
   | { type: 'APPEND_PROJECT_DECISION'; decision: DecisionRecord }
   | { type: 'SET_PROJECT_BLOCKED'; blocked: boolean; reason?: string }

@@ -1147,9 +1147,13 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         id: action.projectId,
         createdAt: now,
         updatedAt: now,
+        title: action.title,
         status: 'active',
         decisions: [],
-        projectMemory: [],
+        projectMemory: {
+          recentExchanges: [],
+          keyNotes: null,
+        },
         schemaVersion: 1,
       };
 
@@ -1190,6 +1194,11 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         decisions: [...state.activeProject.decisions, action.decision],
         // Update status based on decision
         status: action.decision.blocked ? 'blocked' : 'active',
+        // Update projectMemory from decision
+        projectMemory: {
+          recentExchanges: action.decision.recentExchanges,
+          keyNotes: action.decision.keyNotes,
+        },
       };
 
       return {

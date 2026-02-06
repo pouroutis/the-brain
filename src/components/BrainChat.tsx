@@ -11,7 +11,6 @@ import { ActionBar } from './ActionBar';
 import { WarningBanner } from './WarningBanner';
 import { ProjectModeLayout } from './ProjectModeLayout';
 import { DecisionModeLayout } from './DecisionModeLayout';
-import { buildCeoExecutionPrompt } from '../utils/executionPromptBuilder';
 import {
   exportTranscriptAsJson,
   exportTranscriptAsMarkdown,
@@ -23,7 +22,7 @@ import {
   PROMPT_START_MARKER,
   PROMPT_END_MARKER,
 } from '../utils/ceoControlBlockParser';
-import type { Agent, BrainMode, InterruptSeverity, InterruptScope } from '../types/brain';
+import type { Agent, BrainMode } from '../types/brain';
 
 // -----------------------------------------------------------------------------
 // Types
@@ -53,9 +52,7 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     pauseExecutionLoop,
     stopExecutionLoop,
     markDone,
-    setCeoExecutionPrompt,
     // Project phase actions
-    addProjectInterrupt,
     markProjectDone,
     forceProjectFail,
     // Selectors
@@ -71,11 +68,7 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     getMode,
     getLoopState,
     isLoopRunning,
-    canGenerateExecutionPrompt,
-    getResultArtifact,
-    getCeoExecutionPrompt,
     getSystemMessages,
-    getProjectError,
     getProjectRun,
     getDiscussionCeoPromptArtifact,
     setDiscussionCeoPromptArtifact,
@@ -95,6 +88,12 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     // CEO-only mode toggle
     setCeoOnlyMode,
     isCeoOnlyMode,
+    // Project management
+    getActiveProject,
+    listProjects,
+    createNewProject,
+    switchToProjectById,
+    deleteProject,
   } = useBrain();
 
   // ---------------------------------------------------------------------------
@@ -125,11 +124,7 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
   const mode = getMode();
   const loopState = getLoopState();
   const loopRunning = isLoopRunning();
-  const canGenerate = canGenerateExecutionPrompt();
-  const resultArtifact = getResultArtifact();
-  const persistedCeoPrompt = getCeoExecutionPrompt();
   const systemMessages = getSystemMessages();
-  const projectError = getProjectError();
   const projectRun = getProjectRun();
   const discussionCeoPromptArtifact = getDiscussionCeoPromptArtifact();
   const clarificationState = getClarificationState();
@@ -137,6 +132,8 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
   const decisionBlockingState = getDecisionBlockingState();
   const decisionBlocked = isDecisionBlocked();
   const ceoOnlyModeEnabled = isCeoOnlyMode();
+  const activeProject = getActiveProject();
+  const projects = listProjects();
 
   // ---------------------------------------------------------------------------
   // Extract last CEO questions (for CeoClarificationPanel display)
@@ -150,17 +147,6 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     const parsed = parseCeoControlBlock(ceoResponse.content);
     return parsed.blockedQuestions;
   }, [mode, lastExchange, ceo]);
-
-  // ---------------------------------------------------------------------------
-  // CEO Execution Prompt (memoized)
-  // Only contains the CEO's final decision
-  // Only available in Project mode
-  // ---------------------------------------------------------------------------
-
-  const ceoExecutionPrompt = useMemo(
-    () => (mode === 'project' ? buildCeoExecutionPrompt(lastExchange, ceo, mode, resultArtifact, loopState) : null),
-    [lastExchange, ceo, mode, resultArtifact, loopState]
-  );
 
   // ---------------------------------------------------------------------------
   // Warning display rule (GPT mandate):
@@ -226,10 +212,9 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
   );
 
   // ---------------------------------------------------------------------------
-  // Executor Panel: Generate Prompt Logic
+  // Executor Panel: Generate Prompt Logic (used in Decision mode warning)
   // ---------------------------------------------------------------------------
 
-  const [executorCopyFeedback, setExecutorCopyFeedback] = useState<string | null>(null);
   const generatedForExchangeRef = useRef<Set<string>>(new Set());
 
   // ---------------------------------------------------------------------------
@@ -324,32 +309,6 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     }
   }, [mode, exchanges.length, decisionBlocked, unblockDecisionSession]);
 
-  const hasGeneratedForCurrentExchange =
-    lastExchange?.id !== null &&
-    lastExchange?.id !== undefined &&
-    generatedForExchangeRef.current.has(lastExchange.id);
-
-  const handleExecutorGeneratePrompt = useCallback(async () => {
-    if (mode !== 'project' || !ceoExecutionPrompt || !lastExchange?.id) return;
-
-    if (generatedForExchangeRef.current.has(lastExchange.id)) {
-      setExecutorCopyFeedback('Already generated');
-      setTimeout(() => setExecutorCopyFeedback(null), 2000);
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(ceoExecutionPrompt);
-      generatedForExchangeRef.current.add(lastExchange.id);
-      setCeoExecutionPrompt(ceoExecutionPrompt);
-      setExecutorCopyFeedback('Copied!');
-      setTimeout(() => setExecutorCopyFeedback(null), 2000);
-    } catch {
-      setExecutorCopyFeedback('Failed');
-      setTimeout(() => setExecutorCopyFeedback(null), 2000);
-    }
-  }, [ceoExecutionPrompt, lastExchange?.id, mode, setCeoExecutionPrompt]);
-
   const handleStartExecution = useCallback(() => {
     startExecutionLoop();
   }, [startExecutionLoop]);
@@ -375,21 +334,6 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
       markDone();
     }
   }, [markDone, markProjectDone, projectRun]);
-
-  // ---------------------------------------------------------------------------
-  // Project Phase Machine Handlers
-  // ---------------------------------------------------------------------------
-
-  const handleRequestChange = useCallback(
-    (message: string, severity: InterruptSeverity, scope: InterruptScope) => {
-      addProjectInterrupt(message, severity, scope);
-    },
-    [addProjectInterrupt]
-  );
-
-  const handleCopyPrompt = useCallback(() => {
-    // Placeholder for tracking copy action
-  }, []);
 
   // ---------------------------------------------------------------------------
   // Clarification Handlers (Decision Mode)
@@ -453,10 +397,39 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
   const canExportDiscussion = mode === 'discussion' && state.transcript.length > 0;
 
   // ---------------------------------------------------------------------------
+  // Project Management Handlers
+  // ---------------------------------------------------------------------------
+
+  const handleSelectProject = useCallback(
+    (projectId: string) => {
+      switchToProjectById(projectId);
+    },
+    [switchToProjectById]
+  );
+
+  const handleNewProject = useCallback(() => {
+    createNewProject();
+    // Switch to Decision mode for new project
+    setMode('decision');
+  }, [createNewProject, setMode]);
+
+  const handleDeleteProject = useCallback(
+    (projectId: string) => {
+      deleteProject(projectId);
+    },
+    [deleteProject]
+  );
+
+  const handleContinueInDecisionMode = useCallback(() => {
+    // Switch to Decision mode with active project
+    setMode('decision');
+  }, [setMode]);
+
+  // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
 
-  // Project mode: Use two-pane layout (currently disabled from Home)
+  // Project mode: Read-only Project Dashboard
   if (mode === 'project') {
     return (
       <div className="brain-chat brain-chat--project">
@@ -465,30 +438,20 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
           <WarningBanner warning={warning} onDismiss={handleDismissWarning} />
         )}
 
-        {/* Two-Pane Project Layout */}
+        {/* Project Dashboard Layout */}
         <ProjectModeLayout
-          exchanges={exchanges}
-          pendingExchange={pendingExchange}
-          currentAgent={currentAgent}
-          mode={mode}
-          ceo={ceo}
-          systemMessages={systemMessages}
-          ceoPromptArtifact={projectRun?.ceoPromptArtifact ?? persistedCeoPrompt}
-          executorOutput={projectRun?.executorOutput ?? resultArtifact}
-          projectError={projectRun?.error ?? projectError}
-          loopState={loopState}
-          projectRun={projectRun}
-          onRequestChange={handleRequestChange}
-          onCopyPrompt={handleCopyPrompt}
+          projects={projects}
+          activeProject={activeProject}
+          onSelectProject={handleSelectProject}
+          onNewProject={handleNewProject}
+          onDeleteProject={handleDeleteProject}
+          onContinueInDecisionMode={handleContinueInDecisionMode}
         />
 
-        {/* Prompt Input (disabled during execution loop) */}
-        <PromptInput canSubmit={canSubmitPrompt} onSubmit={handleSubmit} />
-
-        {/* Action Bar (Project Mode Controls - No mode switching) */}
+        {/* Action Bar (Project Mode - minimal controls) */}
         <ActionBar
-          canClear={canClear()}
-          isProcessing={processing}
+          canClear={false}
+          isProcessing={false}
           onClear={handleClear}
           onCancel={handleCancel}
           mode={mode}
@@ -497,11 +460,6 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
           onPauseExecution={handlePauseExecution}
           onStopExecution={handleStopExecution}
           onMarkDone={handleMarkDone}
-          ceo={ceo}
-          onCeoChange={handleCeoChange}
-          onGeneratePrompt={handleExecutorGeneratePrompt}
-          canGenerate={canGenerate && !hasGeneratedForCurrentExchange && !!ceoExecutionPrompt}
-          generateFeedback={executorCopyFeedback}
           onReturnHome={onReturnHome}
         />
       </div>
@@ -517,7 +475,7 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
           <WarningBanner warning={warning} onDismiss={handleDismissWarning} />
         )}
 
-        {/* Two-Pane Decision Layout */}
+        {/* Three-Pane Decision Layout */}
         <DecisionModeLayout
           exchanges={exchanges}
           pendingExchange={pendingExchange}
@@ -537,6 +495,11 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
           onToggleCeoOnlyMode={handleToggleCeoOnlyMode}
           lastCeoQuestions={lastCeoQuestions}
           onRetryCeoClarification={handleRetryCeoClarification}
+          projects={projects}
+          activeProjectId={activeProject?.id ?? null}
+          onSelectProject={handleSelectProject}
+          onNewProject={handleNewProject}
+          onDeleteProject={handleDeleteProject}
         />
 
         {/* Decision Finalized Message */}

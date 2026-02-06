@@ -49,17 +49,16 @@ export function HomeScreen({ onSelectMode }: HomeScreenProps): JSX.Element {
             </span>
           </button>
 
-          {/* Project Mode - Disabled/Coming Soon */}
+          {/* Project Mode - View/Manage Projects */}
           <button
-            className="home-screen__button home-screen__button--project home-screen__button--disabled"
-            disabled
+            className="home-screen__button home-screen__button--project"
+            onClick={() => onSelectMode('project')}
             data-testid="select-project"
           >
             <span className="home-screen__button-title">Project</span>
             <span className="home-screen__button-desc">
-              Coming soon. Autonomous execution loop.
+              View and manage saved projects. Read-only dashboard.
             </span>
-            <span className="home-screen__button-badge">Coming Soon</span>
           </button>
         </div>
       </div>

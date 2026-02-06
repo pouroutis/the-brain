@@ -53,9 +53,12 @@ import {
   generateProjectId,
   generateDecisionId,
   loadActiveProject,
+  loadProject,
   saveProject,
   setActiveProjectId,
   clearActiveProject,
+  clearProjectById,
+  listProjects as listProjectsFromStorage,
 } from '../utils/decisionPersistence';
 import {
   shouldCompact,
@@ -225,6 +228,14 @@ interface BrainActions {
   createProject: () => string;
   /** Clear the active project */
   clearProject: () => void;
+  /** Create a new project, clear board, stay in Decision mode */
+  createNewProject: () => string;
+  /** Switch to a different project by ID */
+  switchToProjectById: (projectId: string) => void;
+  /** Clear active project selection (for Project Dashboard empty state) */
+  clearActiveProjectSelection: () => void;
+  /** Delete a project by ID */
+  deleteProject: (projectId: string) => void;
 }
 
 /**
@@ -310,6 +321,8 @@ interface BrainSelectors {
   getActiveProject: () => ProjectState | null;
   /** Check if there is an active project */
   hasActiveProject: () => boolean;
+  /** List all saved projects from localStorage */
+  listProjects: () => ProjectState[];
 }
 
 /**
@@ -1258,7 +1271,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     // Implicit project creation: Create project if in Decision mode and no active project
     if (state.mode === 'decision' && !state.activeProject) {
       const projectId = generateProjectId();
-      dispatch({ type: 'CREATE_PROJECT', projectId });
+      const title = userPrompt.slice(0, 60);
+      dispatch({ type: 'CREATE_PROJECT', projectId, title });
     }
 
     const runId = generateRunId();
@@ -1534,6 +1548,42 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     dispatch({ type: 'CLEAR_PROJECT' });
   }, []);
 
+  const createNewProject = useCallback((): string => {
+    // Clear the board first
+    if (!state.isProcessing) {
+      dispatch({ type: 'CLEAR' });
+    }
+    // Create a new project
+    const projectId = generateProjectId();
+    dispatch({ type: 'CREATE_PROJECT', projectId });
+    return projectId;
+  }, [state.isProcessing]);
+
+  const switchToProjectById = useCallback((projectId: string): void => {
+    // Load project from localStorage
+    const project = loadProject(projectId);
+    if (project) {
+      dispatch({ type: 'REHYDRATE_PROJECT', project });
+      setActiveProjectId(projectId);
+    }
+  }, []);
+
+  const clearActiveProjectSelection = useCallback((): void => {
+    // Clear active project pointer but keep data in localStorage
+    clearActiveProject();
+    dispatch({ type: 'CLEAR_PROJECT' });
+  }, []);
+
+  const deleteProject = useCallback((projectId: string): void => {
+    // Remove from localStorage
+    clearProjectById(projectId);
+    // If this was the active project, clear it from state too
+    if (state.activeProject?.id === projectId) {
+      clearActiveProject();
+      dispatch({ type: 'CLEAR_PROJECT' });
+    }
+  }, [state.activeProject?.id]);
+
   // ---------------------------------------------------------------------------
   // Selectors
   // ---------------------------------------------------------------------------
@@ -1732,6 +1782,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     return state.activeProject !== null;
   }, [state.activeProject]);
 
+  const listProjects = useCallback((): ProjectState[] => {
+    return listProjectsFromStorage();
+  }, []);
+
   // ---------------------------------------------------------------------------
   // Memoized Context Value
   // ---------------------------------------------------------------------------
@@ -1774,6 +1828,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       setCeoOnlyMode,
       createProject,
       clearProject,
+      createNewProject,
+      switchToProjectById,
+      clearActiveProjectSelection,
+      deleteProject,
       // Selectors
       getState,
       getActiveRunId,
@@ -1814,6 +1872,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       isCeoOnlyMode,
       getActiveProject,
       hasActiveProject,
+      listProjects,
     }),
     [
       submitPrompt,
@@ -1851,6 +1910,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       setCeoOnlyMode,
       createProject,
       clearProject,
+      createNewProject,
+      switchToProjectById,
+      clearActiveProjectSelection,
+      deleteProject,
       getState,
       getActiveRunId,
       getPendingExchange,
@@ -1890,6 +1953,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       isCeoOnlyMode,
       getActiveProject,
       hasActiveProject,
+      listProjects,
     ]
   );
 
