@@ -3,6 +3,71 @@
 // =============================================================================
 
 import type { Agent, AgentResponse, Carryover, Exchange, KeyNotes } from '../types/brain';
+
+// =============================================================================
+// PROJECT SUMMARY (Decision Mode Only)
+// Human-curated, static text. <= 500 words, bullets only.
+// =============================================================================
+
+/**
+ * Static Project Summary for Decision mode.
+ * This is injected into EVERY AI call in Decision mode so agents can
+ * produce accurate decisions and Claude Code prompts.
+ */
+export const PROJECT_SUMMARY_TEXT = `
+## FACTS (What Exists Now)
+- "The Brain" is a multi-AI chat system using GPT, Claude, and Gemini
+- Three operating modes: Discussion (free-form), Decision (Claude Code prompt output), Project (disabled)
+- CEO agent speaks last and produces final decisions (default: GPT)
+- Agent order: Gemini first, Claude second, CEO last
+- React + TypeScript frontend with Vite build system
+- State managed via useReducer pattern (brainReducer)
+- AI calls routed through Supabase Edge Functions (proxies)
+- Discussion mode has memory persistence (localStorage) and compaction
+- Decision mode outputs a "Claude Code Prompt" artifact in right pane
+
+## LOCKED / FORBIDDEN (Hard Rules)
+- No in-session mode switching — mode selected from Home screen only
+- No direct API key exposure in frontend
+- No breaking existing test contracts without explicit approval
+- No changes to .env.local or credentials
+- CEO must always speak last in the agent sequence
+- Agent order (gemini, claude, gpt) must not change without approval
+- Discussion mode must NOT include Project Summary injection
+- Project mode is disabled (Coming Soon)
+
+## OUT OF SCOPE (Not Building Now)
+- Real-time collaboration / multi-user
+- Authentication / user accounts
+- Conversation branching / forking
+- File uploads or image processing
+- Voice input/output
+- Mobile-specific optimizations
+- Streaming responses (currently batch only)
+- Agent-specific model selection per call
+- Custom system prompts per session
+`.trim();
+
+/**
+ * Build the Project Summary block for Decision mode injection.
+ * Header: "PROJECT SUMMARY (READ-ONLY)"
+ * Includes instruction line about unknowns.
+ */
+export function buildProjectSummaryBlock(): string {
+  const sections: string[] = [];
+
+  sections.push('=== PROJECT SUMMARY (READ-ONLY) ===');
+  sections.push('If info is missing, say UNKNOWN. Do not guess.');
+  sections.push('');
+  sections.push(PROJECT_SUMMARY_TEXT);
+  sections.push('');
+  sections.push('=== END PROJECT SUMMARY ===');
+  sections.push('');
+  sections.push('--- USER PROMPT ---');
+  sections.push('');
+
+  return sections.join('\n');
+}
 import {
   MAX_CONTEXT_CHARS,
   MAX_EXCHANGES,

@@ -52,7 +52,7 @@ import {
   parseKeyNotes,
   mergeKeyNotes,
 } from '../utils/compaction';
-import { buildDiscussionMemoryBlock, buildCarryoverMemoryBlock } from '../utils/contextBuilder';
+import { buildDiscussionMemoryBlock, buildCarryoverMemoryBlock, buildProjectSummaryBlock } from '../utils/contextBuilder';
 
 // -----------------------------------------------------------------------------
 // Constants
@@ -667,6 +667,17 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
         if (memoryBlock) {
           promptWithMemory = memoryBlock + userPrompt;
         }
+      }
+
+      // -----------------------------------------------------------------------
+      // Decision Mode: Project Summary Injection (Decision mode ONLY)
+      // Prepend static project summary so all agents can produce accurate
+      // decisions and Claude Code prompts.
+      // -----------------------------------------------------------------------
+
+      if (currentMode === 'decision') {
+        const summaryBlock = buildProjectSummaryBlock();
+        promptWithMemory = summaryBlock + userPrompt;
       }
 
       // -----------------------------------------------------------------------

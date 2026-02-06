@@ -386,6 +386,26 @@ body {
   cursor: not-allowed;
 }
 
+.prompt-input-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.prompt-input-container .prompt-input {
+  margin-bottom: 0;
+}
+
+.prompt-input__summary-indicator {
+  font-size: 0.75rem;
+  color: #52b788;
+  padding: 4px 8px;
+  background-color: rgba(82, 183, 136, 0.1);
+  border-radius: 4px;
+  align-self: flex-start;
+}
+
 /* -----------------------------------------------------------------------------
    Action Bar
    ----------------------------------------------------------------------------- */

@@ -14,13 +14,15 @@ interface PromptInputProps {
   canSubmit: boolean;
   /** Callback when user submits a prompt */
   onSubmit: (prompt: string) => void;
+  /** Show "Project Summary injected: YES" indicator (Decision mode only) */
+  showSummaryIndicator?: boolean;
 }
 
 // -----------------------------------------------------------------------------
 // Component
 // -----------------------------------------------------------------------------
 
-export function PromptInput({ canSubmit, onSubmit }: PromptInputProps): JSX.Element {
+export function PromptInput({ canSubmit, onSubmit, showSummaryIndicator = false }: PromptInputProps): JSX.Element {
   const [inputValue, setInputValue] = useState('');
 
   const handleChange = useCallback((e: ChangeEvent<HTMLTextAreaElement>) => {
@@ -58,25 +60,32 @@ export function PromptInput({ canSubmit, onSubmit }: PromptInputProps): JSX.Elem
   const isSubmitDisabled = isDisabled || !inputValue.trim();
 
   return (
-    <form className="prompt-input" onSubmit={handleSubmit}>
-      <textarea
-        className="prompt-input__field"
-        value={inputValue}
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
-        placeholder="Ask the AI board..."
-        disabled={isDisabled}
-        rows={1}
-        title="Type your question here. Press Enter to send."
-      />
-      <button
-        type="submit"
-        className="prompt-input__submit"
-        disabled={isSubmitDisabled}
-        title="Send your question to all AIs"
-      >
-        Send
-      </button>
-    </form>
+    <div className="prompt-input-container">
+      {showSummaryIndicator && (
+        <div className="prompt-input__summary-indicator" data-testid="summary-indicator">
+          Project Summary injected: YES
+        </div>
+      )}
+      <form className="prompt-input" onSubmit={handleSubmit}>
+        <textarea
+          className="prompt-input__field"
+          value={inputValue}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          placeholder="Ask the AI board..."
+          disabled={isDisabled}
+          rows={1}
+          title="Type your question here. Press Enter to send."
+        />
+        <button
+          type="submit"
+          className="prompt-input__submit"
+          disabled={isSubmitDisabled}
+          title="Send your question to all AIs"
+        >
+          Send
+        </button>
+      </form>
+    </div>
   );
 }

@@ -390,8 +390,12 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
           ceoPromptArtifact={discussionCeoPromptArtifact}
         />
 
-        {/* Prompt Input */}
-        <PromptInput canSubmit={canSubmitPrompt} onSubmit={handleSubmit} />
+        {/* Prompt Input (with summary indicator in Decision mode) */}
+        <PromptInput
+          canSubmit={canSubmitPrompt}
+          onSubmit={handleSubmit}
+          showSummaryIndicator={true}
+        />
 
         {/* Action Bar (No mode switching) */}
         <ActionBar
