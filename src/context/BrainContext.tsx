@@ -236,6 +236,8 @@ interface BrainActions {
   clearActiveProjectSelection: () => void;
   /** Delete a project by ID */
   deleteProject: (projectId: string) => void;
+  /** Clear the blocked status on the active project */
+  clearProjectBlock: () => void;
 }
 
 /**
@@ -1584,6 +1586,11 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     }
   }, [state.activeProject?.id]);
 
+  const clearProjectBlock = useCallback((): void => {
+    // Clear blocked status on active project (sets status back to 'active')
+    dispatch({ type: 'SET_PROJECT_BLOCKED', blocked: false });
+  }, []);
+
   // ---------------------------------------------------------------------------
   // Selectors
   // ---------------------------------------------------------------------------
@@ -1832,6 +1839,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       switchToProjectById,
       clearActiveProjectSelection,
       deleteProject,
+      clearProjectBlock,
       // Selectors
       getState,
       getActiveRunId,
@@ -1914,6 +1922,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       switchToProjectById,
       clearActiveProjectSelection,
       deleteProject,
+      clearProjectBlock,
       getState,
       getActiveRunId,
       getPendingExchange,

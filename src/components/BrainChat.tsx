@@ -94,6 +94,7 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     createNewProject,
     switchToProjectById,
     deleteProject,
+    clearProjectBlock,
   } = useBrain();
 
   // ---------------------------------------------------------------------------
@@ -430,6 +431,18 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     setMode('project');
   }, [setMode]);
 
+  const handleClearProjectBlock = useCallback(() => {
+    // Clear blocked status on active project (sets status back to 'active')
+    clearProjectBlock();
+  }, [clearProjectBlock]);
+
+  // ---------------------------------------------------------------------------
+  // Persisted Project Blocked State
+  // When project is loaded with blocked status, show banner in Decision mode
+  // ---------------------------------------------------------------------------
+
+  const isProjectBlocked = activeProject?.status === 'blocked';
+
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
@@ -478,6 +491,35 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
         {/* Warning Banner (runId-scoped display) */}
         {shouldShowWarning && (
           <WarningBanner warning={warning} onDismiss={handleDismissWarning} />
+        )}
+
+        {/* Persisted Project Blocked Banner */}
+        {isProjectBlocked && (
+          <div className="brain-chat__project-blocked-banner" data-testid="project-blocked-banner">
+            <div className="brain-chat__project-blocked-icon">⛔</div>
+            <div className="brain-chat__project-blocked-content">
+              <h3 className="brain-chat__project-blocked-title">Project Blocked</h3>
+              <p className="brain-chat__project-blocked-desc">
+                This project was saved in a blocked state. Clear the block to continue or view the project dashboard.
+              </p>
+            </div>
+            <div className="brain-chat__project-blocked-actions">
+              <button
+                className="brain-chat__project-blocked-btn brain-chat__project-blocked-btn--primary"
+                onClick={handleClearProjectBlock}
+                data-testid="clear-project-block-btn"
+              >
+                Clear Block
+              </button>
+              <button
+                className="brain-chat__project-blocked-btn brain-chat__project-blocked-btn--secondary"
+                onClick={handleViewInProject}
+                data-testid="go-to-project-btn"
+              >
+                Go to Project
+              </button>
+            </div>
+          </div>
         )}
 
         {/* Three-Pane Decision Layout */}
