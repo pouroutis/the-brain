@@ -253,3 +253,130 @@ describe('CeoPromptArtifact Type', () => {
     expect(artifact.createdAt).toBeDefined();
   });
 });
+
+// =============================================================================
+// Batch 5: DRAFT + STOP_NOW Parser Tests
+// =============================================================================
+
+describe('CEO DRAFT Markers (Batch 5)', () => {
+  it('extracts draft from valid DRAFT markers', () => {
+    const draftText = 'Build a REST API with Node.js and Express';
+    const content = `Here is my analysis.\n\n=== CEO_DRAFT_START ===\n${draftText}\n=== CEO_DRAFT_END ===\n\nPlease review.`;
+    const result = parseCeoControlBlock(content);
+
+    expect(result.hasDraftArtifact).toBe(true);
+    expect(result.draftText).toBe(draftText);
+    expect(result.hasPromptArtifact).toBe(false);
+    expect(result.isStopped).toBe(false);
+    expect(result.isBlocked).toBe(false);
+  });
+
+  it('FINAL takes precedence over DRAFT when both present', () => {
+    const content = `=== CLAUDE_CODE_PROMPT_START ===\nFinal prompt\n=== CLAUDE_CODE_PROMPT_END ===\n\n=== CEO_DRAFT_START ===\nDraft prompt\n=== CEO_DRAFT_END ===`;
+    const result = parseCeoControlBlock(content);
+
+    expect(result.hasPromptArtifact).toBe(true);
+    expect(result.promptText).toBe('Final prompt');
+    expect(result.hasDraftArtifact).toBe(false);
+  });
+
+  it('DRAFT takes precedence over BLOCKED', () => {
+    const content = `=== CEO_DRAFT_START ===\nDraft text\n=== CEO_DRAFT_END ===\n\n=== CEO_BLOCKED_START ===\nQ1: Question?\n=== CEO_BLOCKED_END ===`;
+    const result = parseCeoControlBlock(content);
+
+    expect(result.hasDraftArtifact).toBe(true);
+    expect(result.isBlocked).toBe(false);
+  });
+
+  it('returns empty draft for markers with no content', () => {
+    const content = `=== CEO_DRAFT_START ===\n\n=== CEO_DRAFT_END ===`;
+    const result = parseCeoControlBlock(content);
+
+    expect(result.hasDraftArtifact).toBe(false);
+    expect(result.draftText).toBeNull();
+  });
+
+  it('removes DRAFT markers from displayContent', () => {
+    const content = `Before draft.\n\n=== CEO_DRAFT_START ===\nDraft text\n=== CEO_DRAFT_END ===\n\nAfter draft.`;
+    const result = parseCeoControlBlock(content);
+
+    expect(result.displayContent).not.toContain('CEO_DRAFT_START');
+    expect(result.displayContent).not.toContain('CEO_DRAFT_END');
+  });
+});
+
+describe('CEO STOP_NOW (Batch 5)', () => {
+  it('detects STOP_NOW marker', () => {
+    const content = `I cannot proceed with this task.\n\n=== STOP_NOW ===`;
+    const result = parseCeoControlBlock(content);
+
+    expect(result.isStopped).toBe(true);
+    expect(result.hasPromptArtifact).toBe(false);
+    expect(result.hasDraftArtifact).toBe(false);
+    expect(result.isBlocked).toBe(false);
+  });
+
+  it('FINAL takes precedence over STOP_NOW', () => {
+    const content = `=== CLAUDE_CODE_PROMPT_START ===\nPrompt\n=== CLAUDE_CODE_PROMPT_END ===\n\n=== STOP_NOW ===`;
+    const result = parseCeoControlBlock(content);
+
+    expect(result.hasPromptArtifact).toBe(true);
+    expect(result.isStopped).toBe(false);
+  });
+
+  it('STOP_NOW takes precedence over DRAFT', () => {
+    const content = `=== STOP_NOW ===\n\n=== CEO_DRAFT_START ===\nDraft\n=== CEO_DRAFT_END ===`;
+    const result = parseCeoControlBlock(content);
+
+    expect(result.isStopped).toBe(true);
+    expect(result.hasDraftArtifact).toBe(false);
+  });
+
+  it('STOP_NOW takes precedence over BLOCKED', () => {
+    const content = `=== STOP_NOW ===\n\n=== CEO_BLOCKED_START ===\nQ1: Question?\n=== CEO_BLOCKED_END ===`;
+    const result = parseCeoControlBlock(content);
+
+    expect(result.isStopped).toBe(true);
+    expect(result.isBlocked).toBe(false);
+  });
+
+  it('removes STOP_NOW marker from displayContent', () => {
+    const content = `Cannot proceed.\n\n=== STOP_NOW ===`;
+    const result = parseCeoControlBlock(content);
+
+    expect(result.displayContent).not.toContain('STOP_NOW');
+    expect(result.displayContent).toBe('Cannot proceed.');
+  });
+});
+
+describe('Existing parser behavior preserved (Batch 5)', () => {
+  it('no markers returns all false with new fields', () => {
+    const content = 'Regular response without markers.';
+    const result = parseCeoControlBlock(content);
+
+    expect(result.hasPromptArtifact).toBe(false);
+    expect(result.hasDraftArtifact).toBe(false);
+    expect(result.isStopped).toBe(false);
+    expect(result.isBlocked).toBe(false);
+  });
+
+  it('existing FINAL extraction still works', () => {
+    const content = `=== CLAUDE_CODE_PROMPT_START ===\nBuild feature X\n=== CLAUDE_CODE_PROMPT_END ===`;
+    const result = parseCeoControlBlock(content);
+
+    expect(result.hasPromptArtifact).toBe(true);
+    expect(result.promptText).toBe('Build feature X');
+    expect(result.hasDraftArtifact).toBe(false);
+    expect(result.isStopped).toBe(false);
+  });
+
+  it('existing BLOCKED extraction still works', () => {
+    const content = `=== CEO_BLOCKED_START ===\nQ1: What auth method?\n=== CEO_BLOCKED_END ===`;
+    const result = parseCeoControlBlock(content);
+
+    expect(result.isBlocked).toBe(true);
+    expect(result.blockedQuestions).toHaveLength(1);
+    expect(result.hasDraftArtifact).toBe(false);
+    expect(result.isStopped).toBe(false);
+  });
+});

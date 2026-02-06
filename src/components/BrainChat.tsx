@@ -95,7 +95,6 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     switchToProjectById,
     deleteProject,
     clearProjectBlock,
-    completeDecisionEpoch,
   } = useBrain();
 
   // ---------------------------------------------------------------------------
@@ -266,41 +265,55 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
 
     // Check for BLOCKED state (trigger clarification lane) - takes precedence
     if (parsed.isBlocked && parsed.blockedQuestions.length > 0) {
-      setCeoPromptWarning(null); // Clear any previous warning
+      setCeoPromptWarning(null);
       startClarification(parsed.blockedQuestions);
-      completeDecisionEpoch('blocked');
+      // Note: EPOCH_COMPLETE('blocked') is dispatched by orchestrator, not BrainChat
       return;
     }
 
-    // Check for Claude Code prompt with required markers
+    // Check for Claude Code prompt with required markers (FINAL)
     if (parsed.hasPromptArtifact && parsed.promptText) {
-      // Clear warning - CEO provided valid prompt
       setCeoPromptWarning(null);
-      // Create new artifact with incremented version
       const newArtifact = createCeoPromptArtifact(parsed.promptText, discussionCeoPromptArtifact);
       setDiscussionCeoPromptArtifact(newArtifact);
-      completeDecisionEpoch('prompt_delivered');
+      // Note: EPOCH_COMPLETE('prompt_delivered') is dispatched by orchestrator, not BrainChat
       return;
+    }
+
+    // Check for STOP_NOW — intentional CEO abort, NOT an error
+    if (parsed.isStopped) {
+      setCeoPromptWarning('CEO stopped the process. No prompt will be generated for this task.');
+      // Note: EPOCH_COMPLETE('stopped') is dispatched by orchestrator, not BrainChat
+      // Do NOT trigger hard gate — STOP_NOW is intentional
+      return;
+    }
+
+    // Check for DRAFT artifact — display it but don't block
+    // (In multi-round, the orchestrator handles DRAFT → Round 2 transition.
+    //  BrainChat only sees DRAFT if it leaked to a terminal exchange — e.g., DRAFT in Round 2.
+    //  In that case, fall through to hard gate below.)
+    if (parsed.hasDraftArtifact) {
+      // DRAFT in a terminal exchange means contract violation — fall through to hard gate
     }
 
     // CEO HARD GATE: Invalid output - block session
-    // CEO MUST output either a prompt (with markers) OR BLOCKED questions
     let blockReason: string;
     const hasPartialStart = ceoResponse.content.includes('CLAUDE_CODE_PROMPT');
     const hasStartMarker = ceoResponse.content.includes(PROMPT_START_MARKER);
     const hasEndMarker = ceoResponse.content.includes(PROMPT_END_MARKER);
 
-    if (hasPartialStart || hasStartMarker || hasEndMarker) {
-      // CEO tried to use markers but format is wrong
+    if (parsed.hasDraftArtifact) {
+      // DRAFT in terminal position = contract violation (governance ruling #5)
+      blockReason = `CEO produced a DRAFT in the final round. DRAFT is only allowed in Round 1. Session blocked.`;
+    } else if (hasPartialStart || hasStartMarker || hasEndMarker) {
       blockReason = `CEO prompt has malformed markers. Required format:\n${PROMPT_START_MARKER}\n(prompt)\n${PROMPT_END_MARKER}`;
     } else {
-      // CEO didn't include markers at all
       blockReason = `CEO must output a Claude Code prompt (with markers) or clarification questions. Session blocked.`;
     }
 
     setCeoPromptWarning(blockReason);
     blockDecisionSession(blockReason, lastExchange.id);
-  }, [mode, processing, lastExchange, ceo, discussionCeoPromptArtifact, setDiscussionCeoPromptArtifact, startClarification, blockDecisionSession, completeDecisionEpoch]);
+  }, [mode, processing, lastExchange, ceo, discussionCeoPromptArtifact, setDiscussionCeoPromptArtifact, startClarification, blockDecisionSession]);
 
   // Clear warning and unblock when mode changes or board is cleared
   useEffect(() => {

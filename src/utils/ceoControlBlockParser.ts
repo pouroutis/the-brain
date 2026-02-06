@@ -32,6 +32,24 @@ export const PROMPT_END_MARKER = '=== CLAUDE_CODE_PROMPT_END ===';
 export const BLOCKED_START_MARKER = '=== CEO_BLOCKED_START ===';
 export const BLOCKED_END_MARKER = '=== CEO_BLOCKED_END ===';
 
+/**
+ * Hard delimiters for DRAFT state (Round 1 only — CEO requests advisor review).
+ *
+ * === CEO_DRAFT_START ===
+ * (draft prompt text)
+ * === CEO_DRAFT_END ===
+ */
+export const DRAFT_START_MARKER = '=== CEO_DRAFT_START ===';
+export const DRAFT_END_MARKER = '=== CEO_DRAFT_END ===';
+
+/**
+ * Hard delimiter for STOP_NOW (CEO aborts the process).
+ * Single-line marker, no start/end pair.
+ *
+ * === STOP_NOW ===
+ */
+export const STOP_NOW_MARKER = '=== STOP_NOW ===';
+
 // -----------------------------------------------------------------------------
 // Types
 // -----------------------------------------------------------------------------
@@ -50,6 +68,12 @@ export interface ParsedCeoResponse {
   isBlocked: boolean;
   /** Questions from BLOCKED state (max 3) */
   blockedQuestions: string[];
+  /** Whether a CEO DRAFT was found (between markers) — Batch 5 */
+  hasDraftArtifact: boolean;
+  /** The extracted draft text (if found) — Batch 5 */
+  draftText: string | null;
+  /** Whether STOP_NOW was detected — Batch 5 */
+  isStopped: boolean;
 }
 
 // -----------------------------------------------------------------------------
@@ -139,18 +163,10 @@ function parseBlockedQuestions(content: string): string[] {
 }
 
 /**
- * Parse CEO response content for Claude Code prompt and BLOCKED state.
+ * Parse CEO response content for control blocks.
  * Uses HARD DELIMITERS for deterministic extraction.
  *
- * Prompt format:
- * === CLAUDE_CODE_PROMPT_START ===
- * (prompt text)
- * === CLAUDE_CODE_PROMPT_END ===
- *
- * Blocked format:
- * === CEO_BLOCKED_START ===
- * Q1: Question?
- * === CEO_BLOCKED_END ===
+ * Precedence: FINAL > STOP_NOW > DRAFT > BLOCKED (governance-locked)
  */
 export function parseCeoControlBlock(content: string): ParsedCeoResponse {
   const result: ParsedCeoResponse = {
@@ -159,9 +175,16 @@ export function parseCeoControlBlock(content: string): ParsedCeoResponse {
     displayContent: content,
     isBlocked: false,
     blockedQuestions: [],
+    hasDraftArtifact: false,
+    draftText: null,
+    isStopped: false,
   };
 
-  // Check for Claude Code prompt markers
+  // -------------------------------------------------------------------------
+  // Precedence: FINAL > STOP_NOW > DRAFT > BLOCKED (governance-locked)
+  // -------------------------------------------------------------------------
+
+  // 1. Check for FINAL (Claude Code prompt markers) — highest precedence
   const promptText = extractBetweenMarkers(
     content,
     PROMPT_START_MARKER,
@@ -176,10 +199,35 @@ export function parseCeoControlBlock(content: string): ParsedCeoResponse {
       PROMPT_START_MARKER,
       PROMPT_END_MARKER
     );
-    return result; // Prompt takes precedence
+    return result;
   }
 
-  // Check for BLOCKED markers
+  // 2. Check for STOP_NOW
+  if (content.includes(STOP_NOW_MARKER)) {
+    result.isStopped = true;
+    result.displayContent = content.replace(STOP_NOW_MARKER, '').trim();
+    return result;
+  }
+
+  // 3. Check for DRAFT markers
+  const draftText = extractBetweenMarkers(
+    content,
+    DRAFT_START_MARKER,
+    DRAFT_END_MARKER
+  );
+
+  if (draftText) {
+    result.hasDraftArtifact = true;
+    result.draftText = draftText;
+    result.displayContent = removeMarkerBlock(
+      content,
+      DRAFT_START_MARKER,
+      DRAFT_END_MARKER
+    );
+    return result;
+  }
+
+  // 4. Check for BLOCKED markers — lowest precedence
   const blockedText = extractBetweenMarkers(
     content,
     BLOCKED_START_MARKER,

@@ -40,6 +40,7 @@ import type {
   InterruptSeverity,
   InterruptScope,
 } from '../types/brain';
+import { EPOCH_DEFAULT_MAX_ROUNDS } from '../types/brain';
 
 import { brainReducer, initialBrainState } from '../reducer/brainReducer';
 import { callAgent, CEO_REFORMAT_INSTRUCTION } from '../api/agentClient';
@@ -856,16 +857,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       // Compute agent order: advisors first, CEO last
       const agentOrder = getAgentOrder(currentCeo);
 
-      // Gatekeeping flags (only populated if GPT speaks first)
-      let flags: GatekeepingFlags = {
-        callClaude: true,
-        callGemini: true,
-        reasonTag: 'no_gatekeeping',
-        valid: false,
-      };
-
       // Helper to call an agent
-      const callAgentWithTimeout = async (agent: Agent): Promise<AgentResponse> => {
+      const callAgentWithTimeout = async (agent: Agent, round?: number): Promise<AgentResponse> => {
         const agentAbortController = new AbortController();
         sequenceAbortController.signal.addEventListener('abort', () => {
           agentAbortController.abort();
@@ -891,6 +884,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
             projectDiscussionMode: useProjectContext,
             mode: currentMode,
             ceoAgent: currentCeo,
+            round,
           }
         );
 
@@ -909,8 +903,115 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       };
 
       // -----------------------------------------------------------------------
-      // Call agents in CEO-ordered sequence
+      // Decision Mode: Multi-Round Deliberation Loop (Batch 5)
       // -----------------------------------------------------------------------
+
+      if (currentMode === 'decision') {
+        const advisors = agentOrder.slice(0, -1); // All agents except CEO (last)
+        const agentLabels: Record<Agent, string> = {
+          gpt: 'GPT',
+          claude: 'Claude',
+          gemini: 'Gemini',
+        };
+
+        let continueDeliberation = true;
+        let currentRound = 1;
+        const maxRounds = state.decisionEpoch?.maxRounds ?? EPOCH_DEFAULT_MAX_ROUNDS;
+
+        while (continueDeliberation && currentRound <= maxRounds) {
+          if (isCancelled()) { handleCancel(); return; }
+
+          // --- Call advisors (unless ceoOnlyMode) ---
+          if (!state.ceoOnlyModeEnabled) {
+            for (let i = 0; i < advisors.length; i++) {
+              const advisor = advisors[i];
+              if (isCancelled()) { handleCancel(); return; }
+
+              dispatch({ type: 'AGENT_STARTED', runId, agent: advisor });
+              const response = await callAgentWithTimeout(advisor, currentRound);
+              if (isCancelled()) { handleCancel(); return; }
+              if (!response) continue;
+              dispatch({ type: 'AGENT_COMPLETED', runId, response });
+
+              if (response.status === 'success' && response.content) {
+                conversationContext += `${agentLabels[advisor]}: ${response.content}\n\n`;
+              }
+            }
+          }
+
+          // --- Advance epoch phase: advisors done → CEO phase ---
+          const ceoPhase = currentRound === 1 ? 'CEO_DRAFT' as const : 'CEO_FINAL' as const;
+          dispatch({ type: 'EPOCH_ADVANCE_PHASE', phase: ceoPhase });
+
+          // --- Call CEO ---
+          if (isCancelled()) { handleCancel(); return; }
+          dispatch({ type: 'AGENT_STARTED', runId, agent: currentCeo });
+          const ceoResponse = await callAgentWithTimeout(currentCeo, currentRound);
+          if (isCancelled()) { handleCancel(); return; }
+
+          if (!ceoResponse) {
+            continueDeliberation = false;
+            break;
+          }
+
+          dispatch({ type: 'AGENT_COMPLETED', runId, response: ceoResponse });
+
+          // --- Parse CEO output and decide next action ---
+          if (ceoResponse.status === 'success' && ceoResponse.content) {
+            conversationContext += `${agentLabels[currentCeo]}: ${ceoResponse.content}\n\n`;
+            const parsed = parseCeoControlBlock(ceoResponse.content);
+
+            if (parsed.hasPromptArtifact) {
+              // FINAL — terminal: prompt delivered
+              dispatch({ type: 'EPOCH_COMPLETE', reason: 'prompt_delivered' });
+              continueDeliberation = false;
+            } else if (parsed.isStopped) {
+              // STOP_NOW — terminal: CEO aborted
+              dispatch({ type: 'EPOCH_COMPLETE', reason: 'stopped' });
+              continueDeliberation = false;
+            } else if (parsed.hasDraftArtifact && currentRound === 1) {
+              // DRAFT in Round 1 — continue to Round 2 for advisor review
+              dispatch({ type: 'EPOCH_ADVANCE_ROUND' });
+              currentRound++;
+              // conversationContext already contains the draft for Round 2 advisors
+
+              // Inject advisor review header into prompt for Round 2
+              promptWithMemory = `=== ADVISOR REVIEW ROUND ===\nThe CEO has produced a DRAFT prompt for Claude Code. Review it and provide feedback.\nFocus on: correctness, completeness, risks, and potential improvements.\nThe CEO will read your feedback and produce a FINAL prompt.\n=== END ADVISOR REVIEW HEADER ===\n\n` + userPrompt;
+
+              // Re-inject project summary for Round 2
+              const summaryBlock2 = buildProjectSummaryBlock();
+              promptWithMemory = summaryBlock2 + promptWithMemory;
+            } else if (parsed.isBlocked) {
+              // BLOCKED — terminal: needs clarification
+              dispatch({ type: 'EPOCH_COMPLETE', reason: 'blocked' });
+              continueDeliberation = false;
+            } else if (parsed.hasDraftArtifact && currentRound >= 2) {
+              // DRAFT in Round 2+ is a contract violation — exit loop
+              // BrainChat hard gate will block session (no valid FINAL markers)
+              continueDeliberation = false;
+            } else {
+              // No valid markers — exit loop
+              // BrainChat hard gate will block session
+              continueDeliberation = false;
+            }
+          } else {
+            // CEO error/timeout — stop deliberation
+            continueDeliberation = false;
+          }
+        }
+      } else {
+
+      // -----------------------------------------------------------------------
+      // Discussion / Project Mode: Single-Pass (unchanged)
+      // -----------------------------------------------------------------------
+
+      // Gatekeeping flags (only populated if GPT speaks first)
+      let flags: GatekeepingFlags = {
+        callClaude: true,
+        callGemini: true,
+        reasonTag: 'no_gatekeeping',
+        valid: false,
+      };
 
       for (let i = 0; i < agentOrder.length; i++) {
         const agent = agentOrder[i];
@@ -944,11 +1045,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
         }
 
         dispatch({ type: 'AGENT_COMPLETED', runId, response });
-
-        // Batch 4: Advance epoch phase — last advisor → CEO_DRAFT
-        if (currentMode === 'decision' && !isCeoAgent && i === agentOrder.length - 2) {
-          dispatch({ type: 'EPOCH_ADVANCE_PHASE', phase: 'CEO_DRAFT' });
-        }
 
         // Update conversation context with proper agent labels
         if (response.status === 'success' && response.content) {
@@ -998,6 +1094,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
           }
         }
       }
+
+      } // end of if/else decision vs discussion/project
 
       // -----------------------------------------------------------------------
       // Complete sequence

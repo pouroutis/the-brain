@@ -946,3 +946,190 @@ describe('Orchestrator — Phase 2F Mark DONE', () => {
     expect(result.current.getLoopState()).toBe('idle');
   });
 });
+
+// =============================================================================
+// Batch 5: Multi-Round Decision Mode Tests
+// =============================================================================
+
+describe('Orchestrator — Multi-Round Decision Mode (Batch 5)', () => {
+  // Helper: Create CEO response with FINAL markers
+  function createCeoFinalResponse(agent: Agent, prompt: string): AgentResponse {
+    return createMockResponse(
+      agent,
+      `Here is my decision.\n\n=== CLAUDE_CODE_PROMPT_START ===\n${prompt}\n=== CLAUDE_CODE_PROMPT_END ===`
+    );
+  }
+
+  // Helper: Create CEO response with DRAFT markers
+  function createCeoDraftResponse(agent: Agent, draft: string): AgentResponse {
+    return createMockResponse(
+      agent,
+      `I need advisor review.\n\n=== CEO_DRAFT_START ===\n${draft}\n=== CEO_DRAFT_END ===`
+    );
+  }
+
+  // Helper: Create CEO response with STOP_NOW
+  function createCeoStopResponse(agent: Agent): AgentResponse {
+    return createMockResponse(
+      agent,
+      `This task cannot proceed.\n\n=== STOP_NOW ===`
+    );
+  }
+
+  // Helper: Create CEO response with BLOCKED markers
+  function createCeoBlockedResponse(agent: Agent): AgentResponse {
+    return createMockResponse(
+      agent,
+      `=== CEO_BLOCKED_START ===\nQ1: What framework?\n=== CEO_BLOCKED_END ===`
+    );
+  }
+
+  it('Decision mode: CEO FINAL in Round 1 completes in single round (fast path)', async () => {
+    const claudeResponse = createMockResponse('claude', 'Claude analysis');
+    const geminiResponse = createMockResponse('gemini', 'Gemini analysis');
+    const gptFinal = createCeoFinalResponse('gpt', 'Build the feature');
+
+    mockCallAgent
+      .mockResolvedValueOnce(claudeResponse)   // Round 1 advisor
+      .mockResolvedValueOnce(geminiResponse)   // Round 1 advisor
+      .mockResolvedValueOnce(gptFinal);        // Round 1 CEO → FINAL
+
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    // Switch to decision mode
+    act(() => { result.current.setMode('decision'); });
+
+    // Submit prompt
+    act(() => { result.current.submitPrompt('Build a login page'); });
+
+    await waitFor(() => {
+      expect(result.current.isProcessing()).toBe(false);
+    });
+
+    // Should call exactly 3 agents (single round)
+    expect(mockCallAgent).toHaveBeenCalledTimes(3);
+
+    // Epoch should be complete
+    const epoch = result.current.getDecisionEpoch();
+    expect(epoch).not.toBeNull();
+    expect(epoch!.phase).toBe('EPOCH_COMPLETE');
+    expect(epoch!.terminalReason).toBe('prompt_delivered');
+    expect(epoch!.round).toBe(1);
+  });
+
+  it('Decision mode: CEO DRAFT in Round 1 triggers Round 2', async () => {
+    const r1Claude = createMockResponse('claude', 'Round 1 Claude');
+    const r1Gemini = createMockResponse('gemini', 'Round 1 Gemini');
+    const r1CeoDraft = createCeoDraftResponse('gpt', 'Draft prompt for review');
+    const r2Claude = createMockResponse('claude', 'Round 2 review from Claude');
+    const r2Gemini = createMockResponse('gemini', 'Round 2 review from Gemini');
+    const r2CeoFinal = createCeoFinalResponse('gpt', 'Final prompt after review');
+
+    mockCallAgent
+      .mockResolvedValueOnce(r1Claude)    // Round 1 advisor
+      .mockResolvedValueOnce(r1Gemini)    // Round 1 advisor
+      .mockResolvedValueOnce(r1CeoDraft)  // Round 1 CEO → DRAFT
+      .mockResolvedValueOnce(r2Claude)    // Round 2 advisor
+      .mockResolvedValueOnce(r2Gemini)    // Round 2 advisor
+      .mockResolvedValueOnce(r2CeoFinal); // Round 2 CEO → FINAL
+
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    act(() => { result.current.setMode('decision'); });
+    act(() => { result.current.submitPrompt('Complex task'); });
+
+    await waitFor(() => {
+      expect(result.current.isProcessing()).toBe(false);
+    });
+
+    // Should call 6 agents (2 rounds × 3 agents)
+    expect(mockCallAgent).toHaveBeenCalledTimes(6);
+
+    // Verify round parameter passed to Round 2 agents
+    // Calls 4, 5, 6 should have round=2 in coordination (5th arg = index 4)
+    const call4Coord = mockCallAgent.mock.calls[3][4]; // 4th call coordination
+    expect(call4Coord.round).toBe(2);
+
+    const epoch = result.current.getDecisionEpoch();
+    expect(epoch).not.toBeNull();
+    expect(epoch!.phase).toBe('EPOCH_COMPLETE');
+    expect(epoch!.terminalReason).toBe('prompt_delivered');
+    expect(epoch!.round).toBe(2);
+  });
+
+  it('Decision mode: CEO BLOCKED terminates without Round 2', async () => {
+    const claudeResponse = createMockResponse('claude', 'Claude analysis');
+    const geminiResponse = createMockResponse('gemini', 'Gemini analysis');
+    const gptBlocked = createCeoBlockedResponse('gpt');
+
+    mockCallAgent
+      .mockResolvedValueOnce(claudeResponse)
+      .mockResolvedValueOnce(geminiResponse)
+      .mockResolvedValueOnce(gptBlocked);
+
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    act(() => { result.current.setMode('decision'); });
+    act(() => { result.current.submitPrompt('Unclear task'); });
+
+    await waitFor(() => {
+      expect(result.current.isProcessing()).toBe(false);
+    });
+
+    expect(mockCallAgent).toHaveBeenCalledTimes(3);
+
+    const epoch = result.current.getDecisionEpoch();
+    expect(epoch!.phase).toBe('EPOCH_BLOCKED');
+    expect(epoch!.terminalReason).toBe('blocked');
+  });
+
+  it('Decision mode: CEO STOP_NOW terminates without Round 2', async () => {
+    const claudeResponse = createMockResponse('claude', 'Claude analysis');
+    const geminiResponse = createMockResponse('gemini', 'Gemini analysis');
+    const gptStop = createCeoStopResponse('gpt');
+
+    mockCallAgent
+      .mockResolvedValueOnce(claudeResponse)
+      .mockResolvedValueOnce(geminiResponse)
+      .mockResolvedValueOnce(gptStop);
+
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    act(() => { result.current.setMode('decision'); });
+    act(() => { result.current.submitPrompt('Bad task'); });
+
+    await waitFor(() => {
+      expect(result.current.isProcessing()).toBe(false);
+    });
+
+    expect(mockCallAgent).toHaveBeenCalledTimes(3);
+
+    const epoch = result.current.getDecisionEpoch();
+    expect(epoch!.phase).toBe('EPOCH_STOPPED');
+    expect(epoch!.terminalReason).toBe('stopped');
+  });
+
+  it('Discussion mode remains single-pass (no round loop)', async () => {
+    const claudeResponse = createMockResponse('claude', 'Claude response');
+    const geminiResponse = createMockResponse('gemini', 'Gemini response');
+    const gptResponse = createGPTResponseWithFlags(true, true, 'test');
+
+    mockCallAgent
+      .mockResolvedValueOnce(claudeResponse)
+      .mockResolvedValueOnce(geminiResponse)
+      .mockResolvedValueOnce(gptResponse);
+
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    // Stay in default discussion mode
+    act(() => { result.current.submitPrompt('Simple question'); });
+
+    await waitFor(() => {
+      expect(result.current.isProcessing()).toBe(false);
+    });
+
+    expect(mockCallAgent).toHaveBeenCalledTimes(3);
+    // No epoch in discussion mode
+    expect(result.current.getDecisionEpoch()).toBeNull();
+  });
+});
