@@ -957,8 +957,14 @@ body {
   margin-bottom: 24px;
 }
 
+.decision-mode-layout__blocking-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
 .decision-mode-layout__blocking-btn {
-  background-color: #d32f2f;
   color: white;
   border: none;
   border-radius: 6px;
@@ -967,10 +973,23 @@ body {
   font-weight: 500;
   cursor: pointer;
   transition: background-color 0.2s;
+  width: 100%;
 }
 
-.decision-mode-layout__blocking-btn:hover {
-  background-color: #e53935;
+.decision-mode-layout__blocking-btn--primary {
+  background-color: #1976d2;
+}
+
+.decision-mode-layout__blocking-btn--primary:hover {
+  background-color: #1e88e5;
+}
+
+.decision-mode-layout__blocking-btn--secondary {
+  background-color: #424242;
+}
+
+.decision-mode-layout__blocking-btn--secondary:hover {
+  background-color: #616161;
 }
 
 /* Make layout relative for overlay positioning */

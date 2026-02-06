@@ -90,6 +90,7 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     unblockDecisionSession,
     getDecisionBlockingState,
     isDecisionBlocked,
+    retryCeoReformat,
   } = useBrain();
 
   // ---------------------------------------------------------------------------
@@ -384,6 +385,10 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     unblockDecisionSession();
   }, [clearBoard, unblockDecisionSession]);
 
+  const handleRetryCeoReformat = useCallback(() => {
+    retryCeoReformat();
+  }, [retryCeoReformat]);
+
   // ---------------------------------------------------------------------------
   // Discussion Export: Finish Discussion (JSON + Markdown)
   // ---------------------------------------------------------------------------
@@ -489,6 +494,7 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
           ceoPromptWarning={ceoPromptWarning}
           blockingState={decisionBlockingState}
           onClearAndUnblock={handleClearAndUnblock}
+          onRetryCeoReformat={handleRetryCeoReformat}
         />
 
         {/* Prompt Input (with summary indicator in Decision mode) */}

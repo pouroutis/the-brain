@@ -27,6 +27,8 @@ export interface RunCoordination {
   callIndex: number;
   exchanges: Exchange[];  // Historical exchanges for context building
   projectDiscussionMode?: boolean;  // Inject project context into prompts
+  mode?: 'discussion' | 'decision' | 'project';  // Current brain mode
+  ceoAgent?: Agent;  // Current CEO agent
 }
 
 /**
@@ -66,6 +68,52 @@ GPT and Claude may have already responded. Provide your unique perspective.
 Focus on: factual accuracy, practical information, and clear explanations.
 
 User question: `;
+
+/**
+ * System prompt for CEO in Decision mode (MANDATORY MARKERS)
+ * CEO MUST output ONLY one of the two marker blocks - no other text allowed.
+ */
+const CEO_DECISION_MODE_SYSTEM_PROMPT = `You are the CEO in Decision mode. You MUST output EXACTLY one of these two formats with NO other text:
+
+OPTION 1 - Claude Code Prompt (when ready to execute):
+=== CLAUDE_CODE_PROMPT_START ===
+[Your complete prompt for Claude Code here]
+=== CLAUDE_CODE_PROMPT_END ===
+
+OPTION 2 - Clarification Questions (when you need more info):
+=== CEO_BLOCKED_START ===
+Q1: [First question]
+Q2: [Second question]
+=== CEO_BLOCKED_END ===
+
+RULES:
+- Output ONLY the markers and content between them
+- NO text before or after the markers
+- NO explanations, greetings, or commentary
+- Choose Option 1 when you have enough info to create a prompt
+- Choose Option 2 when you need clarification (max 3 questions)
+
+Example valid output:
+=== CLAUDE_CODE_PROMPT_START ===
+Create a React component that displays a user profile card with name, email, and avatar.
+=== CLAUDE_CODE_PROMPT_END ===`;
+
+/**
+ * Instruction for CEO retry/reformat (when markers were missing)
+ */
+export const CEO_REFORMAT_INSTRUCTION = `Your previous response was missing the required markers. Reformat your answer using EXACTLY one of these formats with NO other text:
+
+=== CLAUDE_CODE_PROMPT_START ===
+[Your prompt here]
+=== CLAUDE_CODE_PROMPT_END ===
+
+OR
+
+=== CEO_BLOCKED_START ===
+Q1: [Question]
+=== CEO_BLOCKED_END ===
+
+Output ONLY the markers and content. No explanations.`;
 
 // -----------------------------------------------------------------------------
 // Types
@@ -114,13 +162,17 @@ interface GeminiResponse {
 function buildGPTRequest(
   userPrompt: string,
   _context: string,
-  projectDiscussionMode: boolean
+  projectDiscussionMode: boolean,
+  isCeoInDecisionMode: boolean = false
 ): OpenAIRequest {
   const projectPrefix = buildProjectContextPrefix('gpt', projectDiscussionMode);
+  const systemPrompt = isCeoInDecisionMode
+    ? CEO_DECISION_MODE_SYSTEM_PROMPT
+    : projectPrefix + GPT_SYSTEM_PROMPT;
   return {
     action: 'chat',
     messages: [],
-    systemPrompt: projectPrefix + GPT_SYSTEM_PROMPT,
+    systemPrompt,
     userMessage: userPrompt,
     stream: false,
   };
@@ -129,16 +181,20 @@ function buildGPTRequest(
 function buildClaudeRequest(
   userPrompt: string,
   context: string,
-  projectDiscussionMode: boolean
+  projectDiscussionMode: boolean,
+  isCeoInDecisionMode: boolean = false
 ): AnthropicRequest {
   const projectPrefix = buildProjectContextPrefix('claude', projectDiscussionMode);
   const fullPrompt = context
     ? `Previous responses:\n${context}\n\nUser's original question: ${userPrompt}`
     : userPrompt;
+  const systemPrompt = isCeoInDecisionMode
+    ? CEO_DECISION_MODE_SYSTEM_PROMPT
+    : projectPrefix + CLAUDE_SYSTEM_PROMPT;
 
   return {
     action: 'chat',
-    systemPrompt: projectPrefix + CLAUDE_SYSTEM_PROMPT,
+    systemPrompt,
     prompt: fullPrompt,
     stream: false,
   };
@@ -147,10 +203,18 @@ function buildClaudeRequest(
 function buildGeminiRequest(
   userPrompt: string,
   context: string,
-  projectDiscussionMode: boolean
+  projectDiscussionMode: boolean,
+  isCeoInDecisionMode: boolean = false
 ): GeminiRequest {
   const projectPrefix = buildProjectContextPrefix('gemini', projectDiscussionMode);
-  let fullPrompt = projectPrefix + GEMINI_PROMPT_PREFIX + userPrompt;
+  let fullPrompt: string;
+
+  if (isCeoInDecisionMode) {
+    // Gemini doesn't have system prompt, so prepend the CEO instruction
+    fullPrompt = CEO_DECISION_MODE_SYSTEM_PROMPT + '\n\n' + userPrompt;
+  } else {
+    fullPrompt = projectPrefix + GEMINI_PROMPT_PREFIX + userPrompt;
+  }
 
   if (context) {
     fullPrompt += `\n\nPrevious responses from other AIs:\n${context}`;
@@ -226,7 +290,10 @@ export async function callAgent(
   coordination: RunCoordination,
   timeoutMs: number = DEFAULT_TIMEOUT_MS
 ): Promise<AgentResponse> {
-  const { runId, callIndex, exchanges, projectDiscussionMode = false } = coordination;
+  const { runId, callIndex, exchanges, projectDiscussionMode = false, mode, ceoAgent } = coordination;
+
+  // Detect if this is CEO in Decision mode (requires special system prompt)
+  const isCeoInDecisionMode = mode === 'decision' && ceoAgent === agent;
   const timestamp = Date.now();
 
   // -------------------------------------------------------------------------
@@ -286,13 +353,13 @@ export async function callAgent(
 
   switch (agent) {
     case 'gpt':
-      requestBody = buildGPTRequest(truncatedPrompt, truncatedContext, projectDiscussionMode);
+      requestBody = buildGPTRequest(truncatedPrompt, truncatedContext, projectDiscussionMode, isCeoInDecisionMode);
       break;
     case 'claude':
-      requestBody = buildClaudeRequest(truncatedPrompt, truncatedContext, projectDiscussionMode);
+      requestBody = buildClaudeRequest(truncatedPrompt, truncatedContext, projectDiscussionMode, isCeoInDecisionMode);
       break;
     case 'gemini':
-      requestBody = buildGeminiRequest(truncatedPrompt, truncatedContext, projectDiscussionMode);
+      requestBody = buildGeminiRequest(truncatedPrompt, truncatedContext, projectDiscussionMode, isCeoInDecisionMode);
       break;
   }
 

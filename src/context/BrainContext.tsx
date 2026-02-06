@@ -39,7 +39,7 @@ import type {
 } from '../types/brain';
 
 import { brainReducer, initialBrainState } from '../reducer/brainReducer';
-import { callAgent } from '../api/agentClient';
+import { callAgent, CEO_REFORMAT_INSTRUCTION } from '../api/agentClient';
 import { callGhostOrchestrator, getGhostErrorMessage } from '../api/ghostClient';
 import type { GhostErrorCode } from '../types/ghost';
 import { env } from '../config/env';
@@ -205,6 +205,8 @@ interface BrainActions {
   blockDecisionSession: (reason: string, exchangeId: string) => void;
   /** Unblock Decision mode session (retry) */
   unblockDecisionSession: () => void;
+  /** Retry CEO with reformat instruction (Decision mode only) */
+  retryCeoReformat: () => void;
 }
 
 /**
@@ -758,6 +760,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
             callIndex: callIndexRef.current,
             exchanges: state.exchanges,
             projectDiscussionMode: useProjectContext,
+            mode: currentMode,
+            ceoAgent: currentCeo,
           }
         );
 
@@ -1298,6 +1302,86 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     dispatch({ type: 'DECISION_UNBLOCK_SESSION' });
   }, []);
 
+  // Ref for CEO retry in progress
+  const ceoRetryAbortControllerRef = useRef<AbortController | null>(null);
+
+  const retryCeoReformat = useCallback((): void => {
+    // Guard: Only in decision mode with blocking state
+    if (state.mode !== 'decision' || !state.decisionBlockingState?.isBlocked) {
+      return;
+    }
+
+    // Guard: Don't retry if already retrying
+    if (ceoRetryAbortControllerRef.current) {
+      return;
+    }
+
+    // Get last exchange to find CEO's original response
+    const lastExchange = state.exchanges[state.exchanges.length - 1];
+    if (!lastExchange) return;
+
+    const currentCeo = ceoRef.current;
+    const ceoResponse = lastExchange.responsesByAgent[currentCeo];
+    if (!ceoResponse || ceoResponse.status !== 'success' || !ceoResponse.content) {
+      return;
+    }
+
+    // Create abort controller
+    const abortController = new AbortController();
+    ceoRetryAbortControllerRef.current = abortController;
+
+    // Run CEO retry
+    const runCeoRetry = async () => {
+      try {
+        // Build the retry prompt with CEO's original response and reformat instruction
+        const retryPrompt = `${CEO_REFORMAT_INSTRUCTION}\n\nYour previous response was:\n${ceoResponse.content}`;
+
+        const response = await callAgent(
+          currentCeo,
+          retryPrompt,
+          '', // No context needed for reformat
+          abortController,
+          {
+            runId: `ceo-retry-${Date.now()}`,
+            callIndex: 1,
+            exchanges: state.exchanges,
+            projectDiscussionMode: false,
+            mode: 'decision',
+            ceoAgent: currentCeo,
+          }
+        );
+
+        if (abortController.signal.aborted) return;
+
+        if (response.status === 'success' && response.content) {
+          const parsed = parseCeoControlBlock(response.content);
+
+          if (parsed.hasPromptArtifact && parsed.promptText) {
+            // Success: Update prompt artifact and unblock
+            dispatch({
+              type: 'SET_DISCUSSION_CEO_PROMPT_ARTIFACT',
+              artifact: {
+                text: parsed.promptText,
+                version: (state.discussionCeoPromptArtifact?.version ?? 0) + 1,
+                createdAt: new Date().toISOString(),
+              },
+            });
+            dispatch({ type: 'DECISION_UNBLOCK_SESSION' });
+          } else if (parsed.isBlocked && parsed.blockedQuestions.length > 0) {
+            // CEO asked questions - start clarification
+            dispatch({ type: 'DECISION_UNBLOCK_SESSION' });
+            dispatch({ type: 'START_CLARIFICATION', questions: parsed.blockedQuestions });
+          }
+          // If still invalid, session remains blocked
+        }
+      } finally {
+        ceoRetryAbortControllerRef.current = null;
+      }
+    };
+
+    runCeoRetry();
+  }, [state.mode, state.decisionBlockingState, state.exchanges, state.discussionCeoPromptArtifact]);
+
   // ---------------------------------------------------------------------------
   // Selectors
   // ---------------------------------------------------------------------------
@@ -1521,6 +1605,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       cancelClarification,
       blockDecisionSession,
       unblockDecisionSession,
+      retryCeoReformat,
       // Selectors
       getState,
       getActiveRunId,
@@ -1590,6 +1675,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       cancelClarification,
       blockDecisionSession,
       unblockDecisionSession,
+      retryCeoReformat,
       getState,
       getActiveRunId,
       getPendingExchange,

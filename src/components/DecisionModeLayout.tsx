@@ -38,6 +38,8 @@ interface DecisionModeLayoutProps {
   blockingState: DecisionBlockingState | null;
   /** Callback to clear board and unblock */
   onClearAndUnblock: () => void;
+  /** Callback to retry CEO with reformat instruction */
+  onRetryCeoReformat: () => void;
 }
 
 // -----------------------------------------------------------------------------
@@ -58,6 +60,7 @@ export function DecisionModeLayout({
   ceoPromptWarning,
   blockingState,
   onClearAndUnblock,
+  onRetryCeoReformat,
 }: DecisionModeLayoutProps): JSX.Element {
   const isBlocked = blockingState?.isBlocked ?? false;
 
@@ -73,13 +76,22 @@ export function DecisionModeLayout({
             <p className="decision-mode-layout__blocking-help">
               CEO must output either a valid Claude Code prompt (with markers) or clarification questions.
             </p>
-            <button
-              className="decision-mode-layout__blocking-btn"
-              onClick={onClearAndUnblock}
-              data-testid="clear-and-retry-btn"
-            >
-              Clear Board &amp; Retry
-            </button>
+            <div className="decision-mode-layout__blocking-actions">
+              <button
+                className="decision-mode-layout__blocking-btn decision-mode-layout__blocking-btn--primary"
+                onClick={onRetryCeoReformat}
+                data-testid="retry-ceo-reformat-btn"
+              >
+                Retry CEO (reformat)
+              </button>
+              <button
+                className="decision-mode-layout__blocking-btn decision-mode-layout__blocking-btn--secondary"
+                onClick={onClearAndUnblock}
+                data-testid="clear-and-retry-btn"
+              >
+                Clear Board &amp; Retry
+              </button>
+            </div>
           </div>
         </div>
       )}
