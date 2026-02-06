@@ -425,6 +425,11 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     setMode('decision');
   }, [setMode]);
 
+  const handleViewInProject = useCallback(() => {
+    // Switch to Project mode to view project dashboard
+    setMode('project');
+  }, [setMode]);
+
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
@@ -502,10 +507,17 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
           onDeleteProject={handleDeleteProject}
         />
 
-        {/* Decision Finalized Message */}
+        {/* Decision Finalized Message + View Project Button */}
         {isDecisionFinalized && (
           <div className="brain-chat__decision-finalized" data-testid="decision-finalized-message">
-            Decision finalized. Copy the Claude Code prompt or Clear Board to continue.
+            <span>Decision finalized. Copy the Claude Code prompt or Clear Board to continue.</span>
+            <button
+              className="brain-chat__view-project-btn"
+              onClick={handleViewInProject}
+              data-testid="view-in-project-btn"
+            >
+              View in Project
+            </button>
           </div>
         )}
 

@@ -3,8 +3,9 @@
 // ProjectModeLayout Component (Project Dashboard - Read Only)
 // =============================================================================
 
+import { useState } from 'react';
 import { ProjectSidebar } from './ProjectSidebar';
-import type { ProjectState, DecisionRecord } from '../types/brain';
+import type { ProjectState, DecisionRecord, Exchange } from '../types/brain';
 
 // -----------------------------------------------------------------------------
 // Types
@@ -52,6 +53,19 @@ function getStatusDisplay(status: ProjectState['status']): { label: string; clas
   }
 }
 
+/**
+ * Get the last blocked decision's reason
+ */
+function getLastBlockedReason(decisions: DecisionRecord[]): string | null {
+  for (let i = decisions.length - 1; i >= 0; i--) {
+    const d = decisions[i];
+    if (d.blocked && d.blockedReason) {
+      return d.blockedReason;
+    }
+  }
+  return null;
+}
+
 // -----------------------------------------------------------------------------
 // Sub-Components
 // -----------------------------------------------------------------------------
@@ -59,9 +73,11 @@ function getStatusDisplay(status: ProjectState['status']): { label: string; clas
 interface DecisionCardProps {
   decision: DecisionRecord;
   index: number;
+  isExpanded: boolean;
+  onToggle: () => void;
 }
 
-function DecisionCard({ decision, index }: DecisionCardProps): JSX.Element {
+function DecisionCard({ decision, index, isExpanded, onToggle }: DecisionCardProps): JSX.Element {
   const hasPrompt = decision.promptProduced && decision.claudeCodePrompt;
 
   return (
@@ -73,8 +89,17 @@ function DecisionCard({ decision, index }: DecisionCardProps): JSX.Element {
         {decision.blocked && (
           <span className="project-dashboard__decision-blocked">BLOCKED</span>
         )}
+        {hasPrompt && (
+          <button
+            className="project-dashboard__decision-toggle"
+            onClick={onToggle}
+            data-testid={`decision-toggle-${index}`}
+          >
+            {isExpanded ? '▼ Hide Prompt' : '▶ Show Prompt'}
+          </button>
+        )}
       </div>
-      {hasPrompt && (
+      {hasPrompt && isExpanded && (
         <div className="project-dashboard__decision-prompt">
           <pre>{decision.claudeCodePrompt}</pre>
         </div>
@@ -84,6 +109,22 @@ function DecisionCard({ decision, index }: DecisionCardProps): JSX.Element {
           <strong>Blocked:</strong> {decision.blockedReason}
         </div>
       )}
+    </div>
+  );
+}
+
+interface ExchangeItemProps {
+  exchange: Exchange;
+  index: number;
+}
+
+function ExchangeItem({ exchange, index }: ExchangeItemProps): JSX.Element {
+  return (
+    <div className="project-dashboard__exchange-item">
+      <span className="project-dashboard__exchange-number">#{index + 1}</span>
+      <span className="project-dashboard__exchange-prompt">
+        {exchange.userPrompt.slice(0, 100)}{exchange.userPrompt.length > 100 ? '...' : ''}
+      </span>
     </div>
   );
 }
@@ -101,6 +142,30 @@ export function ProjectModeLayout({
   onContinueInDecisionMode,
 }: ProjectModeLayoutProps): JSX.Element {
   const statusDisplay = activeProject ? getStatusDisplay(activeProject.status) : null;
+
+  // Local state for expand/collapse
+  const [expandedDecisions, setExpandedDecisions] = useState<Set<string>>(new Set());
+  const [showRecentExchanges, setShowRecentExchanges] = useState(false);
+
+  const toggleDecisionExpand = (decisionId: string) => {
+    setExpandedDecisions((prev) => {
+      const next = new Set(prev);
+      if (next.has(decisionId)) {
+        next.delete(decisionId);
+      } else {
+        next.add(decisionId);
+      }
+      return next;
+    });
+  };
+
+  // Get blocked reason if project is blocked
+  const isBlocked = activeProject?.status === 'blocked';
+  const blockedReason = activeProject ? getLastBlockedReason(activeProject.decisions) : null;
+
+  // Get recent exchanges count
+  const recentExchanges = activeProject?.projectMemory.recentExchanges ?? [];
+  const exchangeCount = recentExchanges.length;
 
   return (
     <div className="project-mode-layout" data-testid="project-mode-layout">
@@ -133,6 +198,26 @@ export function ProjectModeLayout({
         ) : (
           /* Project Details */
           <>
+            {/* Blocked Banner */}
+            {isBlocked && (
+              <div className="project-dashboard__blocked-banner" data-testid="blocked-banner">
+                <div className="project-dashboard__blocked-icon">⛔</div>
+                <div className="project-dashboard__blocked-content">
+                  <h3 className="project-dashboard__blocked-title">CEO BLOCKED</h3>
+                  {blockedReason && (
+                    <p className="project-dashboard__blocked-reason">{blockedReason}</p>
+                  )}
+                </div>
+                <button
+                  className="project-dashboard__blocked-btn"
+                  onClick={onContinueInDecisionMode}
+                  data-testid="return-to-decision-btn"
+                >
+                  Return to Decision
+                </button>
+              </div>
+            )}
+
             {/* Project Header */}
             <div className="project-dashboard__header">
               <h2 className="project-dashboard__title">
@@ -170,6 +255,34 @@ export function ProjectModeLayout({
               </button>
             </div>
 
+            {/* Recent Exchanges (Project Memory) */}
+            {exchangeCount > 0 && (
+              <div className="project-dashboard__exchanges">
+                <div className="project-dashboard__section-header">
+                  <h3 className="project-dashboard__section-title">Recent Exchanges</h3>
+                  <button
+                    className="project-dashboard__expand-btn"
+                    onClick={() => setShowRecentExchanges(!showRecentExchanges)}
+                    data-testid="toggle-exchanges-btn"
+                  >
+                    {showRecentExchanges ? '▼ Hide' : `▶ Show (${exchangeCount} captured)`}
+                  </button>
+                </div>
+                {showRecentExchanges && (
+                  <div className="project-dashboard__exchange-list">
+                    {recentExchanges.map((exchange, index) => (
+                      <ExchangeItem key={exchange.id} exchange={exchange} index={index} />
+                    ))}
+                  </div>
+                )}
+                {!showRecentExchanges && (
+                  <p className="project-dashboard__exchange-count">
+                    {exchangeCount} exchange{exchangeCount !== 1 ? 's' : ''} captured in project memory
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Decision History */}
             <div className="project-dashboard__decisions">
               <h3 className="project-dashboard__section-title">Decision History</h3>
@@ -180,7 +293,13 @@ export function ProjectModeLayout({
               ) : (
                 <div className="project-dashboard__decision-list">
                   {activeProject.decisions.map((decision, index) => (
-                    <DecisionCard key={decision.id} decision={decision} index={index} />
+                    <DecisionCard
+                      key={decision.id}
+                      decision={decision}
+                      index={index}
+                      isExpanded={expandedDecisions.has(decision.id)}
+                      onToggle={() => toggleDecisionExpand(decision.id)}
+                    />
                   ))}
                 </div>
               )}
