@@ -404,8 +404,9 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
   const handleSelectProject = useCallback(
     (projectId: string) => {
       switchToProjectById(projectId);
+      setMode('project');
     },
-    [switchToProjectById]
+    [switchToProjectById, setMode]
   );
 
   const handleNewProject = useCallback(() => {
