@@ -207,6 +207,8 @@ interface BrainActions {
   unblockDecisionSession: () => void;
   /** Retry CEO with reformat instruction (Decision mode only) */
   retryCeoReformat: () => void;
+  /** Set CEO-only mode toggle (Decision mode only) */
+  setCeoOnlyMode: (enabled: boolean) => void;
 }
 
 /**
@@ -286,6 +288,8 @@ interface BrainSelectors {
   getDecisionBlockingState: () => DecisionBlockingState | null;
   /** Check if decision session is blocked */
   isDecisionBlocked: () => boolean;
+  /** Check if CEO-only mode is enabled */
+  isCeoOnlyMode: () => boolean;
 }
 
 /**
@@ -770,11 +774,12 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       };
 
       // Helper to check if agent should be called
-      // Phase 2F: ALL modes force all agents (gatekeeping disabled for MVP)
-      const shouldCallAgent = (_agent: Agent, _isCeo: boolean): boolean => {
-        // ALL MODES: Force all agents (Discussion, Decision, Project)
-        // Gatekeeping flags are ignored — all 3 agents always speak
-        // CEO ordering is handled by getAgentOrder() — CEO speaks last
+      const shouldCallAgent = (_agent: Agent, isCeo: boolean): boolean => {
+        // Decision mode with CEO-only toggle: skip non-CEO agents
+        if (currentMode === 'decision' && state.ceoOnlyModeEnabled && !isCeo) {
+          return false;
+        }
+        // All other cases: call the agent
         return true;
       };
 
@@ -1382,6 +1387,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     runCeoRetry();
   }, [state.mode, state.decisionBlockingState, state.exchanges, state.discussionCeoPromptArtifact]);
 
+  const setCeoOnlyMode = useCallback((enabled: boolean): void => {
+    dispatch({ type: 'SET_CEO_ONLY_MODE', enabled });
+  }, []);
+
   // ---------------------------------------------------------------------------
   // Selectors
   // ---------------------------------------------------------------------------
@@ -1568,6 +1577,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     return state.decisionBlockingState?.isBlocked ?? false;
   }, [state.decisionBlockingState]);
 
+  const isCeoOnlyMode = useCallback((): boolean => {
+    return state.ceoOnlyModeEnabled;
+  }, [state.ceoOnlyModeEnabled]);
+
   // ---------------------------------------------------------------------------
   // Memoized Context Value
   // ---------------------------------------------------------------------------
@@ -1606,6 +1619,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       blockDecisionSession,
       unblockDecisionSession,
       retryCeoReformat,
+      setCeoOnlyMode,
       // Selectors
       getState,
       getActiveRunId,
@@ -1643,6 +1657,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       isClarificationActive,
       getDecisionBlockingState,
       isDecisionBlocked,
+      isCeoOnlyMode,
     }),
     [
       submitPrompt,
@@ -1676,6 +1691,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       blockDecisionSession,
       unblockDecisionSession,
       retryCeoReformat,
+      setCeoOnlyMode,
       getState,
       getActiveRunId,
       getPendingExchange,
@@ -1712,6 +1728,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       isClarificationActive,
       getDecisionBlockingState,
       isDecisionBlocked,
+      isCeoOnlyMode,
     ]
   );
 

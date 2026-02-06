@@ -91,6 +91,9 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     getDecisionBlockingState,
     isDecisionBlocked,
     retryCeoReformat,
+    // CEO-only mode toggle
+    setCeoOnlyMode,
+    isCeoOnlyMode,
   } = useBrain();
 
   // ---------------------------------------------------------------------------
@@ -132,6 +135,20 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
   const clarificationActive = isClarificationActive();
   const decisionBlockingState = getDecisionBlockingState();
   const decisionBlocked = isDecisionBlocked();
+  const ceoOnlyModeEnabled = isCeoOnlyMode();
+
+  // ---------------------------------------------------------------------------
+  // Extract last CEO questions (for CeoClarificationPanel display)
+  // Shown even when CEO-only toggle is OFF
+  // ---------------------------------------------------------------------------
+
+  const lastCeoQuestions = useMemo((): string[] => {
+    if (mode !== 'decision' || !lastExchange) return [];
+    const ceoResponse = lastExchange.responsesByAgent[ceo];
+    if (!ceoResponse || ceoResponse.status !== 'success' || !ceoResponse.content) return [];
+    const parsed = parseCeoControlBlock(ceoResponse.content);
+    return parsed.blockedQuestions;
+  }, [mode, lastExchange, ceo]);
 
   // ---------------------------------------------------------------------------
   // CEO Execution Prompt (memoized)
@@ -389,6 +406,13 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     retryCeoReformat();
   }, [retryCeoReformat]);
 
+  const handleToggleCeoOnlyMode = useCallback(
+    (enabled: boolean) => {
+      setCeoOnlyMode(enabled);
+    },
+    [setCeoOnlyMode]
+  );
+
   // ---------------------------------------------------------------------------
   // Discussion Export: Finish Discussion (JSON + Markdown)
   // ---------------------------------------------------------------------------
@@ -495,6 +519,9 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
           blockingState={decisionBlockingState}
           onClearAndUnblock={handleClearAndUnblock}
           onRetryCeoReformat={handleRetryCeoReformat}
+          ceoOnlyModeEnabled={ceoOnlyModeEnabled}
+          onToggleCeoOnlyMode={handleToggleCeoOnlyMode}
+          lastCeoQuestions={lastCeoQuestions}
         />
 
         {/* Prompt Input (with summary indicator in Decision mode) */}

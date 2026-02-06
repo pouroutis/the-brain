@@ -71,9 +71,9 @@ User question: `;
 
 /**
  * System prompt for CEO in Decision mode (MANDATORY MARKERS)
- * CEO MUST output ONLY one of the two marker blocks - no other text allowed.
+ * CEO MUST include one of the two marker blocks. Surrounding text is tolerated but discouraged.
  */
-const CEO_DECISION_MODE_SYSTEM_PROMPT = `You are the CEO in Decision mode. You MUST output EXACTLY one of these two formats with NO other text:
+const CEO_DECISION_MODE_SYSTEM_PROMPT = `You are the CEO in Decision mode. You MUST include one of these two marker formats in your response:
 
 OPTION 1 - Claude Code Prompt (when ready to execute):
 === CLAUDE_CODE_PROMPT_START ===
@@ -87,16 +87,21 @@ Q2: [Second question]
 === CEO_BLOCKED_END ===
 
 RULES:
-- Output ONLY the markers and content between them
-- NO text before or after the markers
-- NO explanations, greetings, or commentary
+- You MUST include exactly ONE of these marker blocks
 - Choose Option 1 when you have enough info to create a prompt
 - Choose Option 2 when you need clarification (max 3 questions)
+- Prefer minimal text outside the markers
 
-Example valid output:
+EXAMPLE 1 - Ready to execute:
 === CLAUDE_CODE_PROMPT_START ===
 Create a React component that displays a user profile card with name, email, and avatar.
-=== CLAUDE_CODE_PROMPT_END ===`;
+=== CLAUDE_CODE_PROMPT_END ===
+
+EXAMPLE 2 - Need clarification:
+=== CEO_BLOCKED_START ===
+Q1: What authentication method should be used?
+Q2: Should the component support dark mode?
+=== CEO_BLOCKED_END ===`;
 
 /**
  * Instruction for CEO retry/reformat (when markers were missing)

@@ -53,6 +53,7 @@ export const initialBrainState: BrainState = {
   discussionCeoPromptArtifact: null,
   clarificationState: null,
   decisionBlockingState: null,
+  ceoOnlyModeEnabled: false,
 };
 
 // -----------------------------------------------------------------------------
@@ -1122,6 +1123,16 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
       return {
         ...state,
         decisionBlockingState: null,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // SET_CEO_ONLY_MODE — Toggle CEO-only routing in Decision mode
+    // -------------------------------------------------------------------------
+    case 'SET_CEO_ONLY_MODE': {
+      return {
+        ...state,
+        ceoOnlyModeEnabled: action.enabled,
       };
     }
 

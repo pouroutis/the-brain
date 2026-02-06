@@ -1,6 +1,6 @@
 // =============================================================================
 // The Brain — CEO Clarification Panel (Decision Mode Only)
-// Collapsible panel for CEO-only clarification when CEO outputs BLOCKED
+// Panel for CEO-only clarification and routing toggle
 // =============================================================================
 
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -14,6 +14,12 @@ interface CeoClarificationPanelProps {
   clarificationState: ClarificationState | null;
   onSendMessage: (content: string) => void;
   onCancel: () => void;
+  /** CEO-only mode toggle state */
+  ceoOnlyModeEnabled: boolean;
+  /** Callback to toggle CEO-only mode */
+  onToggleCeoOnlyMode: (enabled: boolean) => void;
+  /** CEO questions from last exchange (shown even when toggle is OFF) */
+  lastCeoQuestions: string[];
 }
 
 // -----------------------------------------------------------------------------
@@ -24,17 +30,20 @@ export function CeoClarificationPanel({
   clarificationState,
   onSendMessage,
   onCancel,
+  ceoOnlyModeEnabled,
+  onToggleCeoOnlyMode,
+  lastCeoQuestions,
 }: CeoClarificationPanelProps): JSX.Element {
   const [inputValue, setInputValue] = useState('');
   const [isCollapsed, setIsCollapsed] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Auto-expand when clarification becomes active
+  // Auto-expand when clarification becomes active or has questions
   useEffect(() => {
-    if (clarificationState?.isActive) {
+    if (clarificationState?.isActive || lastCeoQuestions.length > 0) {
       setIsCollapsed(false);
     }
-  }, [clarificationState?.isActive]);
+  }, [clarificationState?.isActive, lastCeoQuestions.length]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -67,24 +76,18 @@ export function CeoClarificationPanel({
     setIsCollapsed((prev) => !prev);
   }, []);
 
-  // Render nothing if no clarification state or resolved
+  const handleToggleCeoOnly = useCallback(() => {
+    onToggleCeoOnlyMode(!ceoOnlyModeEnabled);
+  }, [ceoOnlyModeEnabled, onToggleCeoOnlyMode]);
+
   const isActive = clarificationState?.isActive ?? false;
   const hasMemo = clarificationState?.decisionMemo !== null;
+  const hasQuestions = (clarificationState?.blockedQuestions?.length ?? 0) > 0 || lastCeoQuestions.length > 0;
 
-  // Show panel if active or has decision memo to display
-  if (!isActive && !hasMemo) {
-    return (
-      <div className="ceo-clarification-panel ceo-clarification-panel--inactive">
-        <button
-          className="ceo-clarification-panel__toggle"
-          onClick={toggleCollapsed}
-          disabled
-        >
-          Clarify with CEO only
-        </button>
-      </div>
-    );
-  }
+  // Determine which questions to show (active clarification takes precedence)
+  const questionsToShow = clarificationState?.blockedQuestions?.length
+    ? clarificationState.blockedQuestions
+    : lastCeoQuestions;
 
   return (
     <div
@@ -94,12 +97,20 @@ export function CeoClarificationPanel({
       {/* Header with toggle */}
       <div className="ceo-clarification-panel__header">
         <button
-          className="ceo-clarification-panel__toggle"
-          onClick={toggleCollapsed}
+          className={`ceo-clarification-panel__toggle ${ceoOnlyModeEnabled ? 'ceo-clarification-panel__toggle--active' : ''}`}
+          onClick={handleToggleCeoOnly}
+          data-testid="ceo-only-toggle"
         >
-          {isCollapsed ? '+ ' : '- '}
-          Clarify with CEO only
-          {isActive && <span className="ceo-clarification-panel__active-badge">ACTIVE</span>}
+          {ceoOnlyModeEnabled ? '● ' : '○ '}
+          CEO Only Mode
+          {ceoOnlyModeEnabled && <span className="ceo-clarification-panel__active-badge">ON</span>}
+        </button>
+        <button
+          className="ceo-clarification-panel__expand"
+          onClick={toggleCollapsed}
+          title={isCollapsed ? 'Expand' : 'Collapse'}
+        >
+          {isCollapsed ? '▼' : '▲'}
         </button>
         {isActive && (
           <button
@@ -115,12 +126,12 @@ export function CeoClarificationPanel({
       {/* Content (hidden when collapsed) */}
       {!isCollapsed && (
         <div className="ceo-clarification-panel__content">
-          {/* BLOCKED Questions */}
-          {clarificationState?.blockedQuestions && clarificationState.blockedQuestions.length > 0 && (
+          {/* CEO Questions (shown ALWAYS when available) */}
+          {hasQuestions && questionsToShow.length > 0 && (
             <div className="ceo-clarification-panel__questions">
               <div className="ceo-clarification-panel__questions-label">CEO Questions:</div>
               <ul>
-                {clarificationState.blockedQuestions.map((q, idx) => (
+                {questionsToShow.map((q, idx) => (
                   <li key={idx}>{q}</li>
                 ))}
               </ul>
@@ -128,28 +139,30 @@ export function CeoClarificationPanel({
           )}
 
           {/* Messages */}
-          <div className="ceo-clarification-panel__messages">
-            {clarificationState?.messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`ceo-clarification-panel__message ceo-clarification-panel__message--${msg.role}`}
-              >
-                <span className="ceo-clarification-panel__message-role">
-                  {msg.role === 'user' ? 'You' : 'CEO'}:
-                </span>
-                <span className="ceo-clarification-panel__message-content">
-                  {msg.content}
-                </span>
-              </div>
-            ))}
-            {clarificationState?.isProcessing && (
-              <div className="ceo-clarification-panel__message ceo-clarification-panel__message--ceo ceo-clarification-panel__message--loading">
-                <span className="ceo-clarification-panel__message-role">CEO:</span>
-                <span className="ceo-clarification-panel__spinner" />
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
+          {(isActive || hasMemo) && (
+            <div className="ceo-clarification-panel__messages">
+              {clarificationState?.messages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`ceo-clarification-panel__message ceo-clarification-panel__message--${msg.role}`}
+                >
+                  <span className="ceo-clarification-panel__message-role">
+                    {msg.role === 'user' ? 'You' : 'CEO'}:
+                  </span>
+                  <span className="ceo-clarification-panel__message-content">
+                    {msg.content}
+                  </span>
+                </div>
+              ))}
+              {clarificationState?.isProcessing && (
+                <div className="ceo-clarification-panel__message ceo-clarification-panel__message--ceo ceo-clarification-panel__message--loading">
+                  <span className="ceo-clarification-panel__message-role">CEO:</span>
+                  <span className="ceo-clarification-panel__spinner" />
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+          )}
 
           {/* Decision Memo (shown when resolved) */}
           {hasMemo && clarificationState?.decisionMemo && (
@@ -176,6 +189,15 @@ export function CeoClarificationPanel({
                 Send
               </button>
             </form>
+          )}
+
+          {/* Hint when no questions */}
+          {!hasQuestions && !isActive && !hasMemo && (
+            <div className="ceo-clarification-panel__hint">
+              {ceoOnlyModeEnabled
+                ? 'CEO-only mode active. Only CEO will respond to your next message.'
+                : 'Enable CEO Only Mode to route messages directly to CEO.'}
+            </div>
           )}
         </div>
       )}

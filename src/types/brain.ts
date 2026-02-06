@@ -427,6 +427,8 @@ export interface BrainState {
   clarificationState: ClarificationState | null;
   /** Decision mode: Session blocking state (invalid CEO output) */
   decisionBlockingState: DecisionBlockingState | null;
+  /** Decision mode: CEO-only routing toggle (skip Gemini+Claude when enabled) */
+  ceoOnlyModeEnabled: boolean;
 }
 
 // -----------------------------------------------------------------------------
@@ -477,7 +479,9 @@ export type BrainAction =
   | { type: 'CANCEL_CLARIFICATION' }
   // Decision Mode CEO Hard Gate
   | { type: 'DECISION_BLOCK_SESSION'; reason: string; exchangeId: string }
-  | { type: 'DECISION_UNBLOCK_SESSION' };
+  | { type: 'DECISION_UNBLOCK_SESSION' }
+  // Decision Mode CEO-Only Toggle
+  | { type: 'SET_CEO_ONLY_MODE'; enabled: boolean };
 
 // -----------------------------------------------------------------------------
 // Brain Events (Logging / Debugging) — 6 variants, contract-locked

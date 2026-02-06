@@ -1384,3 +1384,41 @@ body {
 .ceo-clarification-panel__memo-section strong {
   color: #a0d9c1;
 }
+
+/* Toggle active state (CEO Only Mode ON) */
+.ceo-clarification-panel__toggle--active {
+  color: #ffd54f !important;
+  font-weight: 600;
+}
+
+.ceo-clarification-panel__toggle--active:hover {
+  color: #ffecb3 !important;
+}
+
+/* Expand/Collapse button */
+.ceo-clarification-panel__expand {
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  margin-left: auto;
+}
+
+.ceo-clarification-panel__expand:hover {
+  color: #aaa;
+}
+
+/* Collapsed state */
+.ceo-clarification-panel--collapsed .ceo-clarification-panel__content {
+  display: none;
+}
+
+/* Hint message */
+.ceo-clarification-panel__hint {
+  color: #666;
+  font-size: 0.75rem;
+  font-style: italic;
+  padding: 8px 0;
+}

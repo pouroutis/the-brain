@@ -718,6 +718,7 @@ describe('brainReducer — CLEAR', () => {
       discussionCeoPromptArtifact: null,
       clarificationState: null,
       decisionBlockingState: null,
+      ceoOnlyModeEnabled: false,
     };
 
     const action: BrainAction = { type: 'CLEAR' };
@@ -766,6 +767,7 @@ describe('brainReducer — State Invariants', () => {
       'discussionCeoPromptArtifact',
       'clarificationState',
       'decisionBlockingState',
+      'ceoOnlyModeEnabled',
     ].sort();
 
     const actualKeys = Object.keys(initialBrainState).sort();

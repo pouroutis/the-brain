@@ -40,6 +40,12 @@ interface DecisionModeLayoutProps {
   onClearAndUnblock: () => void;
   /** Callback to retry CEO with reformat instruction */
   onRetryCeoReformat: () => void;
+  /** CEO-only routing toggle state */
+  ceoOnlyModeEnabled: boolean;
+  /** Callback to toggle CEO-only mode */
+  onToggleCeoOnlyMode: (enabled: boolean) => void;
+  /** CEO questions from last exchange (shown even when toggle is OFF) */
+  lastCeoQuestions: string[];
 }
 
 // -----------------------------------------------------------------------------
@@ -61,6 +67,9 @@ export function DecisionModeLayout({
   blockingState,
   onClearAndUnblock,
   onRetryCeoReformat,
+  ceoOnlyModeEnabled,
+  onToggleCeoOnlyMode,
+  lastCeoQuestions,
 }: DecisionModeLayoutProps): JSX.Element {
   const isBlocked = blockingState?.isBlocked ?? false;
 
@@ -115,6 +124,9 @@ export function DecisionModeLayout({
           clarificationState={clarificationState}
           onSendMessage={onSendClarificationMessage}
           onCancel={onCancelClarification}
+          ceoOnlyModeEnabled={ceoOnlyModeEnabled}
+          onToggleCeoOnlyMode={onToggleCeoOnlyMode}
+          lastCeoQuestions={lastCeoQuestions}
         />
       </div>
     </div>
