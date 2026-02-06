@@ -422,9 +422,10 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
   );
 
   const handleContinueInDecisionMode = useCallback(() => {
-    // Switch to Decision mode with active project
+    // Clear board first to reset isDecisionFinalized, then switch to Decision mode
+    clearBoard();
     setMode('decision');
-  }, [setMode]);
+  }, [clearBoard, setMode]);
 
   const handleViewInProject = useCallback(() => {
     // Switch to Project mode to view project dashboard
