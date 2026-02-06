@@ -85,6 +85,11 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     getClarificationState,
     isClarificationActive,
     startClarification,
+    // Decision mode blocking
+    blockDecisionSession,
+    unblockDecisionSession,
+    getDecisionBlockingState,
+    isDecisionBlocked,
   } = useBrain();
 
   // ---------------------------------------------------------------------------
@@ -124,6 +129,8 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
   const discussionCeoPromptArtifact = getDiscussionCeoPromptArtifact();
   const clarificationState = getClarificationState();
   const clarificationActive = isClarificationActive();
+  const decisionBlockingState = getDecisionBlockingState();
+  const decisionBlocked = isDecisionBlocked();
 
   // ---------------------------------------------------------------------------
   // CEO Execution Prompt (memoized)
@@ -150,7 +157,7 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
   // Block main input during clarification (Decision mode)
   // ---------------------------------------------------------------------------
 
-  const canSubmitPrompt = canSubmit() && !loopRunning && !clarificationActive;
+  const canSubmitPrompt = canSubmit() && !loopRunning && !clarificationActive && !decisionBlocked;
 
   // ---------------------------------------------------------------------------
   // Handlers
@@ -162,9 +169,11 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
       if (loopRunning) return;
       // Hard block: No input during clarification (CEO-only lane)
       if (clarificationActive) return;
+      // Hard block: No input when session is blocked (invalid CEO output)
+      if (decisionBlocked) return;
       submitPrompt(prompt);
     },
-    [submitPrompt, loopRunning, clarificationActive]
+    [submitPrompt, loopRunning, clarificationActive, decisionBlocked]
   );
 
   const handleCancel = useCallback(() => {
@@ -257,31 +266,35 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
       return;
     }
 
-    // CEO response WITHOUT required markers - show warning
-    // Check if content has any partial markers (CEO tried but failed)
+    // CEO HARD GATE: Invalid output - block session
+    // CEO MUST output either a prompt (with markers) OR BLOCKED questions
+    let blockReason: string;
     const hasPartialStart = ceoResponse.content.includes('CLAUDE_CODE_PROMPT');
     const hasStartMarker = ceoResponse.content.includes(PROMPT_START_MARKER);
     const hasEndMarker = ceoResponse.content.includes(PROMPT_END_MARKER);
 
     if (hasPartialStart || hasStartMarker || hasEndMarker) {
       // CEO tried to use markers but format is wrong
-      setCeoPromptWarning(
-        `CEO prompt has malformed markers. Required format:\n${PROMPT_START_MARKER}\n(prompt)\n${PROMPT_END_MARKER}`
-      );
+      blockReason = `CEO prompt has malformed markers. Required format:\n${PROMPT_START_MARKER}\n(prompt)\n${PROMPT_END_MARKER}`;
     } else {
       // CEO didn't include markers at all
-      setCeoPromptWarning(
-        `CEO response missing required markers. Prompt panel will not be populated.`
-      );
+      blockReason = `CEO must output a Claude Code prompt (with markers) or clarification questions. Session blocked.`;
     }
-  }, [mode, processing, lastExchange, ceo, discussionCeoPromptArtifact, setDiscussionCeoPromptArtifact, startClarification]);
 
-  // Clear warning when mode changes or board is cleared
+    setCeoPromptWarning(blockReason);
+    blockDecisionSession(blockReason, lastExchange.id);
+  }, [mode, processing, lastExchange, ceo, discussionCeoPromptArtifact, setDiscussionCeoPromptArtifact, startClarification, blockDecisionSession]);
+
+  // Clear warning and unblock when mode changes or board is cleared
   useEffect(() => {
     if (mode !== 'decision' || exchanges.length === 0) {
       setCeoPromptWarning(null);
+      // Also unblock if blocked
+      if (decisionBlocked) {
+        unblockDecisionSession();
+      }
     }
-  }, [mode, exchanges.length]);
+  }, [mode, exchanges.length, decisionBlocked, unblockDecisionSession]);
 
   const hasGeneratedForCurrentExchange =
     lastExchange?.id !== null &&
@@ -364,6 +377,12 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
   const handleCancelClarification = useCallback(() => {
     cancelClarification();
   }, [cancelClarification]);
+
+  const handleClearAndUnblock = useCallback(() => {
+    // Clear board and unblock session
+    clearBoard();
+    unblockDecisionSession();
+  }, [clearBoard, unblockDecisionSession]);
 
   // ---------------------------------------------------------------------------
   // Discussion Export: Finish Discussion (JSON + Markdown)
@@ -468,6 +487,8 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
           onSendClarificationMessage={handleSendClarificationMessage}
           onCancelClarification={handleCancelClarification}
           ceoPromptWarning={ceoPromptWarning}
+          blockingState={decisionBlockingState}
+          onClearAndUnblock={handleClearAndUnblock}
         />
 
         {/* Prompt Input (with summary indicator in Decision mode) */}

@@ -710,3 +710,180 @@ describe('Clarification Messages Isolation', () => {
     expect(calledAgents).not.toContain('gemini');
   });
 });
+
+// -----------------------------------------------------------------------------
+// Decision Mode Session Blocking Tests (CEO Hard Gate)
+// -----------------------------------------------------------------------------
+
+describe('Decision Mode Session Blocking (CEO Hard Gate)', () => {
+  it('decisionBlockingState is null initially', () => {
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    expect(result.current.getDecisionBlockingState()).toBeNull();
+    expect(result.current.isDecisionBlocked()).toBe(false);
+  });
+
+  it('blockDecisionSession blocks the session', () => {
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    act(() => {
+      result.current.setMode('decision');
+    });
+
+    act(() => {
+      result.current.blockDecisionSession('Invalid CEO output', 'ex-123');
+    });
+
+    const state = result.current.getDecisionBlockingState();
+    expect(state).not.toBeNull();
+    expect(state?.isBlocked).toBe(true);
+    expect(state?.reason).toBe('Invalid CEO output');
+    expect(state?.exchangeId).toBe('ex-123');
+    expect(result.current.isDecisionBlocked()).toBe(true);
+  });
+
+  it('unblockDecisionSession clears blocking state', () => {
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    act(() => {
+      result.current.setMode('decision');
+    });
+
+    act(() => {
+      result.current.blockDecisionSession('Invalid CEO output', 'ex-123');
+    });
+
+    expect(result.current.isDecisionBlocked()).toBe(true);
+
+    act(() => {
+      result.current.unblockDecisionSession();
+    });
+
+    expect(result.current.getDecisionBlockingState()).toBeNull();
+    expect(result.current.isDecisionBlocked()).toBe(false);
+  });
+
+  it('submitPrompt is blocked when session is blocked', async () => {
+    mockCallAgent
+      .mockResolvedValueOnce(createAgentResponse('gemini'))
+      .mockResolvedValueOnce(createAgentResponse('claude'))
+      .mockResolvedValueOnce(createAgentResponse('gpt'));
+
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    act(() => {
+      result.current.setMode('decision');
+    });
+
+    // Block the session
+    act(() => {
+      result.current.blockDecisionSession('Invalid CEO output', 'ex-123');
+    });
+
+    expect(result.current.isDecisionBlocked()).toBe(true);
+
+    // Clear mock to track new calls
+    mockCallAgent.mockClear();
+
+    // Try to submit a prompt while blocked
+    act(() => {
+      result.current.submitPrompt('This should be blocked');
+    });
+
+    // Wait a bit to ensure no sequence started
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Should NOT have called any agents
+    expect(mockCallAgent).not.toHaveBeenCalled();
+
+    // Should NOT be processing
+    expect(result.current.isProcessing()).toBe(false);
+  });
+
+  it('submitPrompt works after unblocking', async () => {
+    mockCallAgent
+      .mockResolvedValueOnce(createAgentResponse('gemini'))
+      .mockResolvedValueOnce(createAgentResponse('claude'))
+      .mockResolvedValueOnce(createAgentResponse('gpt'));
+
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    act(() => {
+      result.current.setMode('decision');
+    });
+
+    // Block and unblock
+    act(() => {
+      result.current.blockDecisionSession('Invalid CEO output', 'ex-123');
+    });
+
+    act(() => {
+      result.current.unblockDecisionSession();
+    });
+
+    expect(result.current.isDecisionBlocked()).toBe(false);
+
+    // Clear mock
+    mockCallAgent.mockClear();
+
+    // Submit should work now
+    act(() => {
+      result.current.submitPrompt('This should work');
+    });
+
+    await waitFor(() => {
+      expect(result.current.isProcessing()).toBe(false);
+    });
+
+    // Should have called all 3 agents
+    expect(mockCallAgent).toHaveBeenCalledTimes(3);
+  });
+
+  it('clearBoard also unblocks session', () => {
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    act(() => {
+      result.current.setMode('decision');
+    });
+
+    // Block the session
+    act(() => {
+      result.current.blockDecisionSession('Invalid CEO output', 'ex-123');
+    });
+
+    expect(result.current.isDecisionBlocked()).toBe(true);
+
+    // Clear board
+    act(() => {
+      result.current.clearBoard();
+    });
+
+    // Should be unblocked
+    expect(result.current.isDecisionBlocked()).toBe(false);
+    expect(result.current.getDecisionBlockingState()).toBeNull();
+  });
+
+  it('changing mode unblocks session', () => {
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    act(() => {
+      result.current.setMode('decision');
+    });
+
+    // Block the session
+    act(() => {
+      result.current.blockDecisionSession('Invalid CEO output', 'ex-123');
+    });
+
+    expect(result.current.isDecisionBlocked()).toBe(true);
+
+    // Change mode
+    act(() => {
+      result.current.setMode('discussion');
+    });
+
+    // Should be unblocked
+    expect(result.current.isDecisionBlocked()).toBe(false);
+    expect(result.current.getDecisionBlockingState()).toBeNull();
+  });
+});

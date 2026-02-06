@@ -717,6 +717,7 @@ describe('brainReducer — CLEAR', () => {
       projectRun: null,
       discussionCeoPromptArtifact: null,
       clarificationState: null,
+      decisionBlockingState: null,
     };
 
     const action: BrainAction = { type: 'CLEAR' };
@@ -764,6 +765,7 @@ describe('brainReducer — State Invariants', () => {
       'projectRun',
       'discussionCeoPromptArtifact',
       'clarificationState',
+      'decisionBlockingState',
     ].sort();
 
     const actualKeys = Object.keys(initialBrainState).sort();
@@ -782,5 +784,116 @@ describe('brainReducer — State Invariants', () => {
     expect(responses).not.toBeInstanceOf(Array);
     expect(typeof responses).toBe('object');
     expect(responses?.gpt).toBeDefined();
+  });
+});
+
+// -----------------------------------------------------------------------------
+// Decision Mode Blocking State Tests
+// -----------------------------------------------------------------------------
+
+describe('brainReducer — Decision Mode Blocking', () => {
+  it('initialBrainState has null decisionBlockingState', () => {
+    expect(initialBrainState.decisionBlockingState).toBeNull();
+  });
+
+  it('DECISION_BLOCK_SESSION blocks session in decision mode', () => {
+    const state: BrainState = { ...initialBrainState, mode: 'decision' };
+
+    const result = brainReducer(state, {
+      type: 'DECISION_BLOCK_SESSION',
+      reason: 'CEO output invalid',
+      exchangeId: 'ex-123',
+    });
+
+    expect(result.decisionBlockingState).not.toBeNull();
+    expect(result.decisionBlockingState?.isBlocked).toBe(true);
+    expect(result.decisionBlockingState?.reason).toBe('CEO output invalid');
+    expect(result.decisionBlockingState?.exchangeId).toBe('ex-123');
+  });
+
+  it('DECISION_BLOCK_SESSION no-ops in discussion mode', () => {
+    const state: BrainState = { ...initialBrainState, mode: 'discussion' };
+
+    const result = brainReducer(state, {
+      type: 'DECISION_BLOCK_SESSION',
+      reason: 'CEO output invalid',
+      exchangeId: 'ex-123',
+    });
+
+    expect(result.decisionBlockingState).toBeNull();
+  });
+
+  it('DECISION_UNBLOCK_SESSION clears blocking state', () => {
+    const state: BrainState = {
+      ...initialBrainState,
+      mode: 'decision',
+      decisionBlockingState: {
+        isBlocked: true,
+        reason: 'Test reason',
+        exchangeId: 'ex-123',
+        timestamp: Date.now(),
+      },
+    };
+
+    const result = brainReducer(state, { type: 'DECISION_UNBLOCK_SESSION' });
+
+    expect(result.decisionBlockingState).toBeNull();
+  });
+
+  it('SUBMIT_START is blocked when decisionBlockingState is active', () => {
+    const state: BrainState = {
+      ...initialBrainState,
+      mode: 'decision',
+      decisionBlockingState: {
+        isBlocked: true,
+        reason: 'Test reason',
+        exchangeId: 'ex-123',
+        timestamp: Date.now(),
+      },
+    };
+
+    const result = brainReducer(state, {
+      type: 'SUBMIT_START',
+      runId: 'new-run',
+      userPrompt: 'Test',
+    });
+
+    // State unchanged — submit blocked
+    expect(result).toBe(state);
+    expect(result.pendingExchange).toBeNull();
+  });
+
+  it('CLEAR clears decisionBlockingState in decision mode', () => {
+    const state: BrainState = {
+      ...initialBrainState,
+      mode: 'decision',
+      decisionBlockingState: {
+        isBlocked: true,
+        reason: 'Test reason',
+        exchangeId: 'ex-123',
+        timestamp: Date.now(),
+      },
+    };
+
+    const result = brainReducer(state, { type: 'CLEAR' });
+
+    expect(result.decisionBlockingState).toBeNull();
+  });
+
+  it('SET_MODE clears decisionBlockingState when leaving decision mode', () => {
+    const state: BrainState = {
+      ...initialBrainState,
+      mode: 'decision',
+      decisionBlockingState: {
+        isBlocked: true,
+        reason: 'Test reason',
+        exchangeId: 'ex-123',
+        timestamp: Date.now(),
+      },
+    };
+
+    const result = brainReducer(state, { type: 'SET_MODE', mode: 'discussion' });
+
+    expect(result.decisionBlockingState).toBeNull();
   });
 });

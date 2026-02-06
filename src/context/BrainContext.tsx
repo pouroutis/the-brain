@@ -23,6 +23,7 @@ import type {
   BrainState,
   CeoPromptArtifact,
   ClarificationState,
+  DecisionBlockingState,
   DecisionMemo,
   Exchange,
   KeyNotes,
@@ -200,6 +201,10 @@ interface BrainActions {
   resolveClarification: (memo: DecisionMemo) => void;
   /** Cancel clarification lane */
   cancelClarification: () => void;
+  /** Block Decision mode session due to invalid CEO output */
+  blockDecisionSession: (reason: string, exchangeId: string) => void;
+  /** Unblock Decision mode session (retry) */
+  unblockDecisionSession: () => void;
 }
 
 /**
@@ -275,6 +280,10 @@ interface BrainSelectors {
   getClarificationState: () => ClarificationState | null;
   /** Check if clarification is active (main input disabled) */
   isClarificationActive: () => boolean;
+  /** Get decision mode blocking state */
+  getDecisionBlockingState: () => DecisionBlockingState | null;
+  /** Check if decision session is blocked */
+  isDecisionBlocked: () => boolean;
 }
 
 /**
@@ -1131,10 +1140,14 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     if (state.clarificationState?.isActive) {
       return '';
     }
+    // Guard: Block if session is blocked due to invalid CEO output (Decision mode)
+    if (state.decisionBlockingState?.isBlocked) {
+      return '';
+    }
     const runId = generateRunId();
     dispatch({ type: 'SUBMIT_START', runId, userPrompt });
     return runId;
-  }, [state.isProcessing, state.clarificationState]);
+  }, [state.isProcessing, state.clarificationState, state.decisionBlockingState]);
 
   const cancelSequence = useCallback((): void => {
     // No-op if no active sequence
@@ -1275,6 +1288,14 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
 
   const cancelClarification = useCallback((): void => {
     dispatch({ type: 'CANCEL_CLARIFICATION' });
+  }, []);
+
+  const blockDecisionSession = useCallback((reason: string, exchangeId: string): void => {
+    dispatch({ type: 'DECISION_BLOCK_SESSION', reason, exchangeId });
+  }, []);
+
+  const unblockDecisionSession = useCallback((): void => {
+    dispatch({ type: 'DECISION_UNBLOCK_SESSION' });
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -1455,6 +1476,14 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     return state.clarificationState?.isActive ?? false;
   }, [state.clarificationState]);
 
+  const getDecisionBlockingState = useCallback((): DecisionBlockingState | null => {
+    return state.decisionBlockingState;
+  }, [state.decisionBlockingState]);
+
+  const isDecisionBlocked = useCallback((): boolean => {
+    return state.decisionBlockingState?.isBlocked ?? false;
+  }, [state.decisionBlockingState]);
+
   // ---------------------------------------------------------------------------
   // Memoized Context Value
   // ---------------------------------------------------------------------------
@@ -1490,6 +1519,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       sendClarificationMessage,
       resolveClarification,
       cancelClarification,
+      blockDecisionSession,
+      unblockDecisionSession,
       // Selectors
       getState,
       getActiveRunId,
@@ -1525,6 +1556,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       getDiscussionCeoPromptArtifact,
       getClarificationState,
       isClarificationActive,
+      getDecisionBlockingState,
+      isDecisionBlocked,
     }),
     [
       submitPrompt,
@@ -1555,6 +1588,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       sendClarificationMessage,
       resolveClarification,
       cancelClarification,
+      blockDecisionSession,
+      unblockDecisionSession,
       getState,
       getActiveRunId,
       getPendingExchange,
@@ -1589,6 +1624,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       getDiscussionCeoPromptArtifact,
       getClarificationState,
       isClarificationActive,
+      getDecisionBlockingState,
+      isDecisionBlocked,
     ]
   );
 

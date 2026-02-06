@@ -266,6 +266,37 @@ export interface ClarificationState {
 }
 
 // -----------------------------------------------------------------------------
+// CEO Output Validation (Decision Mode Hard Gate)
+// -----------------------------------------------------------------------------
+
+/**
+ * CEO output validation result (Decision mode only)
+ * CEO MUST output one of:
+ * 1. Valid Claude Code prompt (with markers)
+ * 2. BLOCKED questions (max 3)
+ */
+export type CeoOutputValidation =
+  | { valid: true; type: 'prompt' }
+  | { valid: true; type: 'blocked' }
+  | { valid: false; reason: string };
+
+/**
+ * Decision mode session blocking state
+ * - null when not blocked
+ * - set when CEO output is invalid
+ */
+export interface DecisionBlockingState {
+  /** Whether session is blocked due to invalid CEO output */
+  isBlocked: boolean;
+  /** Reason for blocking */
+  reason: string;
+  /** The exchange ID that triggered the block */
+  exchangeId: string;
+  /** Timestamp when block occurred */
+  timestamp: number;
+}
+
+// -----------------------------------------------------------------------------
 // Discussion Session (Persistence)
 // -----------------------------------------------------------------------------
 
@@ -394,6 +425,8 @@ export interface BrainState {
   discussionCeoPromptArtifact: CeoPromptArtifact | null;
   /** Decision mode: CEO-only clarification lane state */
   clarificationState: ClarificationState | null;
+  /** Decision mode: Session blocking state (invalid CEO output) */
+  decisionBlockingState: DecisionBlockingState | null;
 }
 
 // -----------------------------------------------------------------------------
@@ -441,7 +474,10 @@ export type BrainAction =
   | { type: 'CLARIFICATION_CEO_STARTED' }
   | { type: 'CLARIFICATION_CEO_RESPONSE'; content: string }
   | { type: 'RESOLVE_CLARIFICATION'; memo: DecisionMemo }
-  | { type: 'CANCEL_CLARIFICATION' };
+  | { type: 'CANCEL_CLARIFICATION' }
+  // Decision Mode CEO Hard Gate
+  | { type: 'DECISION_BLOCK_SESSION'; reason: string; exchangeId: string }
+  | { type: 'DECISION_UNBLOCK_SESSION' };
 
 // -----------------------------------------------------------------------------
 // Brain Events (Logging / Debugging) — 6 variants, contract-locked

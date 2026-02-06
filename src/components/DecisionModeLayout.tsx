@@ -11,6 +11,7 @@ import type {
   BrainMode,
   CeoPromptArtifact,
   ClarificationState,
+  DecisionBlockingState,
   Exchange,
   PendingExchange,
   SystemMessage,
@@ -33,6 +34,10 @@ interface DecisionModeLayoutProps {
   onCancelClarification: () => void;
   /** Warning message when CEO prompt is missing markers */
   ceoPromptWarning: string | null;
+  /** Session blocking state (invalid CEO output) */
+  blockingState: DecisionBlockingState | null;
+  /** Callback to clear board and unblock */
+  onClearAndUnblock: () => void;
 }
 
 // -----------------------------------------------------------------------------
@@ -51,9 +56,34 @@ export function DecisionModeLayout({
   onSendClarificationMessage,
   onCancelClarification,
   ceoPromptWarning,
+  blockingState,
+  onClearAndUnblock,
 }: DecisionModeLayoutProps): JSX.Element {
+  const isBlocked = blockingState?.isBlocked ?? false;
+
   return (
     <div className="decision-mode-layout" data-testid="decision-mode-layout">
+      {/* Session Blocking Overlay */}
+      {isBlocked && (
+        <div className="decision-mode-layout__blocking-overlay" data-testid="decision-blocking-overlay">
+          <div className="decision-mode-layout__blocking-content">
+            <div className="decision-mode-layout__blocking-icon">⛔</div>
+            <h3 className="decision-mode-layout__blocking-title">Session Blocked</h3>
+            <p className="decision-mode-layout__blocking-reason">{blockingState?.reason}</p>
+            <p className="decision-mode-layout__blocking-help">
+              CEO must output either a valid Claude Code prompt (with markers) or clarification questions.
+            </p>
+            <button
+              className="decision-mode-layout__blocking-btn"
+              onClick={onClearAndUnblock}
+              data-testid="clear-and-retry-btn"
+            >
+              Clear Board &amp; Retry
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Left Pane: Discussion Thread */}
       <div className="decision-mode-layout__left">
         <ExchangeList

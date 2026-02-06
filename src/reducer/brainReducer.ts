@@ -10,6 +10,7 @@ import type {
   Carryover,
   ClarificationMessage,
   ClarificationState,
+  DecisionBlockingState,
   DiscussionSession,
   Exchange,
   PendingExchange,
@@ -51,6 +52,7 @@ export const initialBrainState: BrainState = {
   projectRun: null,
   discussionCeoPromptArtifact: null,
   clarificationState: null,
+  decisionBlockingState: null,
 };
 
 // -----------------------------------------------------------------------------
@@ -219,6 +221,11 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
 
       // Guard: Block if clarification is active (CEO-only lane)
       if (state.clarificationState?.isActive) {
+        return state;
+      }
+
+      // Guard: Block if session is blocked due to invalid CEO output (Decision mode)
+      if (state.decisionBlockingState?.isBlocked) {
         return state;
       }
 
@@ -444,6 +451,8 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         discussionCeoPromptArtifact: clearedCeoPromptArtifact,
         // Clear clarification state in decision mode
         clarificationState: state.mode === 'decision' ? null : state.clarificationState,
+        // Clear blocking state in decision mode
+        decisionBlockingState: state.mode === 'decision' ? null : state.decisionBlockingState,
         // Clear project-specific state when in project mode
         ...(state.mode === 'project' && {
           projectError: null,
@@ -479,6 +488,8 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         ...(action.mode !== 'project' && { projectRun: null }),
         // Clear clarification state when leaving decision mode
         ...(action.mode !== 'decision' && { clarificationState: null }),
+        // Clear blocking state when leaving decision mode
+        ...(action.mode !== 'decision' && { decisionBlockingState: null }),
       };
     }
 
@@ -1079,6 +1090,38 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
       return {
         ...state,
         clarificationState: null,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // DECISION_BLOCK_SESSION — Block session due to invalid CEO output
+    // -------------------------------------------------------------------------
+    case 'DECISION_BLOCK_SESSION': {
+      // Guard: Only in decision mode
+      if (state.mode !== 'decision') {
+        return state;
+      }
+
+      const blockingState: DecisionBlockingState = {
+        isBlocked: true,
+        reason: action.reason,
+        exchangeId: action.exchangeId,
+        timestamp: Date.now(),
+      };
+
+      return {
+        ...state,
+        decisionBlockingState: blockingState,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // DECISION_UNBLOCK_SESSION — Unblock session (on retry or clear)
+    // -------------------------------------------------------------------------
+    case 'DECISION_UNBLOCK_SESSION': {
+      return {
+        ...state,
+        decisionBlockingState: null,
       };
     }
 
