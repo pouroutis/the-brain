@@ -95,6 +95,7 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     switchToProjectById,
     deleteProject,
     clearProjectBlock,
+    completeDecisionEpoch,
   } = useBrain();
 
   // ---------------------------------------------------------------------------
@@ -267,6 +268,7 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     if (parsed.isBlocked && parsed.blockedQuestions.length > 0) {
       setCeoPromptWarning(null); // Clear any previous warning
       startClarification(parsed.blockedQuestions);
+      completeDecisionEpoch('blocked');
       return;
     }
 
@@ -277,6 +279,7 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
       // Create new artifact with incremented version
       const newArtifact = createCeoPromptArtifact(parsed.promptText, discussionCeoPromptArtifact);
       setDiscussionCeoPromptArtifact(newArtifact);
+      completeDecisionEpoch('prompt_delivered');
       return;
     }
 
@@ -297,7 +300,7 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
 
     setCeoPromptWarning(blockReason);
     blockDecisionSession(blockReason, lastExchange.id);
-  }, [mode, processing, lastExchange, ceo, discussionCeoPromptArtifact, setDiscussionCeoPromptArtifact, startClarification, blockDecisionSession]);
+  }, [mode, processing, lastExchange, ceo, discussionCeoPromptArtifact, setDiscussionCeoPromptArtifact, startClarification, blockDecisionSession, completeDecisionEpoch]);
 
   // Clear warning and unblock when mode changes or board is cleared
   useEffect(() => {

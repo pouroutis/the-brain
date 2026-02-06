@@ -11,6 +11,7 @@ import type {
   ClarificationMessage,
   ClarificationState,
   DecisionBlockingState,
+  DecisionEpochPhase,
   DiscussionSession,
   Exchange,
   PendingExchange,
@@ -21,6 +22,7 @@ import type {
   TranscriptEntry,
   TranscriptRole,
 } from '../types/brain';
+import { EPOCH_DEFAULT_MAX_ROUNDS, EPOCH_ABSOLUTE_MAX_ROUNDS } from '../types/brain';
 
 // Re-export constant for use in reducer
 const MAX_REVISIONS = 2;
@@ -56,6 +58,7 @@ export const initialBrainState: BrainState = {
   decisionBlockingState: null,
   ceoOnlyModeEnabled: false,
   activeProject: null,
+  decisionEpoch: null,
 };
 
 // -----------------------------------------------------------------------------
@@ -72,6 +75,14 @@ function generateSessionId(): string {
 
 function generateInterruptId(): string {
   return `int-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+// -----------------------------------------------------------------------------
+// Helper: Check if DecisionEpoch phase is terminal
+// -----------------------------------------------------------------------------
+
+function isTerminalPhase(phase: DecisionEpochPhase): boolean {
+  return phase === 'EPOCH_COMPLETE' || phase === 'EPOCH_BLOCKED' || phase === 'EPOCH_STOPPED';
 }
 
 // -----------------------------------------------------------------------------
@@ -456,6 +467,8 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         clarificationState: state.mode === 'decision' ? null : state.clarificationState,
         // Clear blocking state in decision mode
         decisionBlockingState: state.mode === 'decision' ? null : state.decisionBlockingState,
+        // Clear decisionEpoch (Batch 4)
+        decisionEpoch: null,
         // Clear project-specific state when in project mode
         ...(state.mode === 'project' && {
           projectError: null,
@@ -493,6 +506,8 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         ...(action.mode !== 'decision' && { clarificationState: null }),
         // Clear blocking state when leaving decision mode
         ...(action.mode !== 'decision' && { decisionBlockingState: null }),
+        // Clear decisionEpoch when leaving decision mode (Batch 4)
+        ...(action.mode !== 'decision' && { decisionEpoch: null }),
       };
     }
 
@@ -1175,6 +1190,8 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
       return {
         ...state,
         activeProject: action.project,
+        // Hard reset: project switch clears epoch (governance: prevents cross-context leakage)
+        decisionEpoch: null,
       };
     }
 
@@ -1233,6 +1250,188 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
       return {
         ...state,
         activeProject: null,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // EPOCH_START — Begin a new Decision Epoch
+    // -------------------------------------------------------------------------
+    case 'EPOCH_START': {
+      // Guard: only valid in Decision mode
+      if (state.mode !== 'decision') {
+        console.warn(`EPOCH_START ignored: mode is '${state.mode}', expected 'decision' (epochId: new)`);
+        return state;
+      }
+
+      // Guard: no epoch already active (must reset first)
+      if (state.decisionEpoch !== null && !isTerminalPhase(state.decisionEpoch.phase)) {
+        console.warn(`EPOCH_START ignored: epoch ${state.decisionEpoch.epochId} still active in phase '${state.decisionEpoch.phase}'`);
+        return state;
+      }
+
+      const prevId = state.decisionEpoch?.epochId ?? 0;
+
+      return {
+        ...state,
+        decisionEpoch: {
+          epochId: prevId + 1,
+          round: 1,
+          phase: action.ceoOnlyMode ? 'CEO_DRAFT' : 'ADVISORS',
+          maxRounds: EPOCH_DEFAULT_MAX_ROUNDS,
+          intent: action.intent,
+          ceoAgent: action.ceoAgent,
+          ceoOnlyMode: action.ceoOnlyMode,
+          startedAt: Date.now(),
+          completedAt: null,
+          terminalReason: null,
+        },
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // EPOCH_ADVANCE_PHASE — Move to next phase within the epoch
+    // -------------------------------------------------------------------------
+    case 'EPOCH_ADVANCE_PHASE': {
+      if (!state.decisionEpoch) {
+        console.warn('EPOCH_ADVANCE_PHASE ignored: no active epoch');
+        return state;
+      }
+
+      if (isTerminalPhase(state.decisionEpoch.phase)) {
+        console.warn(`EPOCH_ADVANCE_PHASE ignored: epoch ${state.decisionEpoch.epochId} is terminal (phase: '${state.decisionEpoch.phase}')`);
+        return state;
+      }
+
+      const validTransitions: Partial<Record<DecisionEpochPhase, DecisionEpochPhase[]>> = {
+        'ADVISORS':       ['CEO_DRAFT', 'CEO_FINAL'],
+        'CEO_DRAFT':      ['ADVISOR_REVIEW'],
+        'ADVISOR_REVIEW': ['CEO_FINAL'],
+      };
+
+      const allowed = validTransitions[state.decisionEpoch.phase];
+      if (!allowed || !allowed.includes(action.phase)) {
+        console.warn(`EPOCH_ADVANCE_PHASE: ${state.decisionEpoch.phase} → ${action.phase} is not a valid transition (epochId: ${state.decisionEpoch.epochId})`);
+        return state;
+      }
+
+      return {
+        ...state,
+        decisionEpoch: {
+          ...state.decisionEpoch,
+          phase: action.phase,
+        },
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // EPOCH_ADVANCE_ROUND — Increment round (CEO_DRAFT → ADVISOR_REVIEW)
+    // -------------------------------------------------------------------------
+    case 'EPOCH_ADVANCE_ROUND': {
+      if (!state.decisionEpoch) {
+        console.warn('EPOCH_ADVANCE_ROUND ignored: no active epoch');
+        return state;
+      }
+
+      if (isTerminalPhase(state.decisionEpoch.phase)) {
+        console.warn(`EPOCH_ADVANCE_ROUND ignored: epoch ${state.decisionEpoch.epochId} is terminal`);
+        return state;
+      }
+
+      // Guard: must be in CEO_DRAFT phase
+      if (state.decisionEpoch.phase !== 'CEO_DRAFT') {
+        console.warn(`EPOCH_ADVANCE_ROUND: only valid from CEO_DRAFT, current phase is '${state.decisionEpoch.phase}' (epochId: ${state.decisionEpoch.epochId})`);
+        return state;
+      }
+
+      // Guard: round limit
+      if (state.decisionEpoch.round >= state.decisionEpoch.maxRounds) {
+        console.warn(`EPOCH_ADVANCE_ROUND: max rounds (${state.decisionEpoch.maxRounds}) reached (epochId: ${state.decisionEpoch.epochId})`);
+        return state;
+      }
+
+      return {
+        ...state,
+        decisionEpoch: {
+          ...state.decisionEpoch,
+          round: state.decisionEpoch.round + 1,
+          phase: 'ADVISOR_REVIEW',
+        },
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // EPOCH_EXTEND_MAX_ROUNDS — Extend from 2 → 3 (BLOCKED in Round 2)
+    // -------------------------------------------------------------------------
+    case 'EPOCH_EXTEND_MAX_ROUNDS': {
+      if (!state.decisionEpoch) {
+        console.warn('EPOCH_EXTEND_MAX_ROUNDS ignored: no active epoch');
+        return state;
+      }
+
+      if (isTerminalPhase(state.decisionEpoch.phase)) {
+        console.warn(`EPOCH_EXTEND_MAX_ROUNDS ignored: epoch ${state.decisionEpoch.epochId} is terminal`);
+        return state;
+      }
+
+      // Guard: only extend from 2 → 3
+      if (state.decisionEpoch.maxRounds !== EPOCH_DEFAULT_MAX_ROUNDS) {
+        console.warn(`EPOCH_EXTEND_MAX_ROUNDS: already extended to ${state.decisionEpoch.maxRounds} (epochId: ${state.decisionEpoch.epochId})`);
+        return state;
+      }
+
+      // Guard: only in Round 2
+      if (state.decisionEpoch.round !== 2) {
+        console.warn(`EPOCH_EXTEND_MAX_ROUNDS: only valid in Round 2, current round is ${state.decisionEpoch.round} (epochId: ${state.decisionEpoch.epochId})`);
+        return state;
+      }
+
+      return {
+        ...state,
+        decisionEpoch: {
+          ...state.decisionEpoch,
+          maxRounds: EPOCH_ABSOLUTE_MAX_ROUNDS,
+        },
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // EPOCH_COMPLETE — Epoch reaches terminal state
+    // -------------------------------------------------------------------------
+    case 'EPOCH_COMPLETE': {
+      if (!state.decisionEpoch) {
+        console.warn('EPOCH_COMPLETE ignored: no active epoch');
+        return state;
+      }
+
+      // Guard: cannot complete an already-terminal epoch
+      if (isTerminalPhase(state.decisionEpoch.phase)) {
+        console.warn(`EPOCH_COMPLETE ignored: epoch ${state.decisionEpoch.epochId} already terminal (phase: '${state.decisionEpoch.phase}')`);
+        return state;
+      }
+
+      const terminalPhase: DecisionEpochPhase =
+        action.reason === 'prompt_delivered' ? 'EPOCH_COMPLETE' :
+        action.reason === 'blocked'          ? 'EPOCH_BLOCKED' :
+        /* stopped or cancelled */             'EPOCH_STOPPED';
+
+      return {
+        ...state,
+        decisionEpoch: {
+          ...state.decisionEpoch,
+          phase: terminalPhase,
+          completedAt: Date.now(),
+          terminalReason: action.reason,
+        },
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // EPOCH_RESET — Clear epoch state
+    // -------------------------------------------------------------------------
+    case 'EPOCH_RESET': {
+      return {
+        ...state,
+        decisionEpoch: null,
       };
     }
 

@@ -276,6 +276,8 @@ export interface ClarificationState {
 export interface DecisionRecord {
   /** Unique decision identifier */
   id: string;
+  /** Epoch ID for traceability (Batch 4+, optional for backward compat) */
+  epochId?: number;
   /** Creation timestamp */
   createdAt: number;
   /** Mode when decision was made */
@@ -311,6 +313,63 @@ export interface DecisionRecord {
  * - done: Project completed
  */
 export type ProjectStatus = 'active' | 'blocked' | 'done';
+
+// -----------------------------------------------------------------------------
+// Decision Epoch State Machine (Batch 4)
+// -----------------------------------------------------------------------------
+
+/**
+ * Phase states for the Decision Epoch state machine.
+ * Orchestrator transitions only — AI text NEVER moves phase directly.
+ */
+export type DecisionEpochPhase =
+  | 'IDLE'
+  | 'ADVISORS'
+  | 'CEO_DRAFT'
+  | 'ADVISOR_REVIEW'
+  | 'CEO_FINAL'
+  | 'EPOCH_COMPLETE'
+  | 'EPOCH_BLOCKED'
+  | 'EPOCH_STOPPED';
+
+/** Default max rounds per epoch */
+export const EPOCH_DEFAULT_MAX_ROUNDS = 2;
+
+/** Absolute max rounds (only reachable via BLOCKED extension) */
+export const EPOCH_ABSOLUTE_MAX_ROUNDS = 3;
+
+/**
+ * State object for a single Decision Epoch.
+ * An epoch = one user intent → N rounds of deliberation → terminal state.
+ *
+ * Invariants:
+ * - round is a first-class field, never derived from counting exchanges
+ * - phase transitions are orchestrator-driven only
+ * - Max 2 rounds default; max 3 only if CEO emits BLOCKED in Round 2
+ * - epochId is project-scoped, resets per project
+ */
+export interface DecisionEpoch {
+  /** Unique epoch identifier (monotonic within active project) */
+  epochId: number;
+  /** Current round (1-indexed) */
+  round: number;
+  /** Current phase within the round */
+  phase: DecisionEpochPhase;
+  /** Maximum rounds allowed (default 2, extends to 3 on BLOCKED) */
+  maxRounds: number;
+  /** The user's original intent for this epoch */
+  intent: string;
+  /** CEO agent for this epoch (captured at epoch start, immutable within epoch) */
+  ceoAgent: Agent;
+  /** Whether CEO-only mode was active at epoch start */
+  ceoOnlyMode: boolean;
+  /** Timestamp when epoch started */
+  startedAt: number;
+  /** Timestamp when epoch reached terminal state (null while active) */
+  completedAt: number | null;
+  /** Terminal reason (populated when phase is terminal) */
+  terminalReason: 'prompt_delivered' | 'blocked' | 'stopped' | 'cancelled' | null;
+}
 
 /**
  * Durable project state persisted to localStorage.
@@ -506,6 +565,8 @@ export interface BrainState {
   ceoOnlyModeEnabled: boolean;
   /** Active project state (ProjectState Persistence) */
   activeProject: ProjectState | null;
+  /** Decision mode: Epoch state machine (Batch 4+) */
+  decisionEpoch: DecisionEpoch | null;
 }
 
 // -----------------------------------------------------------------------------
@@ -564,7 +625,14 @@ export type BrainAction =
   | { type: 'REHYDRATE_PROJECT'; project: ProjectState }
   | { type: 'APPEND_PROJECT_DECISION'; decision: DecisionRecord }
   | { type: 'SET_PROJECT_BLOCKED'; blocked: boolean; reason?: string }
-  | { type: 'CLEAR_PROJECT' };
+  | { type: 'CLEAR_PROJECT' }
+  // Decision Epoch State Machine (Batch 4)
+  | { type: 'EPOCH_START'; intent: string; ceoAgent: Agent; ceoOnlyMode: boolean }
+  | { type: 'EPOCH_ADVANCE_PHASE'; phase: DecisionEpochPhase }
+  | { type: 'EPOCH_ADVANCE_ROUND' }
+  | { type: 'EPOCH_EXTEND_MAX_ROUNDS' }
+  | { type: 'EPOCH_COMPLETE'; reason: 'prompt_delivered' | 'blocked' | 'stopped' | 'cancelled' }
+  | { type: 'EPOCH_RESET' };
 
 // -----------------------------------------------------------------------------
 // Brain Events (Logging / Debugging) — 6 variants, contract-locked

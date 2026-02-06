@@ -24,6 +24,7 @@ import type {
   CeoPromptArtifact,
   ClarificationState,
   DecisionBlockingState,
+  DecisionEpoch,
   DecisionMemo,
   DecisionRecord,
   Exchange,
@@ -238,6 +239,8 @@ interface BrainActions {
   deleteProject: (projectId: string) => void;
   /** Clear the blocked status on the active project */
   clearProjectBlock: () => void;
+  /** Complete Decision Epoch with terminal reason (Batch 4+) */
+  completeDecisionEpoch: (reason: 'prompt_delivered' | 'blocked' | 'stopped' | 'cancelled') => void;
 }
 
 /**
@@ -317,6 +320,8 @@ interface BrainSelectors {
   getDecisionBlockingState: () => DecisionBlockingState | null;
   /** Check if decision session is blocked */
   isDecisionBlocked: () => boolean;
+  /** Get Decision Epoch state (Batch 4+) */
+  getDecisionEpoch: () => DecisionEpoch | null;
   /** Check if CEO-only mode is enabled */
   isCeoOnlyMode: () => boolean;
   /** Get active project state */
@@ -550,6 +555,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     const decision: DecisionRecord = {
       id: generateDecisionId(),
       createdAt: Date.now(),
+      epochId: state.decisionEpoch?.epochId,
       mode: state.mode,
       promptProduced: parsed.hasPromptArtifact,
       claudeCodePrompt: parsed.promptText ?? undefined,
@@ -711,6 +717,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     const handleCancel = (): void => {
       // Abort any in-flight request
       sequenceAbortController.abort();
+      // Batch 4: Terminal epoch on cancel
+      if (state.mode === 'decision') {
+        dispatch({ type: 'EPOCH_COMPLETE', reason: 'cancelled' });
+      }
       // Dispatch CANCEL_COMPLETE (runId-guarded by reducer)
       dispatch({ type: 'CANCEL_COMPLETE', runId });
       // Clear active ref
@@ -934,6 +944,11 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
         }
 
         dispatch({ type: 'AGENT_COMPLETED', runId, response });
+
+        // Batch 4: Advance epoch phase — last advisor → CEO_DRAFT
+        if (currentMode === 'decision' && !isCeoAgent && i === agentOrder.length - 2) {
+          dispatch({ type: 'EPOCH_ADVANCE_PHASE', phase: 'CEO_DRAFT' });
+        }
 
         // Update conversation context with proper agent labels
         if (response.status === 'success' && response.content) {
@@ -1279,8 +1294,19 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
 
     const runId = generateRunId();
     dispatch({ type: 'SUBMIT_START', runId, userPrompt });
+
+    // Batch 4: Start Decision Epoch (observational tracking)
+    if (state.mode === 'decision') {
+      dispatch({
+        type: 'EPOCH_START',
+        intent: userPrompt,
+        ceoAgent: ceoRef.current,
+        ceoOnlyMode: state.ceoOnlyModeEnabled,
+      });
+    }
+
     return runId;
-  }, [state.isProcessing, state.clarificationState, state.decisionBlockingState, state.mode, state.activeProject]);
+  }, [state.isProcessing, state.clarificationState, state.decisionBlockingState, state.mode, state.activeProject, state.ceoOnlyModeEnabled]);
 
   const cancelSequence = useCallback((): void => {
     // No-op if no active sequence
@@ -1591,6 +1617,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     dispatch({ type: 'SET_PROJECT_BLOCKED', blocked: false });
   }, []);
 
+  const completeDecisionEpoch = useCallback((reason: 'prompt_delivered' | 'blocked' | 'stopped' | 'cancelled'): void => {
+    dispatch({ type: 'EPOCH_COMPLETE', reason });
+  }, []);
+
   // ---------------------------------------------------------------------------
   // Selectors
   // ---------------------------------------------------------------------------
@@ -1777,6 +1807,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     return state.decisionBlockingState?.isBlocked ?? false;
   }, [state.decisionBlockingState]);
 
+  const getDecisionEpoch = useCallback((): DecisionEpoch | null => {
+    return state.decisionEpoch;
+  }, [state.decisionEpoch]);
+
   const isCeoOnlyMode = useCallback((): boolean => {
     return state.ceoOnlyModeEnabled;
   }, [state.ceoOnlyModeEnabled]);
@@ -1877,10 +1911,12 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       isClarificationActive,
       getDecisionBlockingState,
       isDecisionBlocked,
+      getDecisionEpoch,
       isCeoOnlyMode,
       getActiveProject,
       hasActiveProject,
       listProjects,
+      completeDecisionEpoch,
     }),
     [
       submitPrompt,
@@ -1959,10 +1995,12 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       isClarificationActive,
       getDecisionBlockingState,
       isDecisionBlocked,
+      getDecisionEpoch,
       isCeoOnlyMode,
       getActiveProject,
       hasActiveProject,
       listProjects,
+      completeDecisionEpoch,
     ]
   );
 

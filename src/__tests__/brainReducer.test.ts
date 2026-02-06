@@ -720,6 +720,7 @@ describe('brainReducer — CLEAR', () => {
       decisionBlockingState: null,
       ceoOnlyModeEnabled: false,
       activeProject: null,
+      decisionEpoch: null,
     };
 
     const action: BrainAction = { type: 'CLEAR' };
@@ -768,6 +769,7 @@ describe('brainReducer — State Invariants', () => {
       'discussionCeoPromptArtifact',
       'clarificationState',
       'decisionBlockingState',
+      'decisionEpoch',
       'ceoOnlyModeEnabled',
       'activeProject',
     ].sort();
