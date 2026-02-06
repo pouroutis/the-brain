@@ -1040,7 +1040,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
           clarificationContext += `${roleLabel}: ${msg.content}\n`;
         }
 
-        // Call CEO agent only
+        // Call CEO agent only (with Decision-mode context for marker prompt)
         const response = await callAgent(
           currentCeo,
           lastUserMessage.content,
@@ -1051,6 +1051,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
             callIndex: 1,
             exchanges: state.exchanges,
             projectDiscussionMode: false,
+            mode: 'decision',
+            ceoAgent: currentCeo,
           }
         );
 
@@ -1127,12 +1129,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     };
 
     runCeoClarification();
-
-    // Cleanup
-    return () => {
-      clarificationAbortController.abort();
-      clarificationAbortControllerRef.current = null;
-    };
+    // No cleanup abort - cancel/retry already abort via controller ref; finally clears ref
   }, [state.mode, state.clarificationState, state.exchanges]);
 
   // Reset clarification message count when clarification ends
