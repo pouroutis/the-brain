@@ -25,11 +25,13 @@ import type {
   ClarificationState,
   DecisionBlockingState,
   DecisionMemo,
+  DecisionRecord,
   Exchange,
   KeyNotes,
   LoopState,
   PendingExchange,
   ProjectRun,
+  ProjectState,
   SystemMessage,
   WarningState,
   ErrorCode,
@@ -47,6 +49,14 @@ import {
   loadDiscussionState,
   saveDiscussionState,
 } from '../utils/discussionPersistence';
+import {
+  generateProjectId,
+  generateDecisionId,
+  loadActiveProject,
+  saveProject,
+  setActiveProjectId,
+  clearActiveProject,
+} from '../utils/decisionPersistence';
 import {
   shouldCompact,
   getExchangesToCompact,
@@ -211,6 +221,10 @@ interface BrainActions {
   setCeoOnlyMode: (enabled: boolean) => void;
   /** Retry CEO in clarification lane (after timeout/error) */
   retryCeoClarification: () => void;
+  /** Create a new project (ProjectState Persistence) */
+  createProject: () => string;
+  /** Clear the active project */
+  clearProject: () => void;
 }
 
 /**
@@ -292,6 +306,10 @@ interface BrainSelectors {
   isDecisionBlocked: () => boolean;
   /** Check if CEO-only mode is enabled */
   isCeoOnlyMode: () => boolean;
+  /** Get active project state */
+  getActiveProject: () => ProjectState | null;
+  /** Check if there is an active project */
+  hasActiveProject: () => boolean;
 }
 
 /**
@@ -412,6 +430,12 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
         keyNotes: persisted.keyNotes,
       });
     }
+
+    // Also try to rehydrate active project
+    const activeProject = loadActiveProject();
+    if (activeProject) {
+      dispatch({ type: 'REHYDRATE_PROJECT', project: activeProject });
+    }
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -452,6 +476,80 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       saveDiscussionState(state.discussionSession, state.exchanges, state.transcript, state.keyNotes);
     }
   }, [state.discussionSession, state.exchanges, state.transcript, state.keyNotes, state.mode, state.isProcessing]);
+
+  // ---------------------------------------------------------------------------
+  // Project Persistence: Save on activeProject changes
+  // ---------------------------------------------------------------------------
+
+  useEffect(() => {
+    // Skip if no active project
+    if (!state.activeProject) return;
+
+    // Save project to localStorage
+    saveProject(state.activeProject);
+    setActiveProjectId(state.activeProject.id);
+  }, [state.activeProject]);
+
+  // ---------------------------------------------------------------------------
+  // Decision Tracking: Append decision record when CEO finalizes in Decision mode
+  // ---------------------------------------------------------------------------
+
+  const lastDecisionTrackingExchangeIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    // Only in decision mode
+    if (state.mode !== 'decision') return;
+
+    // Skip during processing
+    if (state.isProcessing) return;
+
+    // Need at least one exchange
+    if (state.exchanges.length === 0) return;
+
+    // Get the last exchange
+    const lastExchange = state.exchanges[state.exchanges.length - 1];
+    if (!lastExchange) return;
+
+    // Skip if already tracked this exchange
+    if (lastDecisionTrackingExchangeIdRef.current === lastExchange.id) return;
+
+    // Need an active project
+    if (!state.activeProject) return;
+
+    // Get CEO response
+    const currentCeo = ceoRef.current;
+    const ceoResponse = lastExchange.responsesByAgent[currentCeo];
+    if (!ceoResponse || ceoResponse.status !== 'success' || !ceoResponse.content) return;
+
+    // Mark as tracked
+    lastDecisionTrackingExchangeIdRef.current = lastExchange.id;
+
+    // Parse CEO response to determine if prompt was produced or blocked
+    const parsed = parseCeoControlBlock(ceoResponse.content);
+
+    // Compute advisors (all agents except CEO)
+    const allAgents: Agent[] = ['gpt', 'claude', 'gemini'];
+    const advisors = allAgents.filter(a => a !== currentCeo);
+
+    // Create decision record
+    const decision: DecisionRecord = {
+      id: generateDecisionId(),
+      createdAt: Date.now(),
+      mode: state.mode,
+      promptProduced: parsed.hasPromptArtifact,
+      claudeCodePrompt: parsed.promptText ?? undefined,
+      blocked: parsed.isBlocked,
+      blockedReason: parsed.isBlocked ? 'CEO requested clarification' : undefined,
+      blockedPayload: parsed.isBlocked ? parsed.blockedQuestions : undefined,
+      ceoAgent: currentCeo,
+      advisors,
+      recentExchanges: state.exchanges.slice(-10),
+      keyNotes: state.keyNotes,
+    };
+
+    // Append decision to project
+    dispatch({ type: 'APPEND_PROJECT_DECISION', decision });
+  }, [state.mode, state.isProcessing, state.exchanges, state.activeProject, state.keyNotes]);
 
   // ---------------------------------------------------------------------------
   // Discussion Compaction: Trigger after SEQUENCE_COMPLETED when threshold met
@@ -1156,10 +1254,17 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     if (state.decisionBlockingState?.isBlocked) {
       return '';
     }
+
+    // Implicit project creation: Create project if in Decision mode and no active project
+    if (state.mode === 'decision' && !state.activeProject) {
+      const projectId = generateProjectId();
+      dispatch({ type: 'CREATE_PROJECT', projectId });
+    }
+
     const runId = generateRunId();
     dispatch({ type: 'SUBMIT_START', runId, userPrompt });
     return runId;
-  }, [state.isProcessing, state.clarificationState, state.decisionBlockingState]);
+  }, [state.isProcessing, state.clarificationState, state.decisionBlockingState, state.mode, state.activeProject]);
 
   const cancelSequence = useCallback((): void => {
     // No-op if no active sequence
@@ -1416,6 +1521,19 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     dispatch({ type: 'SET_CEO_ONLY_MODE', enabled });
   }, []);
 
+  const createProject = useCallback((): string => {
+    const projectId = generateProjectId();
+    dispatch({ type: 'CREATE_PROJECT', projectId });
+    return projectId;
+  }, []);
+
+  const clearProject = useCallback((): void => {
+    // Clear active project pointer from localStorage
+    clearActiveProject();
+    // Clear from state
+    dispatch({ type: 'CLEAR_PROJECT' });
+  }, []);
+
   // ---------------------------------------------------------------------------
   // Selectors
   // ---------------------------------------------------------------------------
@@ -1606,6 +1724,14 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     return state.ceoOnlyModeEnabled;
   }, [state.ceoOnlyModeEnabled]);
 
+  const getActiveProject = useCallback((): ProjectState | null => {
+    return state.activeProject;
+  }, [state.activeProject]);
+
+  const hasActiveProject = useCallback((): boolean => {
+    return state.activeProject !== null;
+  }, [state.activeProject]);
+
   // ---------------------------------------------------------------------------
   // Memoized Context Value
   // ---------------------------------------------------------------------------
@@ -1646,6 +1772,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       unblockDecisionSession,
       retryCeoReformat,
       setCeoOnlyMode,
+      createProject,
+      clearProject,
       // Selectors
       getState,
       getActiveRunId,
@@ -1684,6 +1812,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       getDecisionBlockingState,
       isDecisionBlocked,
       isCeoOnlyMode,
+      getActiveProject,
+      hasActiveProject,
     }),
     [
       submitPrompt,
@@ -1719,6 +1849,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       unblockDecisionSession,
       retryCeoReformat,
       setCeoOnlyMode,
+      createProject,
+      clearProject,
       getState,
       getActiveRunId,
       getPendingExchange,
@@ -1756,6 +1888,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       getDecisionBlockingState,
       isDecisionBlocked,
       isCeoOnlyMode,
+      getActiveProject,
+      hasActiveProject,
     ]
   );
 

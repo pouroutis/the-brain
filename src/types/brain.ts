@@ -266,6 +266,78 @@ export interface ClarificationState {
 }
 
 // -----------------------------------------------------------------------------
+// Decision Record (ProjectState Persistence)
+// -----------------------------------------------------------------------------
+
+/**
+ * A single decision record captured after CEO finalization.
+ * Immutable once created (append-only).
+ */
+export interface DecisionRecord {
+  /** Unique decision identifier */
+  id: string;
+  /** Creation timestamp */
+  createdAt: number;
+  /** Mode when decision was made */
+  mode: BrainMode;
+  /** Whether CEO produced a Claude Code prompt */
+  promptProduced: boolean;
+  /** The Claude Code prompt text (if promptProduced=true) */
+  claudeCodePrompt?: string;
+  /** Whether CEO was blocked (needed clarification) */
+  blocked: boolean;
+  /** Reason for blocking (if blocked=true) */
+  blockedReason?: string;
+  /** Blocked questions payload (if blocked=true) */
+  blockedPayload?: string[];
+  /** CEO agent at time of decision */
+  ceoAgent: Agent;
+  /** Advisor agents at time of decision */
+  advisors: Agent[];
+  /** Last 10 exchanges at time of decision (context snapshot) */
+  recentExchanges: Exchange[];
+  /** KeyNotes at time of decision (may be null) */
+  keyNotes: KeyNotes | null;
+}
+
+// -----------------------------------------------------------------------------
+// ProjectState (Durable Persistence)
+// -----------------------------------------------------------------------------
+
+/**
+ * Project status states.
+ * - active: Project in progress
+ * - blocked: CEO needs user input
+ * - done: Project completed
+ */
+export type ProjectStatus = 'active' | 'blocked' | 'done';
+
+/**
+ * Durable project state persisted to localStorage.
+ * Survives refresh and mode transitions.
+ */
+export interface ProjectState {
+  /** Unique project identifier */
+  id: string;
+  /** Creation timestamp */
+  createdAt: number;
+  /** Last update timestamp */
+  updatedAt: number;
+  /** Optional user-provided title */
+  title?: string;
+  /** Current project status */
+  status: ProjectStatus;
+  /** ID of the last decision (if any) */
+  lastDecisionId?: string;
+  /** Append-only decision history */
+  decisions: DecisionRecord[];
+  /** Project-level memory/notes (future use) */
+  projectMemory: string[];
+  /** Schema version for migration support */
+  schemaVersion: 1;
+}
+
+// -----------------------------------------------------------------------------
 // CEO Output Validation (Decision Mode Hard Gate)
 // -----------------------------------------------------------------------------
 
@@ -429,6 +501,8 @@ export interface BrainState {
   decisionBlockingState: DecisionBlockingState | null;
   /** Decision mode: CEO-only routing toggle (skip Gemini+Claude when enabled) */
   ceoOnlyModeEnabled: boolean;
+  /** Active project state (ProjectState Persistence) */
+  activeProject: ProjectState | null;
 }
 
 // -----------------------------------------------------------------------------
@@ -481,7 +555,13 @@ export type BrainAction =
   | { type: 'DECISION_BLOCK_SESSION'; reason: string; exchangeId: string }
   | { type: 'DECISION_UNBLOCK_SESSION' }
   // Decision Mode CEO-Only Toggle
-  | { type: 'SET_CEO_ONLY_MODE'; enabled: boolean };
+  | { type: 'SET_CEO_ONLY_MODE'; enabled: boolean }
+  // ProjectState Persistence
+  | { type: 'CREATE_PROJECT'; projectId: string }
+  | { type: 'REHYDRATE_PROJECT'; project: ProjectState }
+  | { type: 'APPEND_PROJECT_DECISION'; decision: DecisionRecord }
+  | { type: 'SET_PROJECT_BLOCKED'; blocked: boolean; reason?: string }
+  | { type: 'CLEAR_PROJECT' };
 
 // -----------------------------------------------------------------------------
 // Brain Events (Logging / Debugging) — 6 variants, contract-locked

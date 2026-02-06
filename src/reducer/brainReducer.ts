@@ -16,6 +16,7 @@ import type {
   PendingExchange,
   ProjectRun,
   ProjectInterrupt,
+  ProjectState,
   SystemMessage,
   TranscriptEntry,
   TranscriptRole,
@@ -54,6 +55,7 @@ export const initialBrainState: BrainState = {
   clarificationState: null,
   decisionBlockingState: null,
   ceoOnlyModeEnabled: false,
+  activeProject: null,
 };
 
 // -----------------------------------------------------------------------------
@@ -1133,6 +1135,95 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
       return {
         ...state,
         ceoOnlyModeEnabled: action.enabled,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // CREATE_PROJECT — Create a new active project
+    // -------------------------------------------------------------------------
+    case 'CREATE_PROJECT': {
+      const now = Date.now();
+      const newProject: ProjectState = {
+        id: action.projectId,
+        createdAt: now,
+        updatedAt: now,
+        status: 'active',
+        decisions: [],
+        projectMemory: [],
+        schemaVersion: 1,
+      };
+
+      return {
+        ...state,
+        activeProject: newProject,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // REHYDRATE_PROJECT — Restore project from localStorage
+    // -------------------------------------------------------------------------
+    case 'REHYDRATE_PROJECT': {
+      // Guard: Block if currently processing
+      if (state.isProcessing) {
+        return state;
+      }
+
+      return {
+        ...state,
+        activeProject: action.project,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // APPEND_PROJECT_DECISION — Add a decision record to active project
+    // -------------------------------------------------------------------------
+    case 'APPEND_PROJECT_DECISION': {
+      // Guard: Require active project
+      if (!state.activeProject) {
+        return state;
+      }
+
+      const updatedProject: ProjectState = {
+        ...state.activeProject,
+        updatedAt: Date.now(),
+        lastDecisionId: action.decision.id,
+        decisions: [...state.activeProject.decisions, action.decision],
+        // Update status based on decision
+        status: action.decision.blocked ? 'blocked' : 'active',
+      };
+
+      return {
+        ...state,
+        activeProject: updatedProject,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // SET_PROJECT_BLOCKED — Update project blocked status
+    // -------------------------------------------------------------------------
+    case 'SET_PROJECT_BLOCKED': {
+      // Guard: Require active project
+      if (!state.activeProject) {
+        return state;
+      }
+
+      return {
+        ...state,
+        activeProject: {
+          ...state.activeProject,
+          updatedAt: Date.now(),
+          status: action.blocked ? 'blocked' : 'active',
+        },
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // CLEAR_PROJECT — Clear the active project
+    // -------------------------------------------------------------------------
+    case 'CLEAR_PROJECT': {
+      return {
+        ...state,
+        activeProject: null,
       };
     }
 
