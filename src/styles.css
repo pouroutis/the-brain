@@ -897,6 +897,9 @@ body {
   width: 340px;
   flex-shrink: 0;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 /* -----------------------------------------------------------------------------
@@ -908,7 +911,8 @@ body {
   border: 1px solid #333;
   border-radius: 8px;
   padding: 16px;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }
@@ -1017,4 +1021,243 @@ body {
     width: 100%;
     max-height: 300px;
   }
+}
+
+/* -----------------------------------------------------------------------------
+   CEO Clarification Panel (Decision Mode Only)
+   ----------------------------------------------------------------------------- */
+
+.ceo-clarification-panel {
+  margin-top: 12px;
+  border: 1px solid #333;
+  border-radius: 8px;
+  background-color: #1e1e2e;
+  overflow: hidden;
+}
+
+.ceo-clarification-panel--inactive {
+  opacity: 0.6;
+}
+
+.ceo-clarification-panel--active {
+  border-color: #ffd54f;
+}
+
+.ceo-clarification-panel__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background-color: #242438;
+}
+
+.ceo-clarification-panel__toggle {
+  background: none;
+  border: none;
+  color: #aaa;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ceo-clarification-panel__toggle:hover:not(:disabled) {
+  color: #fff;
+}
+
+.ceo-clarification-panel__toggle:disabled {
+  cursor: not-allowed;
+}
+
+.ceo-clarification-panel__active-badge {
+  background-color: #665200;
+  color: #ffd54f;
+  font-size: 0.625rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+.ceo-clarification-panel__cancel {
+  background: none;
+  border: 1px solid #555;
+  border-radius: 4px;
+  color: #888;
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.ceo-clarification-panel__cancel:hover {
+  border-color: #e57373;
+  color: #e57373;
+}
+
+.ceo-clarification-panel__content {
+  padding: 12px 14px;
+}
+
+.ceo-clarification-panel__questions {
+  margin-bottom: 12px;
+  padding: 10px;
+  background-color: #2a2a3a;
+  border-radius: 6px;
+}
+
+.ceo-clarification-panel__questions-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #ffd54f;
+  margin-bottom: 6px;
+}
+
+.ceo-clarification-panel__questions ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.ceo-clarification-panel__questions li {
+  font-size: 0.8125rem;
+  color: #ccc;
+  margin-bottom: 4px;
+}
+
+.ceo-clarification-panel__messages {
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+
+.ceo-clarification-panel__message {
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+}
+
+.ceo-clarification-panel__message--user {
+  background-color: #1a3a5c;
+  margin-left: 16px;
+}
+
+.ceo-clarification-panel__message--ceo {
+  background-color: #2a2a3a;
+  margin-right: 16px;
+}
+
+.ceo-clarification-panel__message-role {
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+.ceo-clarification-panel__message--user .ceo-clarification-panel__message-role {
+  color: #64b5f6;
+}
+
+.ceo-clarification-panel__message--ceo .ceo-clarification-panel__message-role {
+  color: #ffd54f;
+}
+
+.ceo-clarification-panel__message-content {
+  color: #ddd;
+}
+
+.ceo-clarification-panel__message--loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ceo-clarification-panel__spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #444;
+  border-top-color: #ffd54f;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ceo-clarification-panel__input-form {
+  display: flex;
+  gap: 8px;
+}
+
+.ceo-clarification-panel__input {
+  flex: 1;
+  background-color: #242438;
+  border: 1px solid #444;
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: #eaeaea;
+  font-size: 0.8125rem;
+  font-family: inherit;
+  resize: none;
+}
+
+.ceo-clarification-panel__input:focus {
+  outline: none;
+  border-color: #ffd54f;
+}
+
+.ceo-clarification-panel__input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ceo-clarification-panel__send {
+  background-color: #665200;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  color: #ffd54f;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.ceo-clarification-panel__send:hover:not(:disabled) {
+  background-color: #7a6200;
+}
+
+.ceo-clarification-panel__send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Decision Memo */
+.ceo-clarification-panel__memo {
+  margin-top: 12px;
+  padding: 12px;
+  background-color: #1a3a2e;
+  border: 1px solid #2d5a4a;
+  border-radius: 6px;
+}
+
+.ceo-clarification-panel__memo-header {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #52b788;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #2d5a4a;
+}
+
+.ceo-clarification-panel__memo-section {
+  font-size: 0.8125rem;
+  color: #ccc;
+  margin-bottom: 8px;
+}
+
+.ceo-clarification-panel__memo-section strong {
+  color: #a0d9c1;
 }

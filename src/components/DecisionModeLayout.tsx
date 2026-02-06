@@ -1,14 +1,16 @@
 // =============================================================================
 // The Brain — Multi-AI Sequential Chat System
-// Decision Mode Layout (Two-Pane: Thread + CEO Prompt)
+// Decision Mode Layout (Two-Pane: Thread + CEO Prompt + Clarification)
 // =============================================================================
 
 import { ExchangeList } from './ExchangeList';
 import { CeoPromptPanel } from './CeoPromptPanel';
+import { CeoClarificationPanel } from './CeoClarificationPanel';
 import type {
   Agent,
   BrainMode,
   CeoPromptArtifact,
+  ClarificationState,
   Exchange,
   PendingExchange,
   SystemMessage,
@@ -26,6 +28,9 @@ interface DecisionModeLayoutProps {
   ceo: Agent;
   systemMessages: SystemMessage[];
   ceoPromptArtifact: CeoPromptArtifact | null;
+  clarificationState: ClarificationState | null;
+  onSendClarificationMessage: (content: string) => void;
+  onCancelClarification: () => void;
 }
 
 // -----------------------------------------------------------------------------
@@ -40,6 +45,9 @@ export function DecisionModeLayout({
   ceo,
   systemMessages,
   ceoPromptArtifact,
+  clarificationState,
+  onSendClarificationMessage,
+  onCancelClarification,
 }: DecisionModeLayoutProps): JSX.Element {
   return (
     <div className="decision-mode-layout" data-testid="decision-mode-layout">
@@ -55,9 +63,14 @@ export function DecisionModeLayout({
         />
       </div>
 
-      {/* Right Pane: CEO Prompt Artifact */}
+      {/* Right Pane: CEO Prompt + Clarification */}
       <div className="decision-mode-layout__right">
         <CeoPromptPanel artifact={ceoPromptArtifact} />
+        <CeoClarificationPanel
+          clarificationState={clarificationState}
+          onSendMessage={onSendClarificationMessage}
+          onCancel={onCancelClarification}
+        />
       </div>
     </div>
   );

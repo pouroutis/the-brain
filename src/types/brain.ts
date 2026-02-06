@@ -218,6 +218,54 @@ export interface CeoPromptArtifact {
 }
 
 // -----------------------------------------------------------------------------
+// CEO Clarification Lane (Decision Mode Only)
+// -----------------------------------------------------------------------------
+
+/**
+ * Single message in the clarification lane
+ */
+export interface ClarificationMessage {
+  id: string;
+  role: 'user' | 'ceo';
+  content: string;
+  timestamp: number;
+}
+
+/**
+ * Decision Memo posted by CEO after clarification is resolved
+ */
+export interface DecisionMemo {
+  /** Summary of the clarification exchange */
+  clarificationSummary: string;
+  /** The CEO's final decision */
+  finalDecision: string;
+  /** Next step to take */
+  nextStep: string;
+  /** Timestamp when memo was created */
+  timestamp: number;
+}
+
+/**
+ * State of the CEO-only clarification lane (Decision mode only)
+ * - null when not active
+ * - active when CEO outputs BLOCKED
+ */
+export interface ClarificationState {
+  /** Whether clarification is currently active (main input locked) */
+  isActive: boolean;
+  /** The questions CEO asked when entering BLOCKED state (max 3) */
+  blockedQuestions: string[];
+  /** Messages exchanged in clarification lane */
+  messages: ClarificationMessage[];
+  /** Whether CEO is currently processing a response */
+  isProcessing: boolean;
+  /** The Decision Memo (set when clarification is resolved) */
+  decisionMemo: DecisionMemo | null;
+  /** Timestamp when clarification started */
+  startedAt: number;
+}
+
+// -----------------------------------------------------------------------------
 // Discussion Session (Persistence)
 // -----------------------------------------------------------------------------
 
@@ -344,6 +392,8 @@ export interface BrainState {
   projectRun: ProjectRun | null;
   /** Discussion mode: CEO's finalized Claude Code prompt artifact */
   discussionCeoPromptArtifact: CeoPromptArtifact | null;
+  /** Decision mode: CEO-only clarification lane state */
+  clarificationState: ClarificationState | null;
 }
 
 // -----------------------------------------------------------------------------
@@ -384,7 +434,14 @@ export type BrainAction =
   | { type: 'PROJECT_MARK_DONE' }
   | { type: 'PROJECT_FORCE_FAIL' }
   // Discussion Mode CEO Prompt Artifact
-  | { type: 'SET_DISCUSSION_CEO_PROMPT_ARTIFACT'; artifact: CeoPromptArtifact };
+  | { type: 'SET_DISCUSSION_CEO_PROMPT_ARTIFACT'; artifact: CeoPromptArtifact }
+  // Decision Mode CEO Clarification Lane
+  | { type: 'START_CLARIFICATION'; questions: string[] }
+  | { type: 'CLARIFICATION_USER_MESSAGE'; content: string }
+  | { type: 'CLARIFICATION_CEO_STARTED' }
+  | { type: 'CLARIFICATION_CEO_RESPONSE'; content: string }
+  | { type: 'RESOLVE_CLARIFICATION'; memo: DecisionMemo }
+  | { type: 'CANCEL_CLARIFICATION' };
 
 // -----------------------------------------------------------------------------
 // Brain Events (Logging / Debugging) — 6 variants, contract-locked

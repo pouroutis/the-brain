@@ -8,6 +8,8 @@ import type {
   BrainState,
   BrainAction,
   Carryover,
+  ClarificationMessage,
+  ClarificationState,
   DiscussionSession,
   Exchange,
   PendingExchange,
@@ -48,6 +50,7 @@ export const initialBrainState: BrainState = {
   ghostOutput: null,
   projectRun: null,
   discussionCeoPromptArtifact: null,
+  clarificationState: null,
 };
 
 // -----------------------------------------------------------------------------
@@ -123,6 +126,14 @@ function generateExchangeId(): string {
 
 function generateSystemMessageId(): string {
   return `sys-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+// -----------------------------------------------------------------------------
+// Helper: Generate Clarification Message ID
+// -----------------------------------------------------------------------------
+
+function generateClarificationMessageId(): string {
+  return `clr-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 // -----------------------------------------------------------------------------
@@ -426,6 +437,8 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         keyNotes: clearedKeyNotes,
         systemMessages: clearedSystemMessages,
         discussionCeoPromptArtifact: clearedCeoPromptArtifact,
+        // Clear clarification state in decision mode
+        clarificationState: state.mode === 'decision' ? null : state.clarificationState,
         // Clear project-specific state when in project mode
         ...(state.mode === 'project' && {
           projectError: null,
@@ -459,6 +472,8 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         projectError: null,
         // Clear projectRun when leaving project mode
         ...(action.mode !== 'project' && { projectRun: null }),
+        // Clear clarification state when leaving decision mode
+        ...(action.mode !== 'decision' && { clarificationState: null }),
       };
     }
 
@@ -921,6 +936,144 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
       return {
         ...state,
         discussionCeoPromptArtifact: action.artifact,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // START_CLARIFICATION — CEO outputs BLOCKED, enters clarification lane
+    // -------------------------------------------------------------------------
+    case 'START_CLARIFICATION': {
+      // Guard: Only in decision mode
+      if (state.mode !== 'decision') {
+        return state;
+      }
+
+      // Guard: Block if clarification already active
+      if (state.clarificationState?.isActive) {
+        return state;
+      }
+
+      const newClarificationState: ClarificationState = {
+        isActive: true,
+        blockedQuestions: action.questions.slice(0, 3), // Max 3 questions
+        messages: [],
+        isProcessing: false,
+        decisionMemo: null,
+        startedAt: Date.now(),
+      };
+
+      return {
+        ...state,
+        clarificationState: newClarificationState,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // CLARIFICATION_USER_MESSAGE — User sends message in clarification lane
+    // -------------------------------------------------------------------------
+    case 'CLARIFICATION_USER_MESSAGE': {
+      // Guard: Require active clarification
+      if (!state.clarificationState?.isActive) {
+        return state;
+      }
+
+      // Guard: Block if CEO is currently processing
+      if (state.clarificationState.isProcessing) {
+        return state;
+      }
+
+      const userMessage: ClarificationMessage = {
+        id: generateClarificationMessageId(),
+        role: 'user',
+        content: action.content,
+        timestamp: Date.now(),
+      };
+
+      return {
+        ...state,
+        clarificationState: {
+          ...state.clarificationState,
+          messages: [...state.clarificationState.messages, userMessage],
+        },
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // CLARIFICATION_CEO_STARTED — CEO starts processing clarification response
+    // -------------------------------------------------------------------------
+    case 'CLARIFICATION_CEO_STARTED': {
+      // Guard: Require active clarification
+      if (!state.clarificationState?.isActive) {
+        return state;
+      }
+
+      return {
+        ...state,
+        clarificationState: {
+          ...state.clarificationState,
+          isProcessing: true,
+        },
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // CLARIFICATION_CEO_RESPONSE — CEO responds in clarification lane
+    // -------------------------------------------------------------------------
+    case 'CLARIFICATION_CEO_RESPONSE': {
+      // Guard: Require active clarification
+      if (!state.clarificationState?.isActive) {
+        return state;
+      }
+
+      const ceoMessage: ClarificationMessage = {
+        id: generateClarificationMessageId(),
+        role: 'ceo',
+        content: action.content,
+        timestamp: Date.now(),
+      };
+
+      return {
+        ...state,
+        clarificationState: {
+          ...state.clarificationState,
+          messages: [...state.clarificationState.messages, ceoMessage],
+          isProcessing: false,
+        },
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // RESOLVE_CLARIFICATION — CEO resolves with Decision Memo
+    // -------------------------------------------------------------------------
+    case 'RESOLVE_CLARIFICATION': {
+      // Guard: Require active clarification
+      if (!state.clarificationState?.isActive) {
+        return state;
+      }
+
+      return {
+        ...state,
+        clarificationState: {
+          ...state.clarificationState,
+          isActive: false,
+          isProcessing: false,
+          decisionMemo: action.memo,
+        },
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // CANCEL_CLARIFICATION — User cancels clarification lane
+    // -------------------------------------------------------------------------
+    case 'CANCEL_CLARIFICATION': {
+      // Guard: Require active clarification
+      if (!state.clarificationState?.isActive) {
+        return state;
+      }
+
+      return {
+        ...state,
+        clarificationState: null,
       };
     }
 

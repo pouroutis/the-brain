@@ -12,10 +12,12 @@ import type { CeoPromptArtifact } from '../types/brain';
 /**
  * CEO control block structure.
  * Format: {"ceo_action": "FINALIZE_PROMPT", "claude_code_prompt": "..."}
+ * Or: {"ceo_action": "BLOCKED", "questions": ["Q1?", "Q2?"]}
  */
 interface CeoControlBlock {
   ceo_action: string;
   claude_code_prompt?: string;
+  questions?: string[];
 }
 
 /**
@@ -28,6 +30,10 @@ export interface ParsedCeoResponse {
   promptText: string | null;
   /** The content with control block removed (for display) */
   displayContent: string;
+  /** Whether a BLOCKED action was found (Decision mode clarification) */
+  isBlocked: boolean;
+  /** Questions from BLOCKED action (max 3) */
+  blockedQuestions: string[];
 }
 
 // -----------------------------------------------------------------------------
@@ -43,12 +49,15 @@ const CEO_CONTROL_BLOCK_REGEX = /\{[\s\S]*?"ceo_action"\s*:\s*"[^"]*"[\s\S]*?\}/
 /**
  * Parse CEO response content for control blocks.
  * Extracts FINALIZE_PROMPT artifacts for the right pane.
+ * Detects BLOCKED state for clarification lane (Decision mode).
  */
 export function parseCeoControlBlock(content: string): ParsedCeoResponse {
   const result: ParsedCeoResponse = {
     hasPromptArtifact: false,
     promptText: null,
     displayContent: content,
+    isBlocked: false,
+    blockedQuestions: [],
   };
 
   const matches = content.match(CEO_CONTROL_BLOCK_REGEX);
@@ -66,6 +75,16 @@ export function parseCeoControlBlock(content: string): ParsedCeoResponse {
         // Remove the control block from display content
         result.displayContent = content.replace(match, '').trim();
         // Only process first FINALIZE_PROMPT found
+        break;
+      }
+
+      if (parsed.ceo_action === 'BLOCKED' && Array.isArray(parsed.questions)) {
+        result.isBlocked = true;
+        // Limit to max 3 questions
+        result.blockedQuestions = parsed.questions.slice(0, 3);
+        // Remove the control block from display content
+        result.displayContent = content.replace(match, '').trim();
+        // Only process first BLOCKED found
         break;
       }
     } catch {

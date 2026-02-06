@@ -22,6 +22,8 @@ import type {
   BrainMode,
   BrainState,
   CeoPromptArtifact,
+  ClarificationState,
+  DecisionMemo,
   Exchange,
   KeyNotes,
   LoopState,
@@ -189,6 +191,14 @@ interface BrainActions {
   forceProjectFail: () => void;
   /** Set the discussion mode CEO prompt artifact */
   setDiscussionCeoPromptArtifact: (artifact: CeoPromptArtifact) => void;
+  /** Start clarification lane when CEO outputs BLOCKED (Decision mode only) */
+  startClarification: (questions: string[]) => void;
+  /** Send user message in clarification lane */
+  sendClarificationMessage: (content: string) => void;
+  /** Resolve clarification with Decision Memo */
+  resolveClarification: (memo: DecisionMemo) => void;
+  /** Cancel clarification lane */
+  cancelClarification: () => void;
 }
 
 /**
@@ -260,6 +270,10 @@ interface BrainSelectors {
   getProjectRun: () => ProjectRun | null;
   /** Get discussion mode CEO prompt artifact */
   getDiscussionCeoPromptArtifact: () => CeoPromptArtifact | null;
+  /** Get clarification state (Decision mode only) */
+  getClarificationState: () => ClarificationState | null;
+  /** Check if clarification is active (main input disabled) */
+  isClarificationActive: () => boolean;
 }
 
 /**
@@ -941,6 +955,122 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
   }, [state.mode, state.loopState, state.lastProjectIntent, state.carryover]);
 
   // ---------------------------------------------------------------------------
+  // CEO-Only Clarification Effect (Decision mode only)
+  // Triggered when user sends a message in clarification lane
+  // Calls ONLY the CEO agent (not all 3 agents)
+  // ---------------------------------------------------------------------------
+
+  const clarificationAbortControllerRef = useRef<AbortController | null>(null);
+  const lastClarificationMessageCountRef = useRef<number>(0);
+
+  useEffect(() => {
+    // Only in decision mode with active clarification
+    if (state.mode !== 'decision' || !state.clarificationState?.isActive) {
+      return;
+    }
+
+    // Skip if CEO is already processing
+    if (state.clarificationState.isProcessing) {
+      return;
+    }
+
+    // Get user messages only
+    const userMessages = state.clarificationState.messages.filter(m => m.role === 'user');
+    const currentUserMessageCount = userMessages.length;
+
+    // Skip if no new user messages
+    if (currentUserMessageCount <= lastClarificationMessageCountRef.current) {
+      return;
+    }
+
+    // Skip if already processing this message
+    if (clarificationAbortControllerRef.current) {
+      return;
+    }
+
+    // Update message count
+    lastClarificationMessageCountRef.current = currentUserMessageCount;
+
+    // Get the last user message
+    const lastUserMessage = userMessages[userMessages.length - 1];
+    if (!lastUserMessage) return;
+
+    // Create abort controller for this call
+    const clarificationAbortController = new AbortController();
+    clarificationAbortControllerRef.current = clarificationAbortController;
+
+    // Mark CEO as processing
+    dispatch({ type: 'CLARIFICATION_CEO_STARTED' });
+
+    const runCeoClarification = async () => {
+      try {
+        const currentCeo = ceoRef.current;
+
+        // Build context from clarification history
+        let clarificationContext = `[CLARIFICATION LANE - CEO ONLY]\n`;
+        clarificationContext += `Questions: ${state.clarificationState!.blockedQuestions.join(', ')}\n\n`;
+        for (const msg of state.clarificationState!.messages) {
+          const roleLabel = msg.role === 'user' ? 'USER' : 'CEO';
+          clarificationContext += `${roleLabel}: ${msg.content}\n`;
+        }
+
+        // Call CEO agent only
+        const response = await callAgent(
+          currentCeo,
+          lastUserMessage.content,
+          clarificationContext,
+          clarificationAbortController,
+          {
+            runId: `clarification-${Date.now()}`,
+            callIndex: 1,
+            exchanges: state.exchanges,
+            projectDiscussionMode: false,
+          }
+        );
+
+        // Check if aborted
+        if (clarificationAbortController.signal.aborted) {
+          return;
+        }
+
+        // Handle response
+        if (response.status === 'success' && response.content) {
+          dispatch({ type: 'CLARIFICATION_CEO_RESPONSE', content: response.content });
+        } else {
+          // Error: dispatch a brief error message
+          dispatch({
+            type: 'CLARIFICATION_CEO_RESPONSE',
+            content: '[CEO response failed. Please try again.]',
+          });
+        }
+      } catch {
+        // Error during clarification
+        dispatch({
+          type: 'CLARIFICATION_CEO_RESPONSE',
+          content: '[CEO response failed. Please try again.]',
+        });
+      } finally {
+        clarificationAbortControllerRef.current = null;
+      }
+    };
+
+    runCeoClarification();
+
+    // Cleanup
+    return () => {
+      clarificationAbortController.abort();
+      clarificationAbortControllerRef.current = null;
+    };
+  }, [state.mode, state.clarificationState, state.exchanges]);
+
+  // Reset clarification message count when clarification ends
+  useEffect(() => {
+    if (!state.clarificationState?.isActive) {
+      lastClarificationMessageCountRef.current = 0;
+    }
+  }, [state.clarificationState?.isActive]);
+
+  // ---------------------------------------------------------------------------
   // Action Creators
   // ---------------------------------------------------------------------------
 
@@ -1075,6 +1205,24 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
 
   const setDiscussionCeoPromptArtifact = useCallback((artifact: CeoPromptArtifact): void => {
     dispatch({ type: 'SET_DISCUSSION_CEO_PROMPT_ARTIFACT', artifact });
+  }, []);
+
+  const startClarification = useCallback((questions: string[]): void => {
+    dispatch({ type: 'START_CLARIFICATION', questions });
+  }, []);
+
+  const sendClarificationMessage = useCallback((content: string): void => {
+    // Add user message to clarification lane
+    dispatch({ type: 'CLARIFICATION_USER_MESSAGE', content });
+    // Trigger CEO-only call (will be handled by separate effect)
+  }, []);
+
+  const resolveClarification = useCallback((memo: DecisionMemo): void => {
+    dispatch({ type: 'RESOLVE_CLARIFICATION', memo });
+  }, []);
+
+  const cancelClarification = useCallback((): void => {
+    dispatch({ type: 'CANCEL_CLARIFICATION' });
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -1247,6 +1395,14 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     return state.discussionCeoPromptArtifact;
   }, [state.discussionCeoPromptArtifact]);
 
+  const getClarificationState = useCallback((): ClarificationState | null => {
+    return state.clarificationState;
+  }, [state.clarificationState]);
+
+  const isClarificationActive = useCallback((): boolean => {
+    return state.clarificationState?.isActive ?? false;
+  }, [state.clarificationState]);
+
   // ---------------------------------------------------------------------------
   // Memoized Context Value
   // ---------------------------------------------------------------------------
@@ -1278,6 +1434,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       markProjectDone,
       forceProjectFail,
       setDiscussionCeoPromptArtifact,
+      startClarification,
+      sendClarificationMessage,
+      resolveClarification,
+      cancelClarification,
       // Selectors
       getState,
       getActiveRunId,
@@ -1311,6 +1471,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       getLastProjectIntent,
       getProjectRun,
       getDiscussionCeoPromptArtifact,
+      getClarificationState,
+      isClarificationActive,
     }),
     [
       submitPrompt,
@@ -1337,6 +1499,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       markProjectDone,
       forceProjectFail,
       setDiscussionCeoPromptArtifact,
+      startClarification,
+      sendClarificationMessage,
+      resolveClarification,
+      cancelClarification,
       getState,
       getActiveRunId,
       getPendingExchange,
@@ -1369,6 +1535,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       getLastProjectIntent,
       getProjectRun,
       getDiscussionCeoPromptArtifact,
+      getClarificationState,
+      isClarificationActive,
     ]
   );
 

@@ -74,6 +74,12 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     getProjectRun,
     getDiscussionCeoPromptArtifact,
     setDiscussionCeoPromptArtifact,
+    // Clarification actions
+    sendClarificationMessage,
+    cancelClarification,
+    getClarificationState,
+    isClarificationActive,
+    startClarification,
   } = useBrain();
 
   // ---------------------------------------------------------------------------
@@ -111,6 +117,8 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
   const projectError = getProjectError();
   const projectRun = getProjectRun();
   const discussionCeoPromptArtifact = getDiscussionCeoPromptArtifact();
+  const clarificationState = getClarificationState();
+  const clarificationActive = isClarificationActive();
 
   // ---------------------------------------------------------------------------
   // CEO Execution Prompt (memoized)
@@ -134,9 +142,10 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
   // ---------------------------------------------------------------------------
   // Input Control
   // Block advisor input during execution loop (read-only mode)
+  // Block main input during clarification (Decision mode)
   // ---------------------------------------------------------------------------
 
-  const canSubmitPrompt = canSubmit() && !loopRunning;
+  const canSubmitPrompt = canSubmit() && !loopRunning && !clarificationActive;
 
   // ---------------------------------------------------------------------------
   // Handlers
@@ -220,7 +229,12 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
       const newArtifact = createCeoPromptArtifact(parsed.promptText, discussionCeoPromptArtifact);
       setDiscussionCeoPromptArtifact(newArtifact);
     }
-  }, [mode, processing, lastExchange, ceo, discussionCeoPromptArtifact, setDiscussionCeoPromptArtifact]);
+
+    // Check for BLOCKED state (trigger clarification lane)
+    if (parsed.isBlocked && parsed.blockedQuestions.length > 0) {
+      startClarification(parsed.blockedQuestions);
+    }
+  }, [mode, processing, lastExchange, ceo, discussionCeoPromptArtifact, setDiscussionCeoPromptArtifact, startClarification]);
 
   const hasGeneratedForCurrentExchange =
     lastExchange?.id !== null &&
@@ -288,6 +302,21 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
   const handleCopyPrompt = useCallback(() => {
     // Placeholder for tracking copy action
   }, []);
+
+  // ---------------------------------------------------------------------------
+  // Clarification Handlers (Decision Mode)
+  // ---------------------------------------------------------------------------
+
+  const handleSendClarificationMessage = useCallback(
+    (content: string) => {
+      sendClarificationMessage(content);
+    },
+    [sendClarificationMessage]
+  );
+
+  const handleCancelClarification = useCallback(() => {
+    cancelClarification();
+  }, [cancelClarification]);
 
   // ---------------------------------------------------------------------------
   // Discussion Export: Finish Discussion (JSON + Markdown)
@@ -388,6 +417,9 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
           ceo={ceo}
           systemMessages={systemMessages}
           ceoPromptArtifact={discussionCeoPromptArtifact}
+          clarificationState={clarificationState}
+          onSendClarificationMessage={handleSendClarificationMessage}
+          onCancelClarification={handleCancelClarification}
         />
 
         {/* Prompt Input (with summary indicator in Decision mode) */}
