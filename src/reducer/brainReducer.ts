@@ -405,7 +405,11 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
       // Clear keyNotes and systemMessages in discussion mode
       const clearedKeyNotes = state.mode === 'discussion' ? null : state.keyNotes;
       const clearedSystemMessages: SystemMessage[] = state.mode === 'discussion' ? [] : state.systemMessages;
-      const clearedCeoPromptArtifact = state.mode === 'discussion' ? null : state.discussionCeoPromptArtifact;
+      // Clear CEO prompt artifact in discussion and decision modes (fresh session)
+      const clearedCeoPromptArtifact =
+        state.mode === 'discussion' || state.mode === 'decision'
+          ? null
+          : state.discussionCeoPromptArtifact;
 
       return {
         ...state,
@@ -905,11 +909,12 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
     }
 
     // -------------------------------------------------------------------------
-    // SET_DISCUSSION_CEO_PROMPT_ARTIFACT — Store CEO prompt artifact (Discussion mode)
+    // SET_DISCUSSION_CEO_PROMPT_ARTIFACT — Store CEO prompt artifact (Decision mode)
+    // Note: This action is used in Decision mode for the CEO prompt panel
     // -------------------------------------------------------------------------
     case 'SET_DISCUSSION_CEO_PROMPT_ARTIFACT': {
-      // Guard: Only in discussion mode
-      if (state.mode !== 'discussion') {
+      // Guard: Only in discussion or decision mode
+      if (state.mode !== 'discussion' && state.mode !== 'decision') {
         return state;
       }
 

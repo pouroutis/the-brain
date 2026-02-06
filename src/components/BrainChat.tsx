@@ -1,6 +1,6 @@
 // =============================================================================
 // The Brain — Multi-AI Sequential Chat System
-// BrainChat Container Component (Phase 2B — Mode Enforcement + CEO UX)
+// BrainChat Container Component (Mode Reset — No Switching)
 // =============================================================================
 
 import { useCallback, useMemo, useState, useRef, useEffect } from 'react';
@@ -9,9 +9,8 @@ import { ExchangeList } from './ExchangeList';
 import { PromptInput } from './PromptInput';
 import { ActionBar } from './ActionBar';
 import { WarningBanner } from './WarningBanner';
-import { ExecutorPanel } from './ExecutorPanel';
 import { ProjectModeLayout } from './ProjectModeLayout';
-import { DiscussionModeLayout } from './DiscussionModeLayout';
+import { DecisionModeLayout } from './DecisionModeLayout';
 import { buildCeoExecutionPrompt } from '../utils/executionPromptBuilder';
 import {
   exportTranscriptAsJson,
@@ -22,10 +21,21 @@ import { parseCeoControlBlock, createCeoPromptArtifact } from '../utils/ceoContr
 import type { Agent, BrainMode, InterruptSeverity, InterruptScope } from '../types/brain';
 
 // -----------------------------------------------------------------------------
+// Types
+// -----------------------------------------------------------------------------
+
+interface BrainChatProps {
+  /** Initial mode selected from Home screen */
+  initialMode: BrainMode;
+  /** Callback to return to Home screen */
+  onReturnHome: () => void;
+}
+
+// -----------------------------------------------------------------------------
 // Component
 // -----------------------------------------------------------------------------
 
-export function BrainChat(): JSX.Element {
+export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.Element {
   const {
     // Action creators
     submitPrompt,
@@ -38,11 +48,7 @@ export function BrainChat(): JSX.Element {
     pauseExecutionLoop,
     stopExecutionLoop,
     markDone,
-    setResultArtifact,
     setCeoExecutionPrompt,
-    switchToProject,
-    returnToDiscussion,
-    retryExecution,
     // Project phase actions
     addProjectInterrupt,
     markProjectDone,
@@ -64,13 +70,24 @@ export function BrainChat(): JSX.Element {
     getResultArtifact,
     getCeoExecutionPrompt,
     getSystemMessages,
-    hasActiveDiscussion,
     getProjectError,
-    getGhostOutput,
     getProjectRun,
     getDiscussionCeoPromptArtifact,
     setDiscussionCeoPromptArtifact,
   } = useBrain();
+
+  // ---------------------------------------------------------------------------
+  // Set initial mode on mount
+  // ---------------------------------------------------------------------------
+
+  const hasSetInitialModeRef = useRef(false);
+
+  useEffect(() => {
+    if (!hasSetInitialModeRef.current) {
+      hasSetInitialModeRef.current = true;
+      setMode(initialMode);
+    }
+  }, [initialMode, setMode]);
 
   // ---------------------------------------------------------------------------
   // Derived state from selectors
@@ -91,9 +108,7 @@ export function BrainChat(): JSX.Element {
   const resultArtifact = getResultArtifact();
   const persistedCeoPrompt = getCeoExecutionPrompt();
   const systemMessages = getSystemMessages();
-  const activeDiscussion = hasActiveDiscussion();
   const projectError = getProjectError();
-  const ghostOutput = getGhostOutput();
   const projectRun = getProjectRun();
   const discussionCeoPromptArtifact = getDiscussionCeoPromptArtifact();
 
@@ -157,27 +172,6 @@ export function BrainChat(): JSX.Element {
     [setCeo, loopRunning]
   );
 
-  const handleModeChange = useCallback(
-    (newMode: BrainMode) => {
-      // Hard block: No mode changes during execution loop
-      if (loopRunning) return;
-      // When switching TO project mode, use switchToProject to create carryover
-      if (newMode === 'project' && mode !== 'project') {
-        switchToProject();
-      } else {
-        setMode(newMode);
-      }
-    },
-    [setMode, switchToProject, loopRunning, mode]
-  );
-
-  const handleSaveResultArtifact = useCallback(
-    (artifact: string | null) => {
-      setResultArtifact(artifact);
-    },
-    [setResultArtifact]
-  );
-
   // ---------------------------------------------------------------------------
   // Executor Panel: Generate Prompt Logic
   // ---------------------------------------------------------------------------
@@ -193,14 +187,15 @@ export function BrainChat(): JSX.Element {
   }, [lastExchange?.id]);
 
   // ---------------------------------------------------------------------------
-  // Discussion Mode: Parse CEO responses for FINALIZE_PROMPT control blocks
+  // Decision Mode: Parse CEO responses for FINALIZE_PROMPT control blocks
+  // (Only in Decision mode - NOT Discussion mode)
   // ---------------------------------------------------------------------------
 
   const lastParsedExchangeRef = useRef<string | null>(null);
 
   useEffect(() => {
-    // Only in discussion mode
-    if (mode !== 'discussion') return;
+    // Only in decision mode
+    if (mode !== 'decision') return;
 
     // Only when not processing (sequence completed)
     if (processing) return;
@@ -279,22 +274,6 @@ export function BrainChat(): JSX.Element {
     }
   }, [markDone, markProjectDone, projectRun]);
 
-  const handleSwitchToProject = useCallback(() => {
-    // Hard block: No mode switch during execution loop
-    if (loopRunning) return;
-    switchToProject();
-  }, [switchToProject, loopRunning]);
-
-  const handleReturnToDiscussion = useCallback(() => {
-    // Hard block: No mode switch during execution loop
-    if (loopRunning) return;
-    returnToDiscussion();
-  }, [returnToDiscussion, loopRunning]);
-
-  const handleRetryExecution = useCallback(() => {
-    retryExecution();
-  }, [retryExecution]);
-
   // ---------------------------------------------------------------------------
   // Project Phase Machine Handlers
   // ---------------------------------------------------------------------------
@@ -323,14 +302,14 @@ export function BrainChat(): JSX.Element {
     // Generate timestamp for filenames
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 
-    // Export as JSON (include CEO prompt artifact)
-    const jsonContent = exportTranscriptAsJson(session, transcript, discussionCeoPromptArtifact);
+    // Export as JSON (no CEO prompt artifact in discussion mode)
+    const jsonContent = exportTranscriptAsJson(session, transcript, null);
     downloadFile(jsonContent, `brain-transcript-${timestamp}.json`, 'application/json');
 
-    // Export as Markdown (include CEO prompt artifact)
-    const mdContent = exportTranscriptAsMarkdown(session, transcript, discussionCeoPromptArtifact);
+    // Export as Markdown (no CEO prompt artifact in discussion mode)
+    const mdContent = exportTranscriptAsMarkdown(session, transcript, null);
     downloadFile(mdContent, `brain-transcript-${timestamp}.md`, 'text/markdown');
-  }, [state.discussionSession, state.transcript, discussionCeoPromptArtifact]);
+  }, [state.discussionSession, state.transcript]);
 
   // Can export if in discussion mode with transcript
   const canExportDiscussion = mode === 'discussion' && state.transcript.length > 0;
@@ -339,7 +318,7 @@ export function BrainChat(): JSX.Element {
   // Render
   // ---------------------------------------------------------------------------
 
-  // Project mode: Use two-pane layout
+  // Project mode: Use two-pane layout (currently disabled from Home)
   if (mode === 'project') {
     return (
       <div className="brain-chat brain-chat--project">
@@ -368,14 +347,13 @@ export function BrainChat(): JSX.Element {
         {/* Prompt Input (disabled during execution loop) */}
         <PromptInput canSubmit={canSubmitPrompt} onSubmit={handleSubmit} />
 
-        {/* Action Bar (Project Mode Controls) */}
+        {/* Action Bar (Project Mode Controls - No mode switching) */}
         <ActionBar
           canClear={canClear()}
           isProcessing={processing}
           onClear={handleClear}
           onCancel={handleCancel}
           mode={mode}
-          onModeChange={handleModeChange}
           loopState={loopState}
           onStartExecution={handleStartExecution}
           onPauseExecution={handlePauseExecution}
@@ -386,28 +364,23 @@ export function BrainChat(): JSX.Element {
           onGeneratePrompt={handleExecutorGeneratePrompt}
           canGenerate={canGenerate && !hasGeneratedForCurrentExchange && !!ceoExecutionPrompt}
           generateFeedback={executorCopyFeedback}
-          onFinishDiscussion={handleFinishDiscussion}
-          canExport={canExportDiscussion}
-          onSwitchToProject={handleSwitchToProject}
-          onReturnToDiscussion={handleReturnToDiscussion}
-          hasActiveDiscussion={activeDiscussion}
-          hasExchanges={exchanges.length > 0}
+          onReturnHome={onReturnHome}
         />
       </div>
     );
   }
 
-  // Discussion mode: Two-pane layout with CEO Prompt Panel
-  if (mode === 'discussion') {
+  // Decision mode: Two-pane layout with CEO Prompt Panel
+  if (mode === 'decision') {
     return (
-      <div className="brain-chat brain-chat--discussion">
+      <div className="brain-chat brain-chat--decision">
         {/* Warning Banner (runId-scoped display) */}
         {shouldShowWarning && (
           <WarningBanner warning={warning} onDismiss={handleDismissWarning} />
         )}
 
-        {/* Two-Pane Discussion Layout */}
-        <DiscussionModeLayout
+        {/* Two-Pane Decision Layout */}
+        <DecisionModeLayout
           exchanges={exchanges}
           pendingExchange={pendingExchange}
           currentAgent={currentAgent}
@@ -420,14 +393,13 @@ export function BrainChat(): JSX.Element {
         {/* Prompt Input */}
         <PromptInput canSubmit={canSubmitPrompt} onSubmit={handleSubmit} />
 
-        {/* Action Bar */}
+        {/* Action Bar (No mode switching) */}
         <ActionBar
           canClear={canClear()}
           isProcessing={processing}
           onClear={handleClear}
           onCancel={handleCancel}
           mode={mode}
-          onModeChange={handleModeChange}
           loopState={loopState}
           onStartExecution={handleStartExecution}
           onPauseExecution={handlePauseExecution}
@@ -435,21 +407,13 @@ export function BrainChat(): JSX.Element {
           onMarkDone={handleMarkDone}
           ceo={ceo}
           onCeoChange={handleCeoChange}
-          onGeneratePrompt={handleExecutorGeneratePrompt}
-          canGenerate={canGenerate && !hasGeneratedForCurrentExchange && !!ceoExecutionPrompt}
-          generateFeedback={executorCopyFeedback}
-          onFinishDiscussion={handleFinishDiscussion}
-          canExport={canExportDiscussion}
-          onSwitchToProject={handleSwitchToProject}
-          onReturnToDiscussion={handleReturnToDiscussion}
-          hasActiveDiscussion={activeDiscussion}
-          hasExchanges={exchanges.length > 0}
+          onReturnHome={onReturnHome}
         />
       </div>
     );
   }
 
-  // Decision mode: Original layout (no two-pane)
+  // Discussion mode: Single-pane layout (no prompt panel)
   return (
     <div className="brain-chat">
       {/* Warning Banner (runId-scoped display) */}
@@ -457,7 +421,7 @@ export function BrainChat(): JSX.Element {
         <WarningBanner warning={warning} onDismiss={handleDismissWarning} />
       )}
 
-      {/* Exchange List (completed + pending + system messages) */}
+      {/* Exchange List (single pane - no prompt artifact) */}
       <ExchangeList
         exchanges={exchanges}
         pendingExchange={pendingExchange}
@@ -467,45 +431,24 @@ export function BrainChat(): JSX.Element {
         systemMessages={systemMessages}
       />
 
-      {/* Prompt Input (disabled during execution loop) */}
+      {/* Prompt Input */}
       <PromptInput canSubmit={canSubmitPrompt} onSubmit={handleSubmit} />
 
-      {/* Action Bar (Mode + CEO + Execution Controls + Artifacts + Export + Clear) */}
+      {/* Action Bar (No mode switching) */}
       <ActionBar
         canClear={canClear()}
         isProcessing={processing}
         onClear={handleClear}
         onCancel={handleCancel}
         mode={mode}
-        onModeChange={handleModeChange}
         loopState={loopState}
         onStartExecution={handleStartExecution}
         onPauseExecution={handlePauseExecution}
         onStopExecution={handleStopExecution}
         onMarkDone={handleMarkDone}
-        ceo={ceo}
-        onCeoChange={handleCeoChange}
-        onGeneratePrompt={handleExecutorGeneratePrompt}
-        canGenerate={canGenerate && !hasGeneratedForCurrentExchange && !!ceoExecutionPrompt}
-        generateFeedback={executorCopyFeedback}
         onFinishDiscussion={handleFinishDiscussion}
         canExport={canExportDiscussion}
-        onSwitchToProject={handleSwitchToProject}
-        onReturnToDiscussion={handleReturnToDiscussion}
-        hasActiveDiscussion={activeDiscussion}
-        hasExchanges={exchanges.length > 0}
-      />
-
-      {/* Executor Panel (Project mode only - hidden in discussion mode) */}
-      <ExecutorPanel
-        ceoExecutionPrompt={persistedCeoPrompt}
-        resultArtifact={resultArtifact}
-        onSaveResultArtifact={handleSaveResultArtifact}
-        isProjectMode={false}
-        loopState={loopState}
-        projectError={projectError}
-        ghostOutput={ghostOutput}
-        onRetry={handleRetryExecution}
+        onReturnHome={onReturnHome}
       />
     </div>
   );

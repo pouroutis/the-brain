@@ -115,17 +115,20 @@ function parseGatekeepingFlags(content: string): GatekeepingFlags {
 
 /**
  * Compute agent order based on CEO.
- * CEO ALWAYS speaks LAST. Non-CEO advisors speak first in their natural order.
+ * CEO ALWAYS speaks LAST. Non-CEO advisors speak first in priority order.
+ *
+ * Priority order: Gemini first, Claude second, then CEO last.
  *
  * Order examples:
- * - When CEO=gpt: claude, gemini, gpt (CEO last)
- * - When CEO=claude: gpt, gemini, claude (CEO last)
- * - When CEO=gemini: gpt, claude, gemini (CEO last)
+ * - When CEO=gpt: gemini, claude, gpt (CEO last)
+ * - When CEO=claude: gemini, gpt, claude (CEO last)
+ * - When CEO=gemini: claude, gpt, gemini (CEO last)
  */
 function getAgentOrder(ceo: Agent): Agent[] {
-  // CEO always speaks LAST — no special cases
-  const allAgents: Agent[] = ['gpt', 'claude', 'gemini'];
-  const advisors = allAgents.filter((a) => a !== ceo);
+  // Priority order: gemini, claude, gpt
+  // Remove CEO from this order, then append CEO at the end
+  const priorityOrder: Agent[] = ['gemini', 'claude', 'gpt'];
+  const advisors = priorityOrder.filter((a) => a !== ceo);
   return [...advisors, ceo];
 }
 

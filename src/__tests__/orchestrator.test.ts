@@ -146,11 +146,11 @@ describe('Orchestrator — Happy Path', () => {
       expect(result.current.isProcessing()).toBe(false);
     });
 
-    // Verify all agents were called (CEO=GPT speaks LAST)
+    // Verify all agents were called (CEO=GPT speaks LAST, order: gemini, claude, gpt)
     expect(mockCallAgent).toHaveBeenCalledTimes(3);
     expect(mockCallAgent).toHaveBeenNthCalledWith(
       1,
-      'claude',
+      'gemini',
       'Test question',
       '',
       expect.any(AbortController),
@@ -158,9 +158,9 @@ describe('Orchestrator — Happy Path', () => {
     );
     expect(mockCallAgent).toHaveBeenNthCalledWith(
       2,
-      'gemini',
+      'claude',
       'Test question',
-      expect.stringContaining('Claude:'),
+      expect.stringContaining('Gemini:'),
       expect.any(AbortController),
       expect.objectContaining({ runId: expect.any(String), callIndex: 2, exchanges: expect.any(Array) })
     );
@@ -168,7 +168,7 @@ describe('Orchestrator — Happy Path', () => {
       3,
       'gpt',
       'Test question',
-      expect.stringContaining('Gemini:'),
+      expect.stringContaining('Claude:'),
       expect.any(AbortController),
       expect.objectContaining({ runId: expect.any(String), callIndex: 3, exchanges: expect.any(Array) })
     );
@@ -800,10 +800,10 @@ describe('Orchestrator — Discussion Mode Bypasses Ghost', () => {
     });
 
     // CRITICAL: All 3 agents must be called (Calls 3/3), NOT Ghost
-    // CEO=GPT speaks LAST: claude, gemini, gpt
+    // CEO=GPT speaks LAST, order: gemini, claude, gpt
     expect(mockCallAgent).toHaveBeenCalledTimes(3);
-    expect(mockCallAgent).toHaveBeenNthCalledWith(1, 'claude', expect.any(String), expect.any(String), expect.any(AbortController), expect.any(Object));
-    expect(mockCallAgent).toHaveBeenNthCalledWith(2, 'gemini', expect.any(String), expect.any(String), expect.any(AbortController), expect.any(Object));
+    expect(mockCallAgent).toHaveBeenNthCalledWith(1, 'gemini', expect.any(String), expect.any(String), expect.any(AbortController), expect.any(Object));
+    expect(mockCallAgent).toHaveBeenNthCalledWith(2, 'claude', expect.any(String), expect.any(String), expect.any(AbortController), expect.any(Object));
     expect(mockCallAgent).toHaveBeenNthCalledWith(3, 'gpt', expect.any(String), expect.any(String), expect.any(AbortController), expect.any(Object));
 
     // Exchange should have all 3 responses

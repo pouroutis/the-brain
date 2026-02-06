@@ -1,6 +1,6 @@
 // =============================================================================
 // The Brain — Multi-AI Sequential Chat System
-// ActionBar Component (Phase 2B — Mode Enforcement + CEO UX)
+// ActionBar Component (No Mode Switching — Return Home Only)
 // =============================================================================
 
 import { useCallback } from 'react';
@@ -21,8 +21,6 @@ interface ActionBarProps {
   onCancel: () => void;
   /** Current operating mode */
   mode: BrainMode;
-  /** Callback to change mode */
-  onModeChange: (mode: BrainMode) => void;
   /** Loop state (Phase 2C) */
   loopState: LoopState;
   /** Callback to start execution loop (EXECUTE) */
@@ -47,14 +45,8 @@ interface ActionBarProps {
   onFinishDiscussion?: () => void;
   /** Whether export is available (has transcript) */
   canExport?: boolean;
-  /** Callback to switch from Discussion to Project mode (Task 5.3) */
-  onSwitchToProject?: () => void;
-  /** Callback to return from Project to Discussion mode (Task 5.3) */
-  onReturnToDiscussion?: () => void;
-  /** Whether there is an active discussion session to return to (Task 5.3) */
-  hasActiveDiscussion?: boolean;
-  /** Whether there are exchanges (for Switch to Project button) */
-  hasExchanges?: boolean;
+  /** Callback to return to Home screen */
+  onReturnHome?: () => void;
 }
 
 // -----------------------------------------------------------------------------
@@ -67,12 +59,6 @@ const CEO_OPTIONS: { value: Agent; label: string }[] = [
   { value: 'gemini', label: 'Gemini' },
 ];
 
-const MODE_OPTIONS: { value: BrainMode; label: string; description: string }[] = [
-  { value: 'discussion', label: 'Discussion', description: 'All AIs speak, no execution' },
-  { value: 'decision', label: 'Decision', description: 'Single round, CEO decides' },
-  { value: 'project', label: 'Project', description: 'CEO controls, execution enabled' },
-];
-
 // -----------------------------------------------------------------------------
 // Component
 // -----------------------------------------------------------------------------
@@ -83,7 +69,6 @@ export function ActionBar({
   onClear,
   onCancel,
   mode,
-  onModeChange,
   loopState,
   onStartExecution,
   onPauseExecution,
@@ -96,10 +81,7 @@ export function ActionBar({
   generateFeedback,
   onFinishDiscussion,
   canExport = false,
-  onSwitchToProject,
-  onReturnToDiscussion,
-  hasActiveDiscussion = false,
-  hasExchanges = false,
+  onReturnHome,
 }: ActionBarProps): JSX.Element {
   // Derived state
   const isRunning = loopState === 'running';
@@ -114,15 +96,6 @@ export function ActionBar({
     [onCeoChange, isRunning]
   );
 
-  const handleModeChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>) => {
-      // Hard block: No mode changes during execution loop
-      if (isRunning) return;
-      onModeChange(e.target.value as BrainMode);
-    },
-    [onModeChange, isRunning]
-  );
-
   // CEO is active in Decision and Project modes
   const ceoActive = mode === 'decision' || mode === 'project';
 
@@ -131,24 +104,10 @@ export function ActionBar({
 
   return (
     <div className="action-bar">
-      {/* Single Control Row: Selectors | Execution | Artifacts | Board */}
+      {/* Single Control Row: CEO Selector | Execution | Artifacts | Board | Home */}
       <div className="action-bar__controls">
-        {/* Group: Mode & CEO Selectors */}
+        {/* Group: CEO Selector (Decision/Project modes only) */}
         <div className="action-bar__group action-bar__group--selectors">
-          <select
-            className="action-bar__select"
-            value={mode}
-            onChange={handleModeChange}
-            disabled={isProcessing || isRunning}
-            title="Choose how AIs collaborate: Discussion, Decision, or Project mode"
-          >
-            {MODE_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-
           {ceoActive && onCeoChange && (
             <select
               className="action-bar__select"
@@ -247,42 +206,16 @@ export function ActionBar({
           </div>
         )}
 
-        {/* Group: Discussion Export + Switch to Project (Discussion mode only) */}
-        {mode === 'discussion' && (
+        {/* Group: Discussion Export (Discussion mode only) */}
+        {mode === 'discussion' && onFinishDiscussion && (
           <div className="action-bar__group action-bar__group--export">
-            {onFinishDiscussion && (
-              <button
-                className="action-bar__button action-bar__button--export"
-                onClick={onFinishDiscussion}
-                disabled={!canExport || isProcessing}
-                title="Export full discussion transcript"
-              >
-                Finish Discussion
-              </button>
-            )}
-            {onSwitchToProject && (
-              <button
-                className="action-bar__button action-bar__button--switch-project"
-                onClick={onSwitchToProject}
-                disabled={isProcessing || !hasExchanges}
-                title="Switch to Project mode with discussion context"
-              >
-                Switch to Project
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Group: Back to Discussion (Project mode only, when active discussion exists) */}
-        {mode === 'project' && hasActiveDiscussion && onReturnToDiscussion && (
-          <div className="action-bar__group action-bar__group--return">
             <button
-              className="action-bar__button action-bar__button--return"
-              onClick={onReturnToDiscussion}
-              disabled={isProcessing || isRunning}
-              title="Return to Discussion mode"
+              className="action-bar__button action-bar__button--export"
+              onClick={onFinishDiscussion}
+              disabled={!canExport || isProcessing}
+              title="Export full discussion transcript"
             >
-              Back to Discussion
+              Finish Discussion
             </button>
           </div>
         )}
@@ -307,6 +240,20 @@ export function ActionBar({
             Clear Board
           </button>
         </div>
+
+        {/* Group: Return Home */}
+        {onReturnHome && (
+          <div className="action-bar__group action-bar__group--home">
+            <button
+              className="action-bar__button action-bar__button--home"
+              onClick={onReturnHome}
+              disabled={isProcessing || isRunning}
+              title="Return to mode selection"
+            >
+              Home
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

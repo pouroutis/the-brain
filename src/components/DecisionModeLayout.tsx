@@ -1,6 +1,6 @@
 // =============================================================================
 // The Brain — Multi-AI Sequential Chat System
-// Discussion Mode Layout (Two-Pane: Thread + CEO Prompt)
+// Decision Mode Layout (Two-Pane: Thread + CEO Prompt)
 // =============================================================================
 
 import { ExchangeList } from './ExchangeList';
@@ -18,7 +18,7 @@ import type {
 // Types
 // -----------------------------------------------------------------------------
 
-interface DiscussionModeLayoutProps {
+interface DecisionModeLayoutProps {
   exchanges: Exchange[];
   pendingExchange: PendingExchange | null;
   currentAgent: Agent | null;
@@ -32,7 +32,7 @@ interface DiscussionModeLayoutProps {
 // Component
 // -----------------------------------------------------------------------------
 
-export function DiscussionModeLayout({
+export function DecisionModeLayout({
   exchanges,
   pendingExchange,
   currentAgent,
@@ -40,11 +40,11 @@ export function DiscussionModeLayout({
   ceo,
   systemMessages,
   ceoPromptArtifact,
-}: DiscussionModeLayoutProps): JSX.Element {
+}: DecisionModeLayoutProps): JSX.Element {
   return (
-    <div className="discussion-mode-layout" data-testid="discussion-mode-layout">
+    <div className="decision-mode-layout" data-testid="decision-mode-layout">
       {/* Left Pane: Discussion Thread */}
-      <div className="discussion-mode-layout__left">
+      <div className="decision-mode-layout__left">
         <ExchangeList
           exchanges={exchanges}
           pendingExchange={pendingExchange}
@@ -56,7 +56,7 @@ export function DiscussionModeLayout({
       </div>
 
       {/* Right Pane: CEO Prompt Artifact */}
-      <div className="discussion-mode-layout__right">
+      <div className="decision-mode-layout__right">
         <CeoPromptPanel artifact={ceoPromptArtifact} />
       </div>
     </div>

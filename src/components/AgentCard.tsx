@@ -4,6 +4,7 @@
 // =============================================================================
 
 import type { Agent, AgentResponse, BrainMode } from '../types/brain';
+import { parseCeoControlBlock } from '../utils/ceoControlBlockParser';
 
 // -----------------------------------------------------------------------------
 // Types
@@ -143,9 +144,16 @@ export function AgentCard({ agent, response, isActive, mode, isCeo = false }: Ag
   const rawContent = response?.status === 'success' ? response.content : response?.content;
 
   // Sanitize gatekeeping flags in ALL modes (CALL_CLAUDE, CALL_GEMINI, REASON_TAG)
-  const content = rawContent
+  let content = rawContent
     ? sanitizeGatekeepingFlags(rawContent)
     : rawContent;
+
+  // In Decision mode, sanitize CEO content to remove FINALIZE_PROMPT JSON block
+  // This prevents duplication (prompt shows only in right pane)
+  if (isCeo && mode === 'decision' && content) {
+    const parsed = parseCeoControlBlock(content);
+    content = parsed.displayContent;
+  }
 
   // Get contextual sub-message for terminal states
   const subMessage = getStatusSubMessage(response);

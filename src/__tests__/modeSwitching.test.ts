@@ -1,5 +1,12 @@
 // =============================================================================
-// The Brain — Mode Switching Tests (Task 5.3)
+// The Brain — Mode Selection Tests (No In-Session Switching)
+// =============================================================================
+//
+// After the UI refactor, mode is selected ONLY from the Home screen.
+// There is no in-session mode switching. These tests verify:
+// 1. SET_MODE action works for initial mode selection
+// 2. Mode state remains stable during a session
+// 3. Carryover and session state still function correctly
 // =============================================================================
 
 import { describe, it, expect } from 'vitest';
@@ -58,195 +65,110 @@ function createMockKeyNotes(): KeyNotes {
   };
 }
 
-function createDiscussionState(overrides: Partial<BrainState> = {}): BrainState {
-  return {
-    ...initialBrainState,
-    mode: 'discussion',
-    discussionSession: createMockSession(),
-    exchanges: [createMockExchange('ex-1', 'Test prompt')],
-    keyNotes: createMockKeyNotes(),
-    ...overrides,
-  };
-}
-
 // -----------------------------------------------------------------------------
-// Dispatch Order Semantics Tests
+// Initial Mode Selection Tests (Home Screen)
 // -----------------------------------------------------------------------------
 
-describe('Mode switching dispatch order', () => {
-  describe('switchToProject (simulated via sequential dispatches)', () => {
-    it('CREATE_CARRYOVER_FROM_DISCUSSION + SET_MODE produces carryover and mode=project', () => {
-      // Simulate switchToProject: dispatch carryover, then set mode
-      let state = createDiscussionState();
-
-      // Step 1: Dispatch CREATE_CARRYOVER_FROM_DISCUSSION
-      state = brainReducer(state, { type: 'CREATE_CARRYOVER_FROM_DISCUSSION' });
-
-      // Verify carryover was created
-      expect(state.carryover).not.toBeNull();
-      expect(state.carryover?.fromSessionId).toBe('session-test-123');
-      expect(state.carryover?.last10Exchanges).toHaveLength(1);
-      expect(state.mode).toBe('discussion'); // Mode not changed yet
-
-      // Step 2: Dispatch SET_MODE to project
-      state = brainReducer(state, { type: 'SET_MODE', mode: 'project' });
-
-      // Verify mode changed
-      expect(state.mode).toBe('project');
-      // Verify carryover preserved
-      expect(state.carryover).not.toBeNull();
-    });
-
-    it('SET_MODE still succeeds even if carryover no-ops (no exchanges)', () => {
-      // State with no exchanges - carryover will no-op
-      let state = createDiscussionState({ exchanges: [] });
-
-      // Step 1: Dispatch CREATE_CARRYOVER_FROM_DISCUSSION (will no-op)
-      state = brainReducer(state, { type: 'CREATE_CARRYOVER_FROM_DISCUSSION' });
-      expect(state.carryover).toBeNull(); // No-op due to empty exchanges
-
-      // Step 2: Dispatch SET_MODE to project (should still succeed)
-      state = brainReducer(state, { type: 'SET_MODE', mode: 'project' });
-      expect(state.mode).toBe('project');
-    });
-
-    it('SET_MODE still succeeds even if carryover no-ops (no session)', () => {
-      // State with no session - carryover will no-op
-      let state = createDiscussionState({ discussionSession: null });
-
-      // Step 1: Dispatch CREATE_CARRYOVER_FROM_DISCUSSION (will no-op)
-      state = brainReducer(state, { type: 'CREATE_CARRYOVER_FROM_DISCUSSION' });
-      expect(state.carryover).toBeNull(); // No-op due to null session
-
-      // Step 2: Dispatch SET_MODE to project (should still succeed)
-      state = brainReducer(state, { type: 'SET_MODE', mode: 'project' });
-      expect(state.mode).toBe('project');
-    });
+describe('Initial mode selection from Home screen', () => {
+  it('SET_MODE sets mode to discussion', () => {
+    const state = brainReducer(initialBrainState, { type: 'SET_MODE', mode: 'discussion' });
+    expect(state.mode).toBe('discussion');
   });
 
-  describe('returnToDiscussion (SET_MODE only)', () => {
-    it('preserves discussionSession and exchanges when returning to discussion', () => {
-      // Start in project mode with carryover and a valid discussion session
-      const session = createMockSession();
-      const exchanges = [createMockExchange('ex-1', 'Test')];
-      const carryover = {
-        schemaVersion: 1 as const,
-        fromSessionId: session.id,
-        keyNotes: createMockKeyNotes(),
-        last10Exchanges: exchanges,
-        createdAt: Date.now(),
-      };
+  it('SET_MODE sets mode to decision', () => {
+    const state = brainReducer(initialBrainState, { type: 'SET_MODE', mode: 'decision' });
+    expect(state.mode).toBe('decision');
+  });
 
-      let state: BrainState = {
-        ...initialBrainState,
-        mode: 'project',
-        discussionSession: session,
-        exchanges,
-        carryover,
-      };
+  it('SET_MODE sets mode to project', () => {
+    const state = brainReducer(initialBrainState, { type: 'SET_MODE', mode: 'project' });
+    expect(state.mode).toBe('project');
+  });
 
-      // Dispatch SET_MODE to discussion
-      state = brainReducer(state, { type: 'SET_MODE', mode: 'discussion' });
-
-      // Verify mode changed
-      expect(state.mode).toBe('discussion');
-      // Verify session preserved
-      expect(state.discussionSession).toEqual(session);
-      // Verify exchanges preserved
-      expect(state.exchanges).toEqual(exchanges);
-      // Verify carryover NOT cleared (preserved for potential re-entry)
-      expect(state.carryover).toEqual(carryover);
-    });
+  it('initial mode defaults to discussion', () => {
+    expect(initialBrainState.mode).toBe('discussion');
   });
 });
 
 // -----------------------------------------------------------------------------
-// Visibility/Disabled Logic Tests
+// Mode Isolation Tests (No Switching Invariants)
 // -----------------------------------------------------------------------------
 
-describe('Mode switching button visibility logic', () => {
-  describe('Switch to Project button (Discussion mode)', () => {
-    it('should be visible when mode is discussion', () => {
-      const state = createDiscussionState();
-      expect(state.mode).toBe('discussion');
-      // Button visibility: mode === 'discussion'
-    });
+describe('Mode isolation invariants', () => {
+  it('decision mode starts with clean state (no carryover from other sessions)', () => {
+    // When entering decision mode from Home, state should be fresh
+    const state = brainReducer(initialBrainState, { type: 'SET_MODE', mode: 'decision' });
 
-    it('should be disabled when isProcessing', () => {
-      const state = createDiscussionState({ isProcessing: true });
-      // Button disabled: isProcessing === true
-      expect(state.isProcessing).toBe(true);
-    });
-
-    it('should be disabled when exchanges.length === 0', () => {
-      const state = createDiscussionState({ exchanges: [] });
-      // Button disabled: exchanges.length === 0
-      expect(state.exchanges.length).toBe(0);
-    });
-
-    it('should be enabled when not processing and has exchanges', () => {
-      const state = createDiscussionState({ isProcessing: false });
-      expect(state.isProcessing).toBe(false);
-      expect(state.exchanges.length).toBeGreaterThan(0);
-    });
+    expect(state.mode).toBe('decision');
+    expect(state.exchanges).toHaveLength(0);
+    expect(state.discussionCeoPromptArtifact).toBeNull();
+    expect(state.pendingExchange).toBeNull();
   });
 
-  describe('Back to Discussion button (Project mode)', () => {
-    it('should be visible when mode is project AND hasActiveDiscussion', () => {
-      const state: BrainState = {
-        ...initialBrainState,
-        mode: 'project',
-        discussionSession: createMockSession(),
-      };
-      expect(state.mode).toBe('project');
-      expect(state.discussionSession).not.toBeNull();
-      // Button visible: mode === 'project' && discussionSession !== null
-    });
+  it('discussion mode starts with clean state', () => {
+    const state = brainReducer(initialBrainState, { type: 'SET_MODE', mode: 'discussion' });
 
-    it('should be hidden when no active discussion session', () => {
-      const state: BrainState = {
-        ...initialBrainState,
-        mode: 'project',
-        discussionSession: null,
-      };
-      expect(state.mode).toBe('project');
-      expect(state.discussionSession).toBeNull();
-      // Button hidden: discussionSession === null
-    });
+    expect(state.mode).toBe('discussion');
+    expect(state.exchanges).toHaveLength(0);
+    expect(state.pendingExchange).toBeNull();
+  });
 
-    it('should be disabled when isProcessing', () => {
-      const state: BrainState = {
-        ...initialBrainState,
-        mode: 'project',
-        discussionSession: createMockSession(),
-        isProcessing: true,
-      };
-      expect(state.isProcessing).toBe(true);
-      // Button disabled: isProcessing === true
-    });
+  it('mode remains stable after CLEAR action', () => {
+    let state = brainReducer(initialBrainState, { type: 'SET_MODE', mode: 'decision' });
 
-    it('should be disabled when loop is running', () => {
-      const state: BrainState = {
-        ...initialBrainState,
-        mode: 'project',
-        discussionSession: createMockSession(),
-        loopState: 'running',
-      };
-      expect(state.loopState).toBe('running');
-      // Button disabled: loopState === 'running'
-    });
+    // Clear the board (should not change mode)
+    state = brainReducer(state, { type: 'CLEAR' });
 
-    it('should be enabled when not processing and loop not running', () => {
-      const state: BrainState = {
-        ...initialBrainState,
-        mode: 'project',
-        discussionSession: createMockSession(),
-        isProcessing: false,
-        loopState: 'idle',
-      };
-      expect(state.isProcessing).toBe(false);
-      expect(state.loopState).toBe('idle');
-    });
+    // Mode should remain decision
+    expect(state.mode).toBe('decision');
+  });
+});
+
+// -----------------------------------------------------------------------------
+// Carryover Tests (Preserved for Project Mode Future Use)
+// -----------------------------------------------------------------------------
+
+describe('Carryover creation (for Project mode)', () => {
+  it('CREATE_CARRYOVER_FROM_DISCUSSION creates carryover from discussion session', () => {
+    let state: BrainState = {
+      ...initialBrainState,
+      mode: 'discussion',
+      discussionSession: createMockSession(),
+      exchanges: [createMockExchange('ex-1', 'Test prompt')],
+      keyNotes: createMockKeyNotes(),
+    };
+
+    state = brainReducer(state, { type: 'CREATE_CARRYOVER_FROM_DISCUSSION' });
+
+    expect(state.carryover).not.toBeNull();
+    expect(state.carryover?.fromSessionId).toBe('session-test-123');
+    expect(state.carryover?.last10Exchanges).toHaveLength(1);
+  });
+
+  it('CREATE_CARRYOVER_FROM_DISCUSSION no-ops when no exchanges', () => {
+    let state: BrainState = {
+      ...initialBrainState,
+      mode: 'discussion',
+      discussionSession: createMockSession(),
+      exchanges: [],
+    };
+
+    state = brainReducer(state, { type: 'CREATE_CARRYOVER_FROM_DISCUSSION' });
+
+    expect(state.carryover).toBeNull();
+  });
+
+  it('CREATE_CARRYOVER_FROM_DISCUSSION no-ops when no session', () => {
+    let state: BrainState = {
+      ...initialBrainState,
+      mode: 'discussion',
+      discussionSession: null,
+      exchanges: [createMockExchange('ex-1', 'Test')],
+    };
+
+    state = brainReducer(state, { type: 'CREATE_CARRYOVER_FROM_DISCUSSION' });
+
+    expect(state.carryover).toBeNull();
   });
 });
 
@@ -256,14 +178,41 @@ describe('Mode switching button visibility logic', () => {
 
 describe('hasActiveDiscussion selector logic', () => {
   it('returns true when discussionSession is not null', () => {
-    const state = createDiscussionState();
-    // Selector: state.discussionSession !== null
+    const state: BrainState = {
+      ...initialBrainState,
+      discussionSession: createMockSession(),
+    };
     expect(state.discussionSession !== null).toBe(true);
   });
 
   it('returns false when discussionSession is null', () => {
     const state: BrainState = { ...initialBrainState, discussionSession: null };
-    // Selector: state.discussionSession !== null
     expect(state.discussionSession !== null).toBe(false);
+  });
+});
+
+// -----------------------------------------------------------------------------
+// State Preservation Tests
+// -----------------------------------------------------------------------------
+
+describe('State preservation across mode set', () => {
+  it('SET_MODE preserves existing exchanges and session when switching modes', () => {
+    // This tests that SET_MODE doesn't wipe state (important for returning to Home)
+    const session = createMockSession();
+    const exchanges = [createMockExchange('ex-1', 'Test')];
+
+    let state: BrainState = {
+      ...initialBrainState,
+      mode: 'discussion',
+      discussionSession: session,
+      exchanges,
+    };
+
+    // Set mode to project
+    state = brainReducer(state, { type: 'SET_MODE', mode: 'project' });
+
+    expect(state.mode).toBe('project');
+    expect(state.discussionSession).toEqual(session);
+    expect(state.exchanges).toEqual(exchanges);
   });
 });

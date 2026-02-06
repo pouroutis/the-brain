@@ -10,22 +10,19 @@ import { AgentCard } from './AgentCard';
 // Constants
 // -----------------------------------------------------------------------------
 
-/** Default agent rendering order (Discussion mode) */
-const DEFAULT_AGENT_ORDER: Agent[] = ['gpt', 'claude', 'gemini'];
+/** Default agent rendering order: Gemini first, Claude second, GPT third */
+const DEFAULT_AGENT_ORDER: Agent[] = ['gemini', 'claude', 'gpt'];
 
 /**
- * Compute agent render order based on mode and CEO.
- * - Discussion mode: fixed order (gpt, claude, gemini)
- * - Decision/Project modes: non-CEO first, CEO last
+ * Compute agent render order based on CEO.
+ * - All modes: Gemini, Claude, then CEO last
+ * - CEO is always rendered last regardless of mode
  */
-function getAgentRenderOrder(mode: BrainMode, ceo: Agent): Agent[] {
-  // Discussion mode: use fixed order
-  if (mode === 'discussion') {
-    return DEFAULT_AGENT_ORDER;
-  }
-  // Decision/Project modes: CEO renders LAST
-  const allAgents: Agent[] = ['gpt', 'claude', 'gemini'];
-  const nonCeoAgents = allAgents.filter((a) => a !== ceo);
+function getAgentRenderOrder(ceo: Agent): Agent[] {
+  // Priority order: gemini, claude, gpt
+  // Remove CEO from this order, then append CEO at the end
+  const priorityOrder: Agent[] = ['gemini', 'claude', 'gpt'];
+  const nonCeoAgents = priorityOrder.filter((a) => a !== ceo);
   return [...nonCeoAgents, ceo];
 }
 
@@ -100,8 +97,8 @@ export function ExchangeCard({
   // Derive telemetry for completed exchanges (not shown during pending)
   const telemetry = !isPending ? deriveRoutingTelemetry(responsesByAgent) : null;
 
-  // Compute agent render order based on mode and CEO
-  const agentRenderOrder = getAgentRenderOrder(mode, ceo);
+  // Compute agent render order based on CEO (CEO always last)
+  const agentRenderOrder = getAgentRenderOrder(ceo);
 
   return (
     <div className={`exchange-card ${isPending ? 'exchange-card--pending' : ''}`}>

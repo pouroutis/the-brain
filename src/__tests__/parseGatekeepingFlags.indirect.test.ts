@@ -86,7 +86,7 @@ beforeEach(() => {
 
 describe('Phase 2F Force-All — Gatekeeping Flags Ignored', () => {
   it('calls all 3 agents when flags say CALL_CLAUDE=true CALL_GEMINI=true', async () => {
-    // CEO=GPT speaks last: claude, gemini, gpt
+    // CEO=GPT speaks last, order: gemini, claude, gpt
     const gptContent = `
 Here is my analysis of your question.
 
@@ -97,18 +97,18 @@ REASON_TAG=comprehensive
 ---
 `;
     mockCallAgent
-      .mockResolvedValueOnce(createAgentResponse('claude'))
       .mockResolvedValueOnce(createAgentResponse('gemini'))
+      .mockResolvedValueOnce(createAgentResponse('claude'))
       .mockResolvedValueOnce(createGPTResponse(gptContent));
 
     const { result } = renderHook(() => useBrain(), { wrapper });
     const calledAgents = await runSequenceAndGetCalledAgents(result);
 
-    expect(calledAgents).toEqual(['claude', 'gemini', 'gpt']);
+    expect(calledAgents).toEqual(['gemini', 'claude', 'gpt']);
   });
 
   it('calls all 3 agents when flags say CALL_CLAUDE=false CALL_GEMINI=true (flags ignored)', async () => {
-    // CEO=GPT speaks last: claude, gemini, gpt
+    // CEO=GPT speaks last, order: gemini, claude, gpt
     const gptContent = `
 Simple factual question.
 
@@ -119,19 +119,19 @@ REASON_TAG=factual
 ---
 `;
     mockCallAgent
-      .mockResolvedValueOnce(createAgentResponse('claude'))
       .mockResolvedValueOnce(createAgentResponse('gemini'))
+      .mockResolvedValueOnce(createAgentResponse('claude'))
       .mockResolvedValueOnce(createGPTResponse(gptContent));
 
     const { result } = renderHook(() => useBrain(), { wrapper });
     const calledAgents = await runSequenceAndGetCalledAgents(result);
 
     // Phase 2F: All agents called despite CALL_CLAUDE=false
-    expect(calledAgents).toEqual(['claude', 'gemini', 'gpt']);
+    expect(calledAgents).toEqual(['gemini', 'claude', 'gpt']);
   });
 
   it('calls all 3 agents when flags say CALL_CLAUDE=true CALL_GEMINI=false (flags ignored)', async () => {
-    // CEO=GPT speaks last: claude, gemini, gpt
+    // CEO=GPT speaks last, order: gemini, claude, gpt
     const gptContent = `
 Code analysis needed.
 
@@ -142,19 +142,19 @@ REASON_TAG=code_review
 ---
 `;
     mockCallAgent
-      .mockResolvedValueOnce(createAgentResponse('claude'))
       .mockResolvedValueOnce(createAgentResponse('gemini'))
+      .mockResolvedValueOnce(createAgentResponse('claude'))
       .mockResolvedValueOnce(createGPTResponse(gptContent));
 
     const { result } = renderHook(() => useBrain(), { wrapper });
     const calledAgents = await runSequenceAndGetCalledAgents(result);
 
     // Phase 2F: All agents called despite CALL_GEMINI=false
-    expect(calledAgents).toEqual(['claude', 'gemini', 'gpt']);
+    expect(calledAgents).toEqual(['gemini', 'claude', 'gpt']);
   });
 
   it('calls all 3 agents when flags say both false (flags ignored)', async () => {
-    // CEO=GPT speaks last: claude, gemini, gpt
+    // CEO=GPT speaks last, order: gemini, claude, gpt
     const gptContent = `
 Hi there! Just a greeting.
 
@@ -165,36 +165,36 @@ REASON_TAG=greeting
 ---
 `;
     mockCallAgent
-      .mockResolvedValueOnce(createAgentResponse('claude'))
       .mockResolvedValueOnce(createAgentResponse('gemini'))
+      .mockResolvedValueOnce(createAgentResponse('claude'))
       .mockResolvedValueOnce(createGPTResponse(gptContent));
 
     const { result } = renderHook(() => useBrain(), { wrapper });
     const calledAgents = await runSequenceAndGetCalledAgents(result);
 
     // Phase 2F: All agents called despite both flags=false
-    expect(calledAgents).toEqual(['claude', 'gemini', 'gpt']);
+    expect(calledAgents).toEqual(['gemini', 'claude', 'gpt']);
   });
 
   it('calls all 3 agents with no flags at all', async () => {
-    // CEO=GPT speaks last: claude, gemini, gpt
+    // CEO=GPT speaks last, order: gemini, claude, gpt
     const gptContent = `
 Just a regular response with no flags at all.
 No dashes, no structure.
 `;
     mockCallAgent
-      .mockResolvedValueOnce(createAgentResponse('claude'))
       .mockResolvedValueOnce(createAgentResponse('gemini'))
+      .mockResolvedValueOnce(createAgentResponse('claude'))
       .mockResolvedValueOnce(createGPTResponse(gptContent));
 
     const { result } = renderHook(() => useBrain(), { wrapper });
     const calledAgents = await runSequenceAndGetCalledAgents(result);
 
-    expect(calledAgents).toEqual(['claude', 'gemini', 'gpt']);
+    expect(calledAgents).toEqual(['gemini', 'claude', 'gpt']);
   });
 
   it('calls all 3 agents when GPT errors', async () => {
-    // CEO=GPT speaks last: claude, gemini, gpt
+    // CEO=GPT speaks last, order: gemini, claude, gpt
     const gptError: AgentResponse = {
       agent: 'gpt',
       timestamp: Date.now(),
@@ -204,18 +204,18 @@ No dashes, no structure.
     };
 
     mockCallAgent
-      .mockResolvedValueOnce(createAgentResponse('claude'))
       .mockResolvedValueOnce(createAgentResponse('gemini'))
+      .mockResolvedValueOnce(createAgentResponse('claude'))
       .mockResolvedValueOnce(gptError);
 
     const { result } = renderHook(() => useBrain(), { wrapper });
     const calledAgents = await runSequenceAndGetCalledAgents(result);
 
-    expect(calledAgents).toEqual(['claude', 'gemini', 'gpt']);
+    expect(calledAgents).toEqual(['gemini', 'claude', 'gpt']);
   });
 
   it('calls all 3 agents when GPT times out', async () => {
-    // CEO=GPT speaks last: claude, gemini, gpt
+    // CEO=GPT speaks last, order: gemini, claude, gpt
     const gptTimeout: AgentResponse = {
       agent: 'gpt',
       timestamp: Date.now(),
@@ -223,14 +223,14 @@ No dashes, no structure.
     };
 
     mockCallAgent
-      .mockResolvedValueOnce(createAgentResponse('claude'))
       .mockResolvedValueOnce(createAgentResponse('gemini'))
+      .mockResolvedValueOnce(createAgentResponse('claude'))
       .mockResolvedValueOnce(gptTimeout);
 
     const { result } = renderHook(() => useBrain(), { wrapper });
     const calledAgents = await runSequenceAndGetCalledAgents(result);
 
-    expect(calledAgents).toEqual(['claude', 'gemini', 'gpt']);
+    expect(calledAgents).toEqual(['gemini', 'claude', 'gpt']);
   });
 });
 
@@ -240,10 +240,10 @@ No dashes, no structure.
 
 describe('Phase 2F Force-All — All Modes', () => {
   it('Discussion mode calls all 3 agents', async () => {
-    // CEO=GPT speaks last: claude, gemini, gpt
+    // CEO=GPT speaks last, order: gemini, claude, gpt
     mockCallAgent
-      .mockResolvedValueOnce(createAgentResponse('claude'))
       .mockResolvedValueOnce(createAgentResponse('gemini'))
+      .mockResolvedValueOnce(createAgentResponse('claude'))
       .mockResolvedValueOnce(createGPTResponse('GPT response'));
 
     const { result } = renderHook(() => useBrain(), { wrapper });
@@ -253,14 +253,14 @@ describe('Phase 2F Force-All — All Modes', () => {
 
     const calledAgents = await runSequenceAndGetCalledAgents(result);
 
-    expect(calledAgents).toEqual(['claude', 'gemini', 'gpt']);
+    expect(calledAgents).toEqual(['gemini', 'claude', 'gpt']);
   });
 
   it('Decision mode calls all 3 agents', async () => {
-    // CEO=GPT speaks last: claude, gemini, gpt
+    // CEO=GPT speaks last, order: gemini, claude, gpt
     mockCallAgent
-      .mockResolvedValueOnce(createAgentResponse('claude'))
       .mockResolvedValueOnce(createAgentResponse('gemini'))
+      .mockResolvedValueOnce(createAgentResponse('claude'))
       .mockResolvedValueOnce(createGPTResponse('GPT response'));
 
     const { result } = renderHook(() => useBrain(), { wrapper });
@@ -271,14 +271,14 @@ describe('Phase 2F Force-All — All Modes', () => {
 
     const calledAgents = await runSequenceAndGetCalledAgents(result);
 
-    expect(calledAgents).toEqual(['claude', 'gemini', 'gpt']);
+    expect(calledAgents).toEqual(['gemini', 'claude', 'gpt']);
   });
 
   it('Project mode calls all 3 agents', async () => {
-    // CEO=GPT speaks last: claude, gemini, gpt
+    // CEO=GPT speaks last, order: gemini, claude, gpt
     mockCallAgent
-      .mockResolvedValueOnce(createAgentResponse('claude'))
       .mockResolvedValueOnce(createAgentResponse('gemini'))
+      .mockResolvedValueOnce(createAgentResponse('claude'))
       .mockResolvedValueOnce(createGPTResponse('GPT response'));
 
     const { result } = renderHook(() => useBrain(), { wrapper });
@@ -289,6 +289,6 @@ describe('Phase 2F Force-All — All Modes', () => {
 
     const calledAgents = await runSequenceAndGetCalledAgents(result);
 
-    expect(calledAgents).toEqual(['claude', 'gemini', 'gpt']);
+    expect(calledAgents).toEqual(['gemini', 'claude', 'gpt']);
   });
 });

@@ -1,5 +1,5 @@
 // =============================================================================
-// The Brain — Discussion Mode CEO Prompt Artifact Tests
+// The Brain — Decision Mode CEO Prompt Artifact Tests
 // =============================================================================
 
 import { describe, it, expect } from 'vitest';
@@ -11,10 +11,10 @@ import type { BrainState, CeoPromptArtifact } from '../types/brain';
 // Test Fixtures
 // -----------------------------------------------------------------------------
 
-function createDiscussionState(overrides: Partial<BrainState> = {}): BrainState {
+function createDecisionState(overrides: Partial<BrainState> = {}): BrainState {
   return {
     ...initialBrainState,
-    mode: 'discussion',
+    mode: 'decision',
     ...overrides,
   };
 }
@@ -137,16 +137,16 @@ describe('CEO Prompt Artifact Creation', () => {
 });
 
 // -----------------------------------------------------------------------------
-// Reducer Tests for Discussion CEO Prompt Artifact
+// Reducer Tests for Decision Mode CEO Prompt Artifact
 // -----------------------------------------------------------------------------
 
-describe('Discussion CEO Prompt Artifact Reducer', () => {
+describe('Decision Mode CEO Prompt Artifact Reducer', () => {
   it('initialBrainState has null discussionCeoPromptArtifact', () => {
     expect(initialBrainState.discussionCeoPromptArtifact).toBeNull();
   });
 
-  it('SET_DISCUSSION_CEO_PROMPT_ARTIFACT stores artifact in discussion mode', () => {
-    const state = createDiscussionState();
+  it('SET_DISCUSSION_CEO_PROMPT_ARTIFACT stores artifact in decision mode', () => {
+    const state = createDecisionState();
     const artifact: CeoPromptArtifact = {
       text: 'Build authentication system',
       version: 1,
@@ -161,7 +161,23 @@ describe('Discussion CEO Prompt Artifact Reducer', () => {
     expect(result.discussionCeoPromptArtifact).toEqual(artifact);
   });
 
-  it('SET_DISCUSSION_CEO_PROMPT_ARTIFACT no-ops in non-discussion mode', () => {
+  it('SET_DISCUSSION_CEO_PROMPT_ARTIFACT stores artifact in discussion mode', () => {
+    const state: BrainState = { ...initialBrainState, mode: 'discussion' };
+    const artifact: CeoPromptArtifact = {
+      text: 'Build authentication system',
+      version: 1,
+      createdAt: '2024-01-01T00:00:00.000Z',
+    };
+
+    const result = brainReducer(state, {
+      type: 'SET_DISCUSSION_CEO_PROMPT_ARTIFACT',
+      artifact,
+    });
+
+    expect(result.discussionCeoPromptArtifact).toEqual(artifact);
+  });
+
+  it('SET_DISCUSSION_CEO_PROMPT_ARTIFACT no-ops in project mode', () => {
     const state: BrainState = { ...initialBrainState, mode: 'project' };
     const artifact: CeoPromptArtifact = {
       text: 'Some prompt',
@@ -177,8 +193,8 @@ describe('Discussion CEO Prompt Artifact Reducer', () => {
     expect(result.discussionCeoPromptArtifact).toBeNull();
   });
 
-  it('CLEAR resets discussionCeoPromptArtifact in discussion mode', () => {
-    const state = createDiscussionState({
+  it('CLEAR resets discussionCeoPromptArtifact in decision mode', () => {
+    const state = createDecisionState({
       discussionCeoPromptArtifact: {
         text: 'Some prompt',
         version: 2,
