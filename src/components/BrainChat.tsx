@@ -174,9 +174,16 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
   // Input Control
   // Block advisor input during execution loop (read-only mode)
   // Block main input during clarification (Decision mode)
+  // Block main input after decision is finalized (has prompt artifact)
   // ---------------------------------------------------------------------------
 
-  const canSubmitPrompt = canSubmit() && !loopRunning && !clarificationActive && !decisionBlocked;
+  // Decision is finalized when we have a prompt artifact and clarification is NOT active
+  const isDecisionFinalized = mode === 'decision' &&
+    discussionCeoPromptArtifact !== null &&
+    !clarificationActive &&
+    !processing;
+
+  const canSubmitPrompt = canSubmit() && !loopRunning && !clarificationActive && !decisionBlocked && !isDecisionFinalized;
 
   // ---------------------------------------------------------------------------
   // Handlers
@@ -190,9 +197,11 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
       if (clarificationActive) return;
       // Hard block: No input when session is blocked (invalid CEO output)
       if (decisionBlocked) return;
+      // Hard block: No input after decision is finalized
+      if (isDecisionFinalized) return;
       submitPrompt(prompt);
     },
-    [submitPrompt, loopRunning, clarificationActive, decisionBlocked]
+    [submitPrompt, loopRunning, clarificationActive, decisionBlocked, isDecisionFinalized]
   );
 
   const handleCancel = useCallback(() => {
@@ -529,6 +538,13 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
           lastCeoQuestions={lastCeoQuestions}
           onRetryCeoClarification={handleRetryCeoClarification}
         />
+
+        {/* Decision Finalized Message */}
+        {isDecisionFinalized && (
+          <div className="brain-chat__decision-finalized" data-testid="decision-finalized-message">
+            Decision finalized. Copy the Claude Code prompt or Clear Board to continue.
+          </div>
+        )}
 
         {/* Prompt Input (with summary indicator in Decision mode) */}
         <PromptInput
