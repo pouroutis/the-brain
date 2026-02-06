@@ -155,9 +155,11 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     (prompt: string) => {
       // Hard block: No input during execution loop
       if (loopRunning) return;
+      // Hard block: No input during clarification (CEO-only lane)
+      if (clarificationActive) return;
       submitPrompt(prompt);
     },
-    [submitPrompt, loopRunning]
+    [submitPrompt, loopRunning, clarificationActive]
   );
 
   const handleCancel = useCallback(() => {

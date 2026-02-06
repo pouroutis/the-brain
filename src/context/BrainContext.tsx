@@ -55,6 +55,7 @@ import {
   mergeKeyNotes,
 } from '../utils/compaction';
 import { buildDiscussionMemoryBlock, buildCarryoverMemoryBlock, buildProjectSummaryBlock } from '../utils/contextBuilder';
+import { parseCeoControlBlock } from '../utils/ceoControlBlockParser';
 
 // -----------------------------------------------------------------------------
 // Constants
@@ -547,6 +548,11 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       return;
     }
 
+    // Guard: Skip main sequence if clarification is active (CEO-only lane)
+    if (state.clarificationState?.isActive) {
+      return;
+    }
+
     // Idempotency: skip if already orchestrating this runId
     if (activeRunIdRef.current === currentRunId) {
       return;
@@ -1035,6 +1041,48 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
 
         // Handle response
         if (response.status === 'success' && response.content) {
+          // Parse CEO response for control blocks
+          const parsed = parseCeoControlBlock(response.content);
+
+          // CEO published a Claude Code prompt - resolve clarification
+          if (parsed.hasPromptArtifact && parsed.promptText) {
+            // Add CEO response to messages
+            dispatch({ type: 'CLARIFICATION_CEO_RESPONSE', content: response.content });
+
+            // Create Decision Memo
+            const memo: DecisionMemo = {
+              clarificationSummary: 'Clarification completed. CEO has finalized the prompt.',
+              finalDecision: parsed.promptText.slice(0, 200) + (parsed.promptText.length > 200 ? '...' : ''),
+              nextStep: 'Execute the Claude Code prompt.',
+              timestamp: Date.now(),
+            };
+
+            // Resolve clarification with memo
+            dispatch({ type: 'RESOLVE_CLARIFICATION', memo });
+
+            // Update CEO prompt artifact
+            dispatch({
+              type: 'SET_DISCUSSION_CEO_PROMPT_ARTIFACT',
+              artifact: {
+                text: parsed.promptText,
+                version: 1,
+                createdAt: new Date().toISOString(),
+              },
+            });
+            return;
+          }
+
+          // CEO asked more questions - update blocked questions but keep clarification active
+          if (parsed.isBlocked && parsed.blockedQuestions.length > 0) {
+            // Add CEO response to messages
+            dispatch({ type: 'CLARIFICATION_CEO_RESPONSE', content: response.content });
+            // Update the blocked questions (handled by re-triggering START_CLARIFICATION would lose history)
+            // For now, just keep the clarification active with the new questions shown in response
+            return;
+          }
+
+          // CEO didn't provide valid output - just add response to messages
+          // This enforces that clarification continues until CEO provides proper output
           dispatch({ type: 'CLARIFICATION_CEO_RESPONSE', content: response.content });
         } else {
           // Error: dispatch a brief error message
@@ -1079,10 +1127,14 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     if (state.isProcessing) {
       return '';
     }
+    // Guard: Block if clarification is active (CEO-only lane)
+    if (state.clarificationState?.isActive) {
+      return '';
+    }
     const runId = generateRunId();
     dispatch({ type: 'SUBMIT_START', runId, userPrompt });
     return runId;
-  }, [state.isProcessing]);
+  }, [state.isProcessing, state.clarificationState]);
 
   const cancelSequence = useCallback((): void => {
     // No-op if no active sequence

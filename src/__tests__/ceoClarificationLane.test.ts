@@ -427,3 +427,162 @@ Please clarify these points.`;
     expect(result.hasPromptArtifact).toBe(true);
   });
 });
+
+// -----------------------------------------------------------------------------
+// SUBMIT_START Blocked During Clarification Tests
+// -----------------------------------------------------------------------------
+
+describe('SUBMIT_START Blocked During Clarification', () => {
+  it('submitPrompt does not trigger sequence when clarification is active', async () => {
+    mockCallAgent
+      .mockResolvedValueOnce(createAgentResponse('gemini'))
+      .mockResolvedValueOnce(createAgentResponse('claude'))
+      .mockResolvedValueOnce(createAgentResponse('gpt'));
+
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    // Set to Decision mode
+    act(() => {
+      result.current.setMode('decision');
+    });
+
+    // Start clarification
+    act(() => {
+      result.current.startClarification(['Question?']);
+    });
+
+    expect(result.current.isClarificationActive()).toBe(true);
+
+    // Clear mock to track new calls
+    mockCallAgent.mockClear();
+
+    // Try to submit a prompt while clarification is active
+    act(() => {
+      result.current.submitPrompt('This should be blocked');
+    });
+
+    // Wait a bit to ensure no sequence started
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Should NOT have called any agents
+    expect(mockCallAgent).not.toHaveBeenCalled();
+
+    // Should NOT be processing
+    expect(result.current.isProcessing()).toBe(false);
+
+    // Clarification should still be active
+    expect(result.current.isClarificationActive()).toBe(true);
+  });
+
+  it('submitPrompt works normally after clarification ends', async () => {
+    mockCallAgent
+      .mockResolvedValueOnce(createAgentResponse('gemini'))
+      .mockResolvedValueOnce(createAgentResponse('claude'))
+      .mockResolvedValueOnce(createAgentResponse('gpt'));
+
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    // Set to Decision mode
+    act(() => {
+      result.current.setMode('decision');
+    });
+
+    // Start and then cancel clarification
+    act(() => {
+      result.current.startClarification(['Question?']);
+    });
+
+    expect(result.current.isClarificationActive()).toBe(true);
+
+    act(() => {
+      result.current.cancelClarification();
+    });
+
+    expect(result.current.isClarificationActive()).toBe(false);
+
+    // Clear mock to track new calls
+    mockCallAgent.mockClear();
+
+    // Now submit should work
+    act(() => {
+      result.current.submitPrompt('This should work now');
+    });
+
+    await waitFor(() => {
+      expect(result.current.isProcessing()).toBe(false);
+    });
+
+    // Should have called all 3 agents
+    expect(mockCallAgent).toHaveBeenCalledTimes(3);
+  });
+});
+
+// -----------------------------------------------------------------------------
+// Clarification Messages Never Reach Other AIs Tests
+// -----------------------------------------------------------------------------
+
+describe('Clarification Messages Isolation', () => {
+  it('clarification messages are never sent to Gemini or Claude', async () => {
+    // Mock CEO response (just a plain response, not FINALIZE_PROMPT)
+    mockCallAgent.mockResolvedValue({
+      agent: 'gpt',
+      timestamp: Date.now(),
+      status: 'success',
+      content: 'CEO response to clarification',
+    });
+
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    // Set to Decision mode
+    act(() => {
+      result.current.setMode('decision');
+    });
+
+    // Start clarification
+    act(() => {
+      result.current.startClarification(['Question?']);
+    });
+
+    // Clear any previous calls
+    mockCallAgent.mockClear();
+
+    // Send multiple clarification messages
+    act(() => {
+      result.current.sendClarificationMessage('First response');
+    });
+
+    // Wait for CEO to respond
+    await waitFor(
+      () => {
+        const state = result.current.getClarificationState();
+        return state !== null && state.messages.length >= 2;
+      },
+      { timeout: 2000 }
+    );
+
+    // Send another message
+    mockCallAgent.mockClear();
+    act(() => {
+      result.current.sendClarificationMessage('Second response');
+    });
+
+    await waitFor(
+      () => {
+        const state = result.current.getClarificationState();
+        return state !== null && state.messages.length >= 4;
+      },
+      { timeout: 2000 }
+    );
+
+    // Verify ONLY CEO (gpt) was ever called
+    const allCalls = mockCallAgent.mock.calls;
+    for (const call of allCalls) {
+      expect(call[0]).toBe('gpt'); // All calls must be to CEO
+    }
+
+    // Explicitly check no calls to other agents
+    const calledAgents = allCalls.map((c) => c[0]);
+    expect(calledAgents).not.toContain('claude');
+    expect(calledAgents).not.toContain('gemini');
+  });
+});

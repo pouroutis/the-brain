@@ -217,6 +217,11 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         return state;
       }
 
+      // Guard: Block if clarification is active (CEO-only lane)
+      if (state.clarificationState?.isActive) {
+        return state;
+      }
+
       const newPendingExchange: PendingExchange = {
         runId: action.runId,
         userPrompt: action.userPrompt,
