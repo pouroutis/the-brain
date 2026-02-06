@@ -209,6 +209,8 @@ interface BrainActions {
   retryCeoReformat: () => void;
   /** Set CEO-only mode toggle (Decision mode only) */
   setCeoOnlyMode: (enabled: boolean) => void;
+  /** Retry CEO in clarification lane (after timeout/error) */
+  retryCeoClarification: () => void;
 }
 
 /**
@@ -1052,8 +1054,12 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
           }
         );
 
-        // Check if aborted
+        // Check if aborted - dispatch timeout message instead of silent return
         if (clarificationAbortController.signal.aborted) {
+          dispatch({
+            type: 'CLARIFICATION_CEO_RESPONSE',
+            content: '[CEO response timed out. Click Retry to try again.]',
+          });
           return;
         }
 
@@ -1296,8 +1302,30 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
   }, []);
 
   const cancelClarification = useCallback((): void => {
+    // Abort any in-progress CEO call
+    if (clarificationAbortControllerRef.current) {
+      clarificationAbortControllerRef.current.abort();
+      clarificationAbortControllerRef.current = null;
+    }
     dispatch({ type: 'CANCEL_CLARIFICATION' });
   }, []);
+
+  const retryCeoClarification = useCallback((): void => {
+    // Guard: Only in decision mode with active clarification
+    if (state.mode !== 'decision' || !state.clarificationState?.isActive) {
+      return;
+    }
+
+    // Abort any in-progress call first
+    if (clarificationAbortControllerRef.current) {
+      clarificationAbortControllerRef.current.abort();
+      clarificationAbortControllerRef.current = null;
+    }
+
+    // Create a synthetic "retry" message to trigger the CEO effect
+    // The effect watches for new user messages, so we add a retry request
+    dispatch({ type: 'CLARIFICATION_USER_MESSAGE', content: '[Retry requested]' });
+  }, [state.mode, state.clarificationState?.isActive]);
 
   const blockDecisionSession = useCallback((reason: string, exchangeId: string): void => {
     dispatch({ type: 'DECISION_BLOCK_SESSION', reason, exchangeId });
@@ -1616,6 +1644,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       sendClarificationMessage,
       resolveClarification,
       cancelClarification,
+      retryCeoClarification,
       blockDecisionSession,
       unblockDecisionSession,
       retryCeoReformat,
@@ -1688,6 +1717,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       sendClarificationMessage,
       resolveClarification,
       cancelClarification,
+      retryCeoClarification,
       blockDecisionSession,
       unblockDecisionSession,
       retryCeoReformat,

@@ -46,6 +46,8 @@ interface DecisionModeLayoutProps {
   onToggleCeoOnlyMode: (enabled: boolean) => void;
   /** CEO questions from last exchange (shown even when toggle is OFF) */
   lastCeoQuestions: string[];
+  /** Callback to retry CEO call in clarification (after timeout/error) */
+  onRetryCeoClarification: () => void;
 }
 
 // -----------------------------------------------------------------------------
@@ -70,6 +72,7 @@ export function DecisionModeLayout({
   ceoOnlyModeEnabled,
   onToggleCeoOnlyMode,
   lastCeoQuestions,
+  onRetryCeoClarification,
 }: DecisionModeLayoutProps): JSX.Element {
   const isBlocked = blockingState?.isBlocked ?? false;
 
@@ -127,6 +130,7 @@ export function DecisionModeLayout({
           ceoOnlyModeEnabled={ceoOnlyModeEnabled}
           onToggleCeoOnlyMode={onToggleCeoOnlyMode}
           lastCeoQuestions={lastCeoQuestions}
+          onRetryCeo={onRetryCeoClarification}
         />
       </div>
     </div>

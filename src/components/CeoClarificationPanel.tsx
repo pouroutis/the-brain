@@ -20,6 +20,8 @@ interface CeoClarificationPanelProps {
   onToggleCeoOnlyMode: (enabled: boolean) => void;
   /** CEO questions from last exchange (shown even when toggle is OFF) */
   lastCeoQuestions: string[];
+  /** Callback to retry CEO call (after timeout/error) */
+  onRetryCeo: () => void;
 }
 
 // -----------------------------------------------------------------------------
@@ -33,6 +35,7 @@ export function CeoClarificationPanel({
   ceoOnlyModeEnabled,
   onToggleCeoOnlyMode,
   lastCeoQuestions,
+  onRetryCeo,
 }: CeoClarificationPanelProps): JSX.Element {
   const [inputValue, setInputValue] = useState('');
   const [isCollapsed, setIsCollapsed] = useState(true);
@@ -113,13 +116,24 @@ export function CeoClarificationPanel({
           {isCollapsed ? '▼' : '▲'}
         </button>
         {isActive && (
-          <button
-            className="ceo-clarification-panel__cancel"
-            onClick={onCancel}
-            title="Cancel clarification"
-          >
-            Cancel
-          </button>
+          <>
+            <button
+              className="ceo-clarification-panel__retry"
+              onClick={onRetryCeo}
+              disabled={clarificationState?.isProcessing}
+              title="Retry CEO call"
+              data-testid="retry-ceo-btn"
+            >
+              Retry CEO
+            </button>
+            <button
+              className="ceo-clarification-panel__cancel"
+              onClick={onCancel}
+              title="Cancel clarification"
+            >
+              Cancel
+            </button>
+          </>
         )}
       </div>
 

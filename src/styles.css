@@ -1204,6 +1204,28 @@ body {
   text-transform: uppercase;
 }
 
+/* Retry CEO button (primary action) */
+.ceo-clarification-panel__retry {
+  background: #1a4a1a;
+  border: 1px solid #2d7d2d;
+  border-radius: 4px;
+  color: #81c784;
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.ceo-clarification-panel__retry:hover:not(:disabled) {
+  background: #2d7d2d;
+  color: #a5d6a7;
+}
+
+.ceo-clarification-panel__retry:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .ceo-clarification-panel__cancel {
   background: none;
   border: 1px solid #555;

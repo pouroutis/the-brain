@@ -82,6 +82,7 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     // Clarification actions
     sendClarificationMessage,
     cancelClarification,
+    retryCeoClarification,
     getClarificationState,
     isClarificationActive,
     startClarification,
@@ -396,6 +397,10 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     cancelClarification();
   }, [cancelClarification]);
 
+  const handleRetryCeoClarification = useCallback(() => {
+    retryCeoClarification();
+  }, [retryCeoClarification]);
+
   const handleClearAndUnblock = useCallback(() => {
     // Clear board and unblock session
     clearBoard();
@@ -522,6 +527,7 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
           ceoOnlyModeEnabled={ceoOnlyModeEnabled}
           onToggleCeoOnlyMode={handleToggleCeoOnlyMode}
           lastCeoQuestions={lastCeoQuestions}
+          onRetryCeoClarification={handleRetryCeoClarification}
         />
 
         {/* Prompt Input (with summary indicator in Decision mode) */}
