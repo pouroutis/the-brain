@@ -31,6 +31,8 @@ interface DecisionModeLayoutProps {
   clarificationState: ClarificationState | null;
   onSendClarificationMessage: (content: string) => void;
   onCancelClarification: () => void;
+  /** Warning message when CEO prompt is missing markers */
+  ceoPromptWarning: string | null;
 }
 
 // -----------------------------------------------------------------------------
@@ -48,6 +50,7 @@ export function DecisionModeLayout({
   clarificationState,
   onSendClarificationMessage,
   onCancelClarification,
+  ceoPromptWarning,
 }: DecisionModeLayoutProps): JSX.Element {
   return (
     <div className="decision-mode-layout" data-testid="decision-mode-layout">
@@ -65,7 +68,7 @@ export function DecisionModeLayout({
 
       {/* Right Pane: CEO Prompt + Clarification */}
       <div className="decision-mode-layout__right">
-        <CeoPromptPanel artifact={ceoPromptArtifact} />
+        <CeoPromptPanel artifact={ceoPromptArtifact} warning={ceoPromptWarning} />
         <CeoClarificationPanel
           clarificationState={clarificationState}
           onSendMessage={onSendClarificationMessage}

@@ -1011,6 +1011,34 @@ body {
   background-color: #1a3a5c;
 }
 
+/* CEO Prompt Panel Warning State */
+.ceo-prompt-panel--warning {
+  border-color: #b71c1c;
+}
+
+.ceo-prompt-panel__warning {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px;
+  background-color: #2a1a1a;
+  border-radius: 6px;
+  margin: 12px 0;
+}
+
+.ceo-prompt-panel__warning-icon {
+  font-size: 1.5rem;
+}
+
+.ceo-prompt-panel__warning-text {
+  color: #ef5350;
+  font-size: 0.8125rem;
+  text-align: center;
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
 /* Responsive: stack panes on smaller screens */
 @media (max-width: 900px) {
   .decision-mode-layout {

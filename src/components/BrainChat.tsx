@@ -17,7 +17,12 @@ import {
   exportTranscriptAsMarkdown,
   downloadFile,
 } from '../utils/discussionPersistence';
-import { parseCeoControlBlock, createCeoPromptArtifact } from '../utils/ceoControlBlockParser';
+import {
+  parseCeoControlBlock,
+  createCeoPromptArtifact,
+  PROMPT_START_MARKER,
+  PROMPT_END_MARKER,
+} from '../utils/ceoControlBlockParser';
 import type { Agent, BrainMode, InterruptSeverity, InterruptScope } from '../types/brain';
 
 // -----------------------------------------------------------------------------
@@ -190,6 +195,13 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
   const [executorCopyFeedback, setExecutorCopyFeedback] = useState<string | null>(null);
   const generatedForExchangeRef = useRef<Set<string>>(new Set());
 
+  // ---------------------------------------------------------------------------
+  // CEO Prompt Warning (Decision mode only)
+  // Shown when CEO response doesn't contain required markers
+  // ---------------------------------------------------------------------------
+
+  const [ceoPromptWarning, setCeoPromptWarning] = useState<string | null>(null);
+
   // Reset tracking when exchanges are cleared
   useEffect(() => {
     if (!lastExchange?.id) {
@@ -198,8 +210,9 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
   }, [lastExchange?.id]);
 
   // ---------------------------------------------------------------------------
-  // Decision Mode: Parse CEO responses for FINALIZE_PROMPT control blocks
+  // Decision Mode: Parse CEO responses for Claude Code prompt (HARD DELIMITERS)
   // (Only in Decision mode - NOT Discussion mode)
+  // CEO MUST use: === CLAUDE_CODE_PROMPT_START === ... === CLAUDE_CODE_PROMPT_END ===
   // ---------------------------------------------------------------------------
 
   const lastParsedExchangeRef = useRef<string | null>(null);
@@ -217,26 +230,58 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     // Skip if already parsed this exchange
     if (lastParsedExchangeRef.current === lastExchange.id) return;
 
-    // Get CEO's response
+    // Get CEO's response (ONLY CEO messages are eligible for extraction)
     const ceoResponse = lastExchange.responsesByAgent[ceo];
     if (!ceoResponse || ceoResponse.status !== 'success' || !ceoResponse.content) return;
 
     // Mark as parsed
     lastParsedExchangeRef.current = lastExchange.id;
 
-    // Parse for control block
+    // Parse for markers (HARD DELIMITERS - deterministic extraction)
     const parsed = parseCeoControlBlock(ceoResponse.content);
+
+    // Check for BLOCKED state (trigger clarification lane) - takes precedence
+    if (parsed.isBlocked && parsed.blockedQuestions.length > 0) {
+      setCeoPromptWarning(null); // Clear any previous warning
+      startClarification(parsed.blockedQuestions);
+      return;
+    }
+
+    // Check for Claude Code prompt with required markers
     if (parsed.hasPromptArtifact && parsed.promptText) {
+      // Clear warning - CEO provided valid prompt
+      setCeoPromptWarning(null);
       // Create new artifact with incremented version
       const newArtifact = createCeoPromptArtifact(parsed.promptText, discussionCeoPromptArtifact);
       setDiscussionCeoPromptArtifact(newArtifact);
+      return;
     }
 
-    // Check for BLOCKED state (trigger clarification lane)
-    if (parsed.isBlocked && parsed.blockedQuestions.length > 0) {
-      startClarification(parsed.blockedQuestions);
+    // CEO response WITHOUT required markers - show warning
+    // Check if content has any partial markers (CEO tried but failed)
+    const hasPartialStart = ceoResponse.content.includes('CLAUDE_CODE_PROMPT');
+    const hasStartMarker = ceoResponse.content.includes(PROMPT_START_MARKER);
+    const hasEndMarker = ceoResponse.content.includes(PROMPT_END_MARKER);
+
+    if (hasPartialStart || hasStartMarker || hasEndMarker) {
+      // CEO tried to use markers but format is wrong
+      setCeoPromptWarning(
+        `CEO prompt has malformed markers. Required format:\n${PROMPT_START_MARKER}\n(prompt)\n${PROMPT_END_MARKER}`
+      );
+    } else {
+      // CEO didn't include markers at all
+      setCeoPromptWarning(
+        `CEO response missing required markers. Prompt panel will not be populated.`
+      );
     }
   }, [mode, processing, lastExchange, ceo, discussionCeoPromptArtifact, setDiscussionCeoPromptArtifact, startClarification]);
+
+  // Clear warning when mode changes or board is cleared
+  useEffect(() => {
+    if (mode !== 'decision' || exchanges.length === 0) {
+      setCeoPromptWarning(null);
+    }
+  }, [mode, exchanges.length]);
 
   const hasGeneratedForCurrentExchange =
     lastExchange?.id !== null &&
@@ -422,6 +467,7 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
           clarificationState={clarificationState}
           onSendClarificationMessage={handleSendClarificationMessage}
           onCancelClarification={handleCancelClarification}
+          ceoPromptWarning={ceoPromptWarning}
         />
 
         {/* Prompt Input (with summary indicator in Decision mode) */}

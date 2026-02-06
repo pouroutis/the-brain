@@ -12,13 +12,15 @@ import type { CeoPromptArtifact } from '../types/brain';
 
 interface CeoPromptPanelProps {
   artifact: CeoPromptArtifact | null;
+  /** Warning message when CEO prompt is missing required markers */
+  warning?: string | null;
 }
 
 // -----------------------------------------------------------------------------
 // Component
 // -----------------------------------------------------------------------------
 
-export function CeoPromptPanel({ artifact }: CeoPromptPanelProps): JSX.Element {
+export function CeoPromptPanel({ artifact, warning }: CeoPromptPanelProps): JSX.Element {
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
 
   const handleCopy = useCallback(async () => {
@@ -35,21 +37,31 @@ export function CeoPromptPanel({ artifact }: CeoPromptPanelProps): JSX.Element {
   }, [artifact]);
 
   // ---------------------------------------------------------------------------
-  // Render: Empty State
+  // Render: Empty State (with optional warning)
   // ---------------------------------------------------------------------------
 
   if (!artifact) {
     return (
-      <div className="ceo-prompt-panel ceo-prompt-panel--empty" data-testid="ceo-prompt-panel">
+      <div
+        className={`ceo-prompt-panel ceo-prompt-panel--empty ${warning ? 'ceo-prompt-panel--warning' : ''}`}
+        data-testid="ceo-prompt-panel"
+      >
         <div className="ceo-prompt-panel__header">
           <h3 className="ceo-prompt-panel__title">Claude Code Prompt</h3>
         </div>
-        <div className="ceo-prompt-panel__empty-state">
-          <p>No prompt yet.</p>
-          <p className="ceo-prompt-panel__hint">
-            The CEO will publish a prompt when ready.
-          </p>
-        </div>
+        {warning ? (
+          <div className="ceo-prompt-panel__warning" data-testid="ceo-prompt-warning">
+            <div className="ceo-prompt-panel__warning-icon">⚠️</div>
+            <div className="ceo-prompt-panel__warning-text">{warning}</div>
+          </div>
+        ) : (
+          <div className="ceo-prompt-panel__empty-state">
+            <p>No prompt yet.</p>
+            <p className="ceo-prompt-panel__hint">
+              The CEO will publish a prompt when ready.
+            </p>
+          </div>
+        )}
       </div>
     );
   }

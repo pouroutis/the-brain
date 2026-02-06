@@ -380,13 +380,96 @@ describe('Discussion Mode — No Clarification Impact', () => {
 });
 
 // -----------------------------------------------------------------------------
-// BLOCKED State Parsing Tests
+// Claude Code Prompt Extraction Tests (HARD DELIMITERS)
+// -----------------------------------------------------------------------------
+
+describe('parseCeoControlBlock — Claude Code Prompt Extraction', () => {
+  it('extracts prompt with correct markers', () => {
+    const content = `Here is the prompt for Claude Code:
+
+=== CLAUDE_CODE_PROMPT_START ===
+Implement a function that validates email addresses.
+Use regex for validation.
+=== CLAUDE_CODE_PROMPT_END ===
+
+Let me know if you need changes.`;
+
+    const result = parseCeoControlBlock(content);
+
+    expect(result.hasPromptArtifact).toBe(true);
+    expect(result.promptText).toBe(
+      'Implement a function that validates email addresses.\nUse regex for validation.'
+    );
+    expect(result.displayContent).not.toContain('CLAUDE_CODE_PROMPT_START');
+    expect(result.displayContent).not.toContain('CLAUDE_CODE_PROMPT_END');
+  });
+
+  it('returns hasPromptArtifact=false when markers missing', () => {
+    const content = 'Here is a prompt: do the thing. But no markers.';
+
+    const result = parseCeoControlBlock(content);
+
+    expect(result.hasPromptArtifact).toBe(false);
+    expect(result.promptText).toBeNull();
+  });
+
+  it('returns hasPromptArtifact=false when only start marker present', () => {
+    const content = `=== CLAUDE_CODE_PROMPT_START ===
+Do something
+(missing end marker)`;
+
+    const result = parseCeoControlBlock(content);
+
+    expect(result.hasPromptArtifact).toBe(false);
+    expect(result.promptText).toBeNull();
+  });
+
+  it('returns hasPromptArtifact=false when only end marker present', () => {
+    const content = `Some text
+=== CLAUDE_CODE_PROMPT_END ===`;
+
+    const result = parseCeoControlBlock(content);
+
+    expect(result.hasPromptArtifact).toBe(false);
+    expect(result.promptText).toBeNull();
+  });
+
+  it('returns hasPromptArtifact=false when markers in wrong order', () => {
+    const content = `=== CLAUDE_CODE_PROMPT_END ===
+prompt text
+=== CLAUDE_CODE_PROMPT_START ===`;
+
+    const result = parseCeoControlBlock(content);
+
+    expect(result.hasPromptArtifact).toBe(false);
+    expect(result.promptText).toBeNull();
+  });
+
+  it('returns hasPromptArtifact=false when content between markers is empty', () => {
+    const content = `=== CLAUDE_CODE_PROMPT_START ===
+
+=== CLAUDE_CODE_PROMPT_END ===`;
+
+    const result = parseCeoControlBlock(content);
+
+    expect(result.hasPromptArtifact).toBe(false);
+    expect(result.promptText).toBeNull();
+  });
+});
+
+// -----------------------------------------------------------------------------
+// BLOCKED State Parsing Tests (HARD DELIMITERS)
 // -----------------------------------------------------------------------------
 
 describe('parseCeoControlBlock — BLOCKED Detection', () => {
-  it('detects BLOCKED action with questions', () => {
+  it('detects BLOCKED state with question markers', () => {
     const content = `I need more information to proceed.
-{"ceo_action": "BLOCKED", "questions": ["What is the target platform?", "Should we use TypeScript?"]}
+
+=== CEO_BLOCKED_START ===
+Q1: What is the target platform?
+Q2: Should we use TypeScript?
+=== CEO_BLOCKED_END ===
+
 Please clarify these points.`;
 
     const result = parseCeoControlBlock(content);
@@ -396,21 +479,56 @@ Please clarify these points.`;
       'What is the target platform?',
       'Should we use TypeScript?',
     ]);
-    expect(result.displayContent).not.toContain('"ceo_action"');
+    expect(result.displayContent).not.toContain('CEO_BLOCKED_START');
+  });
+
+  it('parses numbered question format', () => {
+    const content = `=== CEO_BLOCKED_START ===
+1. First question?
+2. Second question?
+=== CEO_BLOCKED_END ===`;
+
+    const result = parseCeoControlBlock(content);
+
+    expect(result.isBlocked).toBe(true);
+    expect(result.blockedQuestions).toEqual([
+      'First question?',
+      'Second question?',
+    ]);
+  });
+
+  it('parses bullet question format', () => {
+    const content = `=== CEO_BLOCKED_START ===
+- What about this?
+- And that?
+=== CEO_BLOCKED_END ===`;
+
+    const result = parseCeoControlBlock(content);
+
+    expect(result.isBlocked).toBe(true);
+    expect(result.blockedQuestions).toEqual([
+      'What about this?',
+      'And that?',
+    ]);
   });
 
   it('limits questions to max 3', () => {
-    const content = `{"ceo_action": "BLOCKED", "questions": ["Q1?", "Q2?", "Q3?", "Q4?", "Q5?"]}`;
+    const content = `=== CEO_BLOCKED_START ===
+Q1: First?
+Q2: Second?
+Q3: Third?
+Q4: Fourth?
+Q5: Fifth?
+=== CEO_BLOCKED_END ===`;
 
     const result = parseCeoControlBlock(content);
 
     expect(result.isBlocked).toBe(true);
     expect(result.blockedQuestions).toHaveLength(3);
-    expect(result.blockedQuestions).toEqual(['Q1?', 'Q2?', 'Q3?']);
   });
 
-  it('returns isBlocked=false when no BLOCKED action', () => {
-    const content = 'Just a normal response without any control blocks.';
+  it('returns isBlocked=false when no BLOCKED markers', () => {
+    const content = 'Just a normal response without any markers.';
 
     const result = parseCeoControlBlock(content);
 
@@ -418,13 +536,19 @@ Please clarify these points.`;
     expect(result.blockedQuestions).toEqual([]);
   });
 
-  it('does not trigger BLOCKED for FINALIZE_PROMPT action', () => {
-    const content = `{"ceo_action": "FINALIZE_PROMPT", "claude_code_prompt": "do the thing"}`;
+  it('prompt takes precedence over BLOCKED when both present', () => {
+    const content = `=== CLAUDE_CODE_PROMPT_START ===
+Do the thing
+=== CLAUDE_CODE_PROMPT_END ===
+
+=== CEO_BLOCKED_START ===
+Q1: Question?
+=== CEO_BLOCKED_END ===`;
 
     const result = parseCeoControlBlock(content);
 
-    expect(result.isBlocked).toBe(false);
     expect(result.hasPromptArtifact).toBe(true);
+    expect(result.isBlocked).toBe(false);
   });
 });
 

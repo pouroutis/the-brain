@@ -20,12 +20,12 @@ function createDecisionState(overrides: Partial<BrainState> = {}): BrainState {
 }
 
 // -----------------------------------------------------------------------------
-// CEO Control Block Parser Tests
+// CEO Control Block Parser Tests (HARD DELIMITERS)
 // -----------------------------------------------------------------------------
 
 describe('CEO Control Block Parser', () => {
-  it('returns no artifact when content has no control block', () => {
-    const content = 'This is a regular response without any JSON control blocks.';
+  it('returns no artifact when content has no markers', () => {
+    const content = 'This is a regular response without any delimiter markers.';
     const result = parseCeoControlBlock(content);
 
     expect(result.hasPromptArtifact).toBe(false);
@@ -33,11 +33,13 @@ describe('CEO Control Block Parser', () => {
     expect(result.displayContent).toBe(content);
   });
 
-  it('extracts FINALIZE_PROMPT artifact from valid JSON block', () => {
+  it('extracts prompt from valid delimiter markers', () => {
     const promptText = 'Build a REST API with authentication';
     const content = `Here's my analysis.
 
-{"ceo_action": "FINALIZE_PROMPT", "claude_code_prompt": "${promptText}"}
+=== CLAUDE_CODE_PROMPT_START ===
+${promptText}
+=== CLAUDE_CODE_PROMPT_END ===
 
 Let me know if you need anything else.`;
 
@@ -45,13 +47,15 @@ Let me know if you need anything else.`;
 
     expect(result.hasPromptArtifact).toBe(true);
     expect(result.promptText).toBe(promptText);
-    expect(result.displayContent).not.toContain('FINALIZE_PROMPT');
+    expect(result.displayContent).not.toContain('CLAUDE_CODE_PROMPT_START');
+    expect(result.displayContent).not.toContain('CLAUDE_CODE_PROMPT_END');
   });
 
-  it('ignores non-FINALIZE_PROMPT actions', () => {
+  it('ignores partial markers (start only)', () => {
     const content = `Some response text.
 
-{"ceo_action": "OTHER_ACTION", "data": "some data"}
+=== CLAUDE_CODE_PROMPT_START ===
+Some content without end marker
 
 More text.`;
 
@@ -61,10 +65,11 @@ More text.`;
     expect(result.promptText).toBeNull();
   });
 
-  it('handles malformed JSON gracefully', () => {
-    const content = `Response with broken JSON:
+  it('ignores partial markers (end only)', () => {
+    const content = `Response with only end marker:
 
-{"ceo_action": "FINALIZE_PROMPT", "claude_code_prompt": broken}
+Some content
+=== CLAUDE_CODE_PROMPT_END ===
 
 End.`;
 
@@ -72,17 +77,20 @@ End.`;
 
     expect(result.hasPromptArtifact).toBe(false);
     expect(result.promptText).toBeNull();
-    expect(result.displayContent).toBe(content);
   });
 
-  it('extracts first FINALIZE_PROMPT when multiple exist', () => {
+  it('extracts first prompt when multiple marker pairs exist', () => {
     const content = `First block:
 
-{"ceo_action": "FINALIZE_PROMPT", "claude_code_prompt": "First prompt"}
+=== CLAUDE_CODE_PROMPT_START ===
+First prompt
+=== CLAUDE_CODE_PROMPT_END ===
 
 Second block:
 
-{"ceo_action": "FINALIZE_PROMPT", "claude_code_prompt": "Second prompt"}`;
+=== CLAUDE_CODE_PROMPT_START ===
+Second prompt
+=== CLAUDE_CODE_PROMPT_END ===`;
 
     const result = parseCeoControlBlock(content);
 
@@ -91,8 +99,11 @@ Second block:
   });
 
   it('handles multi-line prompt text', () => {
-    const promptText = 'Step 1: Create database\\nStep 2: Add models\\nStep 3: Build API';
-    const content = `{"ceo_action": "FINALIZE_PROMPT", "claude_code_prompt": "${promptText}"}`;
+    const content = `=== CLAUDE_CODE_PROMPT_START ===
+Step 1: Create database
+Step 2: Add models
+Step 3: Build API
+=== CLAUDE_CODE_PROMPT_END ===`;
 
     const result = parseCeoControlBlock(content);
 
