@@ -135,7 +135,7 @@ function sanitizeGatekeepingFlags(content: string): string {
 // Component
 // -----------------------------------------------------------------------------
 
-export function AgentCard({ agent, response, isActive, mode, isCeo = false }: AgentCardProps): JSX.Element {
+export function AgentCard({ agent, response, isActive, mode: _mode, isCeo = false }: AgentCardProps): JSX.Element {
   const status = getDisplayStatus(response, isActive);
   const statusLabel = getStatusLabel(status);
 
@@ -150,8 +150,8 @@ export function AgentCard({ agent, response, isActive, mode, isCeo = false }: Ag
   // Get contextual sub-message for terminal states
   const subMessage = getStatusSubMessage(response);
 
-  // Show FINAL DECISION badge in Decision mode for CEO with completed response
-  const showFinalBadge = isCeo && mode === 'decision' && status === 'success';
+  // Show FINAL DECISION badge for CEO with completed response (decision mode only — currently unused)
+  const showFinalBadge = false;
 
   // Build class names
   const cardClasses = ['agent-card'];

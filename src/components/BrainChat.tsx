@@ -15,29 +15,18 @@ import {
   exportTranscriptAsMarkdown,
   downloadFile,
 } from '../utils/discussionPersistence';
-import type { Agent } from '../types/brain';
-
-// -----------------------------------------------------------------------------
-// Types
-// -----------------------------------------------------------------------------
-
-interface BrainChatProps {
-  /** Callback to return to Home screen */
-  onReturnHome: () => void;
-}
 
 // -----------------------------------------------------------------------------
 // Component
 // -----------------------------------------------------------------------------
 
-export function BrainChat({ onReturnHome }: BrainChatProps): JSX.Element {
+export function BrainChat(): JSX.Element {
   const {
     // Action creators
     submitPrompt,
     cancelSequence,
     clearBoard,
     dismissWarning,
-    setCeo,
     // Selectors
     getState,
     canSubmit,
@@ -71,7 +60,6 @@ export function BrainChat({ onReturnHome }: BrainChatProps): JSX.Element {
   // ---------------------------------------------------------------------------
   // Warning display rule (GPT mandate):
   // Only show warning if pendingExchange exists.
-  // This prevents stale warnings from surfacing after completion/cancel.
   // ---------------------------------------------------------------------------
 
   const shouldShowWarning = warning !== null && pendingExchange !== null;
@@ -119,13 +107,6 @@ export function BrainChat({ onReturnHome }: BrainChatProps): JSX.Element {
     dismissWarning();
   }, [dismissWarning]);
 
-  const handleCeoChange = useCallback(
-    (agent: Agent) => {
-      setCeo(agent);
-    },
-    [setCeo]
-  );
-
   // ---------------------------------------------------------------------------
   // Discussion Export: Finish Discussion (JSON + Markdown)
   // ---------------------------------------------------------------------------
@@ -139,12 +120,12 @@ export function BrainChat({ onReturnHome }: BrainChatProps): JSX.Element {
     // Generate timestamp for filenames
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 
-    // Export as JSON (no CEO prompt artifact in discussion mode)
-    const jsonContent = exportTranscriptAsJson(session, transcript, null);
+    // Export as JSON
+    const jsonContent = exportTranscriptAsJson(session, transcript);
     downloadFile(jsonContent, `brain-transcript-${timestamp}.json`, 'application/json');
 
-    // Export as Markdown (no CEO prompt artifact in discussion mode)
-    const mdContent = exportTranscriptAsMarkdown(session, transcript, null);
+    // Export as Markdown
+    const mdContent = exportTranscriptAsMarkdown(session, transcript);
     downloadFile(mdContent, `brain-transcript-${timestamp}.md`, 'text/markdown');
   }, [state.discussionSession, state.transcript]);
 
@@ -182,16 +163,8 @@ export function BrainChat({ onReturnHome }: BrainChatProps): JSX.Element {
         onClear={handleClear}
         onCancel={handleCancel}
         mode={mode}
-        loopState={'idle'}
-        onStartExecution={() => {}}
-        onPauseExecution={() => {}}
-        onStopExecution={() => {}}
-        onMarkDone={() => {}}
-        ceo={ceo}
-        onCeoChange={handleCeoChange}
         onFinishDiscussion={handleFinishDiscussion}
         canExport={canExportDiscussion}
-        onReturnHome={onReturnHome}
       />
     </div>
   );

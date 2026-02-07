@@ -24,7 +24,7 @@ export function AppLayout(): JSX.Element {
         <WorkItemSidebar />
       </div>
       <div className="app-layout__center">
-        <BrainChat onReturnHome={() => {}} />
+        <BrainChat />
       </div>
       <div className="app-layout__shelf">
         <ContextShelfPanel selectedItem={selectedItem} />

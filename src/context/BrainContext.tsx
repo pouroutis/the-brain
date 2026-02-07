@@ -1,6 +1,6 @@
 // =============================================================================
 // The Brain — Multi-AI Sequential Chat System
-// Context / Provider with Orchestrator (Phase 2 — Steps 3 & 4)
+// Context / Provider with Orchestrator
 // =============================================================================
 
 import {
@@ -20,18 +20,12 @@ import type {
   AgentResponse,
   AgentStatus,
   BrainState,
-  CeoPromptArtifact,
   Exchange,
   KeyNotes,
-  LoopState,
   PendingExchange,
-  ProjectRun,
   SystemMessage,
   WarningState,
   ErrorCode,
-  GatekeepingFlags,
-  InterruptSeverity,
-  InterruptScope,
 } from '../types/brain';
 import { brainReducer, initialBrainState } from '../reducer/brainReducer';
 import { callAgent } from '../api/agentClient';
@@ -72,13 +66,17 @@ function generateRunId(): string {
 // -----------------------------------------------------------------------------
 
 /**
+ * Gatekeeping flags parsed from GPT's response.
+ */
+interface GatekeepingFlags {
+  callClaude: boolean;
+  callGemini: boolean;
+  reasonTag: string;
+  valid: boolean;
+}
+
+/**
  * Parse GPT's gatekeeping response to extract routing flags.
- * Expected format in response:
- * ---
- * CALL_CLAUDE=true|false
- * CALL_GEMINI=true|false
- * REASON_TAG=some_tag
- * ---
  */
 function parseGatekeepingFlags(content: string): GatekeepingFlags {
   const defaultFlags: GatekeepingFlags = {
@@ -89,7 +87,6 @@ function parseGatekeepingFlags(content: string): GatekeepingFlags {
   };
 
   try {
-    // Look for the flags block
     const callClaudeMatch = content.match(/CALL_CLAUDE\s*=\s*(true|false)/i);
     const callGeminiMatch = content.match(/CALL_GEMINI\s*=\s*(true|false)/i);
     const reasonTagMatch = content.match(/REASON_TAG\s*=\s*(\S+)/i);
@@ -112,17 +109,8 @@ function parseGatekeepingFlags(content: string): GatekeepingFlags {
 /**
  * Compute agent order based on CEO.
  * CEO ALWAYS speaks LAST. Non-CEO advisors speak first in priority order.
- *
- * Priority order: Gemini first, Claude second, then CEO last.
- *
- * Order examples:
- * - When CEO=gpt: gemini, claude, gpt (CEO last)
- * - When CEO=claude: gemini, gpt, claude (CEO last)
- * - When CEO=gemini: claude, gpt, gemini (CEO last)
  */
 function getAgentOrder(ceo: Agent): Agent[] {
-  // Priority order: gemini, claude, gpt
-  // Remove CEO from this order, then append CEO at the end
   const priorityOrder: Agent[] = ['gemini', 'claude', 'gpt'];
   const advisors = priorityOrder.filter((a) => a !== ceo);
   return [...advisors, ceo];
@@ -149,36 +137,6 @@ interface BrainActions {
   setForceAllAdvisors: (enabled: boolean) => void;
   /** Toggle project discussion mode (injects project context) */
   setProjectDiscussionMode: (enabled: boolean) => void;
-  /** Set the CEO agent (speaks last, generates execution prompt) */
-  setCeo: (agent: Agent) => void;
-  /** Start the autonomous execution loop (Project mode only) */
-  startExecutionLoop: (intent?: string) => void;
-  /** Pause execution loop and return to Discussion mode */
-  pauseExecutionLoop: () => void;
-  /** Stop execution loop and clear context */
-  stopExecutionLoop: () => void;
-  /** Mark execution as DONE (Phase 2F — deterministic termination via UI) */
-  markDone: () => void;
-  /** Set the result artifact from Claude Code execution (Phase 2C) */
-  setResultArtifact: (artifact: string | null) => void;
-  /** Set the CEO execution prompt (Phase 2D — Executor Panel) */
-  setCeoExecutionPrompt: (prompt: string | null) => void;
-  /** Retry ghost orchestrator call after failure (STEP 3-4) */
-  retryExecution: () => void;
-  /** Start a new project epoch with user intent */
-  startProjectEpoch: (intent: string) => void;
-  /** Add a structured interrupt to project */
-  addProjectInterrupt: (message: string, severity: InterruptSeverity, scope: InterruptScope) => void;
-  /** Process pending blocker and restart micro-epoch */
-  processBlocker: () => void;
-  /** Start a new direction/epoch after DONE or FAILED */
-  newProjectDirection: (intent: string) => void;
-  /** Mark project as done */
-  markProjectDone: () => void;
-  /** Force project to failed state */
-  forceProjectFail: () => void;
-  /** Set the discussion mode CEO prompt artifact */
-  setDiscussionCeoPromptArtifact: (artifact: CeoPromptArtifact) => void;
 }
 
 /**
@@ -222,32 +180,10 @@ interface BrainSelectors {
   getProjectDiscussionMode: () => boolean;
   /** Get the current CEO agent */
   getCeo: () => Agent;
-  /** Get the loop state (Phase 2C) */
-  getLoopState: () => LoopState;
-  /** Check if loop is running (convenience helper) */
-  isLoopRunning: () => boolean;
-  /** Check if CEO can generate execution prompt (Project mode only) */
-  canGenerateExecutionPrompt: () => boolean;
-  /** Get the latest result artifact from Claude Code execution (Phase 2C) */
-  getResultArtifact: () => string | null;
-  /** Get the persisted CEO execution prompt (Phase 2D — Executor Panel) */
-  getCeoExecutionPrompt: () => string | null;
-  /** Get keyNotes from compacted exchanges (Discussion mode) */
+  /** Get keyNotes from compacted exchanges */
   getKeyNotes: () => KeyNotes | null;
   /** Get system messages for inline notifications */
   getSystemMessages: () => SystemMessage[];
-  /** Check if there is an active discussion session (Task 5.3) */
-  hasActiveDiscussion: () => boolean;
-  /** Get project error message (STEP 3-4) */
-  getProjectError: () => string | null;
-  /** Get ghost orchestrator output (STEP 3-4) */
-  getGhostOutput: () => string | null;
-  /** Get last project intent (STEP 3-4) */
-  getLastProjectIntent: () => string | null;
-  /** Get project run state */
-  getProjectRun: () => ProjectRun | null;
-  /** Get discussion mode CEO prompt artifact */
-  getDiscussionCeoPromptArtifact: () => CeoPromptArtifact | null;
 }
 
 /**
@@ -274,14 +210,12 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
 
   // ---------------------------------------------------------------------------
   // Force All Advisors State (testing-phase override)
-  // Initialized from env, can be toggled via UI
   // ---------------------------------------------------------------------------
 
   const [forceAllAdvisors, setForceAllAdvisorsState] = useState<boolean>(
     env.forceAllAdvisors
   );
 
-  // Ref for reading current value during async operations
   const forceAllAdvisorsRef = useRef<boolean>(env.forceAllAdvisors);
 
   useEffect(() => {
@@ -290,14 +224,12 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
 
   // ---------------------------------------------------------------------------
   // Project Discussion Mode State
-  // Initialized from env, can be toggled via UI
   // ---------------------------------------------------------------------------
 
   const [projectDiscussionMode, setProjectDiscussionModeState] = useState<boolean>(
     env.projectDiscussionMode
   );
 
-  // Ref for reading current value during async operations
   const projectDiscussionModeRef = useRef<boolean>(env.projectDiscussionMode);
 
   useEffect(() => {
@@ -305,13 +237,12 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
   }, [projectDiscussionMode]);
 
   // ---------------------------------------------------------------------------
-  // CEO State (Phase 2A)
-  // The CEO speaks last and is the only agent whose response becomes execution prompt
+  // CEO State
   // ---------------------------------------------------------------------------
 
   const [ceo, setCeoState] = useState<Agent>(env.defaultCeo);
+  void setCeoState; // Retained — CEO mutation path removed but useState preserved
 
-  // Ref for reading current value during async operations
   const ceoRef = useRef<Agent>(env.defaultCeo);
 
   useEffect(() => {
@@ -322,21 +253,10 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
   // Orchestrator Refs (stable across renders, avoid stale closures)
   // ---------------------------------------------------------------------------
 
-  /** Tracks the currently orchestrating runId to prevent duplicate runs */
   const activeRunIdRef = useRef<string | null>(null);
-
-  /** Synced from state.userCancelled to read fresh value during awaits */
   const userCancelledRef = useRef<boolean>(false);
-
-  /** Current in-flight AbortController for cancellation/cleanup */
   const abortControllerRef = useRef<AbortController | null>(null);
-
-  /** Run-scoped call counter for cost control (Phase 5) */
   const callIndexRef = useRef<number>(0);
-
-  // ---------------------------------------------------------------------------
-  // Sync userCancelled state to ref (for reading during async operations)
-  // ---------------------------------------------------------------------------
 
   useEffect(() => {
     userCancelledRef.current = state.userCancelled;
@@ -347,16 +267,15 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
   // ---------------------------------------------------------------------------
 
   const hasRehydratedRef = useRef(false);
-  const didLoadDataRef = useRef(false); // Track if we actually loaded data
+  const didLoadDataRef = useRef(false);
 
   useEffect(() => {
-    // Only rehydrate once on mount
     if (hasRehydratedRef.current) return;
     hasRehydratedRef.current = true;
 
     const persisted = loadDiscussionState();
     if (persisted) {
-      didLoadDataRef.current = true; // Mark that we loaded existing data
+      didLoadDataRef.current = true;
       dispatch({
         type: 'REHYDRATE_DISCUSSION',
         session: persisted.session,
@@ -369,34 +288,25 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
 
   // ---------------------------------------------------------------------------
   // Discussion Persistence: Save on SEQUENCE_COMPLETED or CLEAR
-  // Triggered by changes to discussionSession (only updates after those actions)
   // ---------------------------------------------------------------------------
 
   const prevExchangesLengthRef = useRef<number | null>(null);
 
   useEffect(() => {
-    // Skip if no session yet (initial state)
     if (!state.discussionSession) return;
-
-    // Skip during processing (mid-sequence)
     if (state.isProcessing) return;
 
-    // First valid run: initialize tracking
     if (prevExchangesLengthRef.current === null) {
       prevExchangesLengthRef.current = state.exchanges.length;
-      // If we rehydrated data, skip save (data already in localStorage)
-      // If fresh start, save immediately (first exchange needs to persist)
       if (didLoadDataRef.current) {
         return;
       }
-      // Fresh start with exchanges → save now
       if (state.exchanges.length > 0) {
         saveDiscussionState(state.discussionSession, state.exchanges, state.transcript, state.keyNotes);
       }
       return;
     }
 
-    // Subsequent runs: save if exchange count changed
     if (prevExchangesLengthRef.current !== state.exchanges.length) {
       prevExchangesLengthRef.current = state.exchanges.length;
       saveDiscussionState(state.discussionSession, state.exchanges, state.transcript, state.keyNotes);
@@ -404,94 +314,67 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
   }, [state.discussionSession, state.exchanges, state.transcript, state.keyNotes, state.isProcessing]);
 
   // ---------------------------------------------------------------------------
-  // Discussion Compaction: Trigger after SEQUENCE_COMPLETED when threshold met
+  // Discussion Compaction
   // ---------------------------------------------------------------------------
 
   const compactionInProgressRef = useRef(false);
   const lastCompactedCountRef = useRef<number>(0);
 
   useEffect(() => {
-    // Skip during processing (mid-sequence)
     if (state.isProcessing) return;
-
-    // Skip if no exchanges
     if (state.exchanges.length === 0) return;
-
-    // Skip if compaction already in progress
     if (compactionInProgressRef.current) return;
 
-    // Check if compaction is due
     const exchangeCount = state.discussionSession?.exchangeCount ?? state.exchanges.length;
     if (!shouldCompact(exchangeCount)) return;
-
-    // Skip if already compacted at this count
     if (lastCompactedCountRef.current === exchangeCount) return;
 
-    // Get exchanges to compact
     const toCompact = getExchangesToCompact(state.exchanges);
     if (toCompact.length === 0) return;
 
-    // Mark compaction in progress
     compactionInProgressRef.current = true;
 
-    // Run compaction asynchronously
     const runCompaction = async () => {
       try {
-        // Get current CEO for summarization
         const currentCeo = ceoRef.current;
-
-        // Build summarization prompt
         const prompt = buildCompactionPrompt(toCompact, state.keyNotes);
-
-        // Create abort controller for compaction call
         const compactionAbortController = new AbortController();
 
-        // Call CEO agent with summarization prompt
         const response = await callAgent(
           currentCeo,
           prompt,
-          '', // No conversation context for summarization
+          '',
           compactionAbortController,
           {
             runId: `compaction-${Date.now()}`,
             callIndex: 1,
-            exchanges: [], // No history for summarization
+            exchanges: [],
             projectDiscussionMode: false,
           }
         );
 
-        // Check for success
         if (response.status !== 'success' || !response.content) {
-          // Summarization failed — do NOT compact, retry on next sequence
           compactionInProgressRef.current = false;
           return;
         }
 
-        // Parse keyNotes from response
         const parsedKeyNotes = parseKeyNotes(response.content);
         if (!parsedKeyNotes) {
-          // Parse failed — do NOT compact, retry on next sequence
           compactionInProgressRef.current = false;
           return;
         }
 
-        // Merge with existing keyNotes
         const mergedKeyNotes = mergeKeyNotes(state.keyNotes, parsedKeyNotes);
-
-        // Get exchanges to keep
         const toKeep = getExchangesToKeep(state.exchanges);
-
-        // Mark this count as compacted
         lastCompactedCountRef.current = exchangeCount;
 
-        // Dispatch compaction completed
         dispatch({
           type: 'COMPACTION_COMPLETED',
           keyNotes: mergedKeyNotes,
           trimmedExchanges: toKeep,
         });
       } catch {
-        // Error during compaction — do NOT compact, retry on next sequence
+        // Error during compaction — retry on next sequence
       } finally {
         compactionInProgressRef.current = false;
       }
@@ -507,73 +390,38 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
   const currentRunId = state.pendingExchange?.runId ?? null;
 
   useEffect(() => {
-    // Only trigger on runId transition (null → new runId)
     if (currentRunId === null) {
       return;
     }
 
-    // Idempotency: skip if already orchestrating this runId
     if (activeRunIdRef.current === currentRunId) {
       return;
     }
 
-    // Set activeRunIdRef synchronously BEFORE any async boundary
     activeRunIdRef.current = currentRunId;
-
-    // Reset call counter for new run (Phase 5 cost control)
     callIndexRef.current = 0;
 
-    // Capture runId for this run (stable reference)
     const runId = currentRunId;
-
-    // Read userPrompt from state at the moment runId is observed (snapshot)
-    // This is safe because runId only transitions when SUBMIT_START creates a new pendingExchange
     const userPrompt = state.pendingExchange?.userPrompt ?? '';
 
-    // Create abort controller for this sequence
     const sequenceAbortController = new AbortController();
     abortControllerRef.current = sequenceAbortController;
 
-    /**
-     * Handle cancellation: abort in-flight, dispatch CANCEL_COMPLETE
-     */
     const handleCancel = (): void => {
-      // Abort any in-flight request
       sequenceAbortController.abort();
-      // Dispatch CANCEL_COMPLETE (runId-guarded by reducer)
       dispatch({ type: 'CANCEL_COMPLETE', runId });
-      // Clear active ref
       activeRunIdRef.current = null;
       abortControllerRef.current = null;
     };
 
-    /**
-     * Check if cancelled (reads fresh ref value)
-     */
     const isCancelled = (): boolean => userCancelledRef.current;
 
-    /**
-     * Run the orchestration sequence
-     */
     const runSequence = async (): Promise<void> => {
-      // -----------------------------------------------------------------------
-      // Single-Pass Mode (CEO-ordered sequence)
-      // CEO speaks LAST. Gatekeeping only works when GPT is first (CEO≠GPT).
-      // -----------------------------------------------------------------------
-
       const currentMode = 'discussion';
 
       let conversationContext = '';
-
-      // Capture settings at start of run
       const useProjectContext = projectDiscussionModeRef.current;
       const currentCeo = ceoRef.current;
-
-      // -----------------------------------------------------------------------
-      // Task 4: Discussion Memory Injection
-      // Build memory block containing keyNotes + last 10 exchanges
-      // Prepend to userPrompt so all agents receive context
-      // -----------------------------------------------------------------------
 
       let promptWithMemory = userPrompt;
       const memoryBlock = buildDiscussionMemoryBlock({
@@ -584,10 +432,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
         promptWithMemory = memoryBlock + userPrompt;
       }
 
-      // Compute agent order: advisors first, CEO last
       const agentOrder = getAgentOrder(currentCeo);
 
-      // Helper to call an agent
       const callAgentWithTimeout = async (agent: Agent): Promise<AgentResponse> => {
         const agentAbortController = new AbortController();
         sequenceAbortController.signal.addEventListener('abort', () => {
@@ -619,11 +465,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
         return response;
       };
 
-      // -----------------------------------------------------------------------
-      // Discussion Mode: Single-Pass
-      // -----------------------------------------------------------------------
-
-      // Gatekeeping flags (only populated if GPT speaks first)
       let flags: GatekeepingFlags = {
         callClaude: true,
         callGemini: true,
@@ -635,7 +476,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
         const agent = agentOrder[i];
         const isFirstAgent = i === 0;
 
-        // Check cancellation before each agent
         if (isCancelled()) {
           handleCancel();
           return;
@@ -645,20 +485,17 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
 
         const response = await callAgentWithTimeout(agent);
 
-        // Post-await cancellation check
         if (isCancelled()) {
           handleCancel();
           return;
         }
 
-        // Guard: Skip if response is undefined (malformed mock or edge case)
         if (!response) {
           continue;
         }
 
         dispatch({ type: 'AGENT_COMPLETED', runId, response });
 
-        // Update conversation context with proper agent labels
         if (response.status === 'success' && response.content) {
           const agentLabels: Record<Agent, string> = {
             gpt: 'GPT',
@@ -668,7 +505,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
           conversationContext += `${agentLabels[agent]}: ${response.content}\n\n`;
         }
 
-        // Parse gatekeeping flags if GPT spoke first
         if (isFirstAgent && agent === 'gpt') {
           if (response.status === 'success' && response.content) {
             flags = parseGatekeepingFlags(response.content);
@@ -681,7 +517,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
             };
           }
 
-          // Emit warning if parse failed
           if (!flags.valid) {
             dispatch({
               type: 'SET_WARNING',
@@ -696,24 +531,15 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
         }
       }
 
-      // -----------------------------------------------------------------------
-      // Complete sequence
-      // -----------------------------------------------------------------------
-
-      // Final safety check: only complete if not cancelled and runId still matches
       if (!isCancelled() && activeRunIdRef.current === runId) {
         dispatch({ type: 'SEQUENCE_COMPLETED', runId });
       }
 
-      // Clear refs
       activeRunIdRef.current = null;
       abortControllerRef.current = null;
     };
 
-    // Start the sequence with error handling to ensure processing always resets
     runSequence().catch(() => {
-      // On any unhandled error, ensure we clean up and reset processing state
-      // Dispatch SEQUENCE_COMPLETED to reset isProcessing=false
       if (activeRunIdRef.current === runId) {
         dispatch({ type: 'SEQUENCE_COMPLETED', runId });
       }
@@ -721,18 +547,9 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       abortControllerRef.current = null;
     });
 
-    // -------------------------------------------------------------------------
-    // Cleanup: Abort on unmount or if effect re-runs
-    // -------------------------------------------------------------------------
-
     return () => {
-      // Abort any in-flight request to prevent ghost dispatch
       sequenceAbortController.abort();
-      // Note: We don't dispatch here as component may be unmounting
     };
-  // Note: state.pendingExchange is read inside effect for userPrompt snapshot.
-  // This is safe because: (1) effect only fires on runId change, (2) idempotency
-  // guard prevents re-runs, (3) userPrompt is captured synchronously before async.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentRunId]);
 
@@ -741,7 +558,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
   // ---------------------------------------------------------------------------
 
   const submitPrompt = useCallback((userPrompt: string): string => {
-    // Guard: Block if already processing (double-submit protection)
     if (state.isProcessing) {
       return '';
     }
@@ -753,7 +569,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
   }, [state.isProcessing]);
 
   const cancelSequence = useCallback((): void => {
-    // No-op if no active sequence
     if (state.pendingExchange === null) {
       return;
     }
@@ -761,7 +576,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
   }, [state.pendingExchange]);
 
   const clearBoard = useCallback((): void => {
-    // Guard: Block if currently processing
     if (state.isProcessing) {
       return;
     }
@@ -769,7 +583,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
   }, [state.isProcessing]);
 
   const dismissWarning = useCallback((): void => {
-    // No-op if no active runId
     if (state.pendingExchange === null) {
       return;
     }
@@ -786,75 +599,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
 
   const setProjectDiscussionMode = useCallback((enabled: boolean): void => {
     setProjectDiscussionModeState(enabled);
-  }, []);
-
-  const setCeo = useCallback((agent: Agent): void => {
-    setCeoState(agent);
-  }, []);
-
-  const startExecutionLoop = useCallback((intent?: string): void => {
-    dispatch({ type: 'START_EXECUTION_LOOP', intent });
-  }, []);
-
-  const pauseExecutionLoop = useCallback((): void => {
-    dispatch({ type: 'PAUSE_EXECUTION_LOOP' });
-  }, []);
-
-  const stopExecutionLoop = useCallback((): void => {
-    dispatch({ type: 'STOP_EXECUTION_LOOP' });
-  }, []);
-
-  const markDone = useCallback((): void => {
-    // Phase 2F: Deterministic termination via UI button
-    // Reuses CEO_DONE_DETECTED action (sets loopState to 'idle')
-    dispatch({ type: 'CEO_DONE_DETECTED' });
-  }, []);
-
-  const setResultArtifact = useCallback((artifact: string | null): void => {
-    dispatch({ type: 'SET_RESULT_ARTIFACT', artifact });
-  }, []);
-
-  const setCeoExecutionPrompt = useCallback((prompt: string | null): void => {
-    dispatch({ type: 'SET_CEO_EXECUTION_PROMPT', prompt });
-  }, []);
-
-  const retryExecution = useCallback((): void => {
-    // STEP 3-4: Retry ghost orchestrator call
-    // Reset error and re-trigger execution
-    dispatch({ type: 'PROJECT_RESET_ERROR' });
-    // Re-start with the same intent
-    dispatch({ type: 'START_EXECUTION_LOOP', intent: state.lastProjectIntent ?? undefined });
-  }, [state.lastProjectIntent]);
-
-  const startProjectEpoch = useCallback((intent: string): void => {
-    dispatch({ type: 'PROJECT_START_EPOCH', intent });
-  }, []);
-
-  const addProjectInterrupt = useCallback(
-    (message: string, severity: InterruptSeverity, scope: InterruptScope): void => {
-      dispatch({ type: 'PROJECT_ADD_INTERRUPT', interrupt: { message, severity, scope } });
-    },
-    []
-  );
-
-  const processBlocker = useCallback((): void => {
-    dispatch({ type: 'PROJECT_PROCESS_BLOCKER' });
-  }, []);
-
-  const newProjectDirection = useCallback((intent: string): void => {
-    dispatch({ type: 'PROJECT_NEW_DIRECTION', intent });
-  }, []);
-
-  const markProjectDone = useCallback((): void => {
-    dispatch({ type: 'PROJECT_MARK_DONE' });
-  }, []);
-
-  const forceProjectFail = useCallback((): void => {
-    dispatch({ type: 'PROJECT_FORCE_FAIL' });
-  }, []);
-
-  const setDiscussionCeoPromptArtifact = useCallback((artifact: CeoPromptArtifact): void => {
-    dispatch({ type: 'SET_DISCUSSION_CEO_PROMPT_ARTIFACT', artifact });
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -899,7 +643,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
 
   const getAgentResponse = useCallback(
     (agent: Agent): AgentResponse | null => {
-      // Priority 1: pendingExchange (current sequence)
       if (state.pendingExchange !== null) {
         const pendingResponse = state.pendingExchange.responsesByAgent[agent];
         if (pendingResponse !== undefined) {
@@ -907,7 +650,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
         }
       }
 
-      // Priority 2: last completed exchange
       const { exchanges } = state;
       if (exchanges.length > 0) {
         const lastExchange = exchanges[exchanges.length - 1];
@@ -937,7 +679,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
   const getAgentError = useCallback(
     (agent: Agent): ErrorCode | null => {
       const response = getAgentResponse(agent);
-      // errorCode only exists when status === 'error'
       if (response !== null && response.status === 'error') {
         return response.errorCode;
       }
@@ -970,28 +711,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     return ceo;
   }, [ceo]);
 
-  const getLoopState = useCallback((): LoopState => {
-    return state.loopState;
-  }, [state.loopState]);
-
-  const isLoopRunning = useCallback((): boolean => {
-    return state.loopState === 'running';
-  }, [state.loopState]);
-
-  const canGenerateExecutionPrompt = useCallback((): boolean => {
-    // Only CEO can generate execution prompts, and only in Project mode
-    // Currently always discussion mode, so always false
-    return false;
-  }, []);
-
-  const getResultArtifact = useCallback((): string | null => {
-    return state.resultArtifact;
-  }, [state.resultArtifact]);
-
-  const getCeoExecutionPrompt = useCallback((): string | null => {
-    return state.ceoExecutionPrompt;
-  }, [state.ceoExecutionPrompt]);
-
   const getKeyNotes = useCallback((): KeyNotes | null => {
     return state.keyNotes;
   }, [state.keyNotes]);
@@ -999,30 +718,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
   const getSystemMessages = useCallback((): SystemMessage[] => {
     return state.systemMessages;
   }, [state.systemMessages]);
-
-  const hasActiveDiscussion = useCallback((): boolean => {
-    return state.discussionSession !== null;
-  }, [state.discussionSession]);
-
-  const getProjectError = useCallback((): string | null => {
-    return state.projectError;
-  }, [state.projectError]);
-
-  const getGhostOutput = useCallback((): string | null => {
-    return state.ghostOutput;
-  }, [state.ghostOutput]);
-
-  const getLastProjectIntent = useCallback((): string | null => {
-    return state.lastProjectIntent;
-  }, [state.lastProjectIntent]);
-
-  const getProjectRun = useCallback((): ProjectRun | null => {
-    return state.projectRun;
-  }, [state.projectRun]);
-
-  const getDiscussionCeoPromptArtifact = useCallback((): CeoPromptArtifact | null => {
-    return state.discussionCeoPromptArtifact;
-  }, [state.discussionCeoPromptArtifact]);
 
   // ---------------------------------------------------------------------------
   // Memoized Context Value
@@ -1037,21 +732,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       dismissWarning,
       setForceAllAdvisors,
       setProjectDiscussionMode,
-      setCeo,
-      startExecutionLoop,
-      pauseExecutionLoop,
-      stopExecutionLoop,
-      markDone,
-      setResultArtifact,
-      setCeoExecutionPrompt,
-      retryExecution,
-      startProjectEpoch,
-      addProjectInterrupt,
-      processBlocker,
-      newProjectDirection,
-      markProjectDone,
-      forceProjectFail,
-      setDiscussionCeoPromptArtifact,
       // Selectors
       getState,
       getActiveRunId,
@@ -1071,19 +751,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       getForceAllAdvisors,
       getProjectDiscussionMode,
       getCeo,
-      getLoopState,
-      isLoopRunning,
-      canGenerateExecutionPrompt,
-      getResultArtifact,
-      getCeoExecutionPrompt,
       getKeyNotes,
       getSystemMessages,
-      hasActiveDiscussion,
-      getProjectError,
-      getGhostOutput,
-      getLastProjectIntent,
-      getProjectRun,
-      getDiscussionCeoPromptArtifact,
     }),
     [
       submitPrompt,
@@ -1092,21 +761,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       dismissWarning,
       setForceAllAdvisors,
       setProjectDiscussionMode,
-      setCeo,
-      startExecutionLoop,
-      pauseExecutionLoop,
-      stopExecutionLoop,
-      markDone,
-      setResultArtifact,
-      setCeoExecutionPrompt,
-      retryExecution,
-      startProjectEpoch,
-      addProjectInterrupt,
-      processBlocker,
-      newProjectDirection,
-      markProjectDone,
-      forceProjectFail,
-      setDiscussionCeoPromptArtifact,
       getState,
       getActiveRunId,
       getPendingExchange,
@@ -1125,19 +779,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       getForceAllAdvisors,
       getProjectDiscussionMode,
       getCeo,
-      getLoopState,
-      isLoopRunning,
-      canGenerateExecutionPrompt,
-      getResultArtifact,
-      getCeoExecutionPrompt,
       getKeyNotes,
       getSystemMessages,
-      hasActiveDiscussion,
-      getProjectError,
-      getGhostOutput,
-      getLastProjectIntent,
-      getProjectRun,
-      getDiscussionCeoPromptArtifact,
     ]
   );
 
@@ -1152,10 +795,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
 // Hook: useBrain
 // -----------------------------------------------------------------------------
 
-/**
- * Access the Brain context. Must be used within a BrainProvider.
- * Throws if used outside provider.
- */
 export function useBrain(): BrainContextValue {
   const context = useContext(BrainContext);
   if (context === null) {

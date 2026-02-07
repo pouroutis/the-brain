@@ -129,8 +129,8 @@ export function ExchangeCard({
             return null;
           }
 
-          // Mark CEO agent in Decision/Project modes
-          const isCeo = (mode === 'decision' || mode === 'project') && agent === ceo;
+          // Mark CEO agent (currently discussion-only, so always false)
+          const isCeo = false;
 
           return (
             <AgentCard

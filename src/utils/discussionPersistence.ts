@@ -3,7 +3,7 @@
 // Discussion Persistence Utilities (localStorage)
 // =============================================================================
 
-import type { CeoPromptArtifact, DiscussionSession, Exchange, KeyNotes, TranscriptEntry } from '../types/brain';
+import type { DiscussionSession, Exchange, KeyNotes, TranscriptEntry } from '../types/brain';
 
 // -----------------------------------------------------------------------------
 // Constants
@@ -21,7 +21,6 @@ interface PersistedDiscussionState {
   exchanges: Exchange[];
   transcript: TranscriptEntry[];
   keyNotes: KeyNotes | null;
-  ceoPromptArtifact: CeoPromptArtifact | null;
 }
 
 // -----------------------------------------------------------------------------
@@ -82,29 +81,14 @@ function isValidKeyNotes(keyNotes: unknown): keyNotes is KeyNotes {
   return true;
 }
 
-function isValidCeoPromptArtifact(artifact: unknown): artifact is CeoPromptArtifact {
-  if (artifact === null) return true; // null is valid (no artifact yet)
-  if (!artifact || typeof artifact !== 'object') return false;
-  const a = artifact as Record<string, unknown>;
-  return (
-    typeof a.text === 'string' &&
-    typeof a.version === 'number' &&
-    typeof a.createdAt === 'string'
-  );
-}
-
 function isValidPersistedState(data: unknown): data is PersistedDiscussionState {
   if (!data || typeof data !== 'object') return false;
   const d = data as Record<string, unknown>;
 
   if (!isValidSession(d.session)) return false;
   if (!Array.isArray(d.exchanges)) return false;
-  // Transcript is optional for backward compatibility (will default to empty)
   if (d.transcript !== undefined && !Array.isArray(d.transcript)) return false;
-  // KeyNotes is optional for backward compatibility (will default to null)
   if (d.keyNotes !== undefined && d.keyNotes !== null && !isValidKeyNotes(d.keyNotes)) return false;
-  // CeoPromptArtifact is optional for backward compatibility (will default to null)
-  if (d.ceoPromptArtifact !== undefined && !isValidCeoPromptArtifact(d.ceoPromptArtifact)) return false;
 
   // Validate each exchange
   for (const exchange of d.exchanges) {
@@ -127,14 +111,12 @@ function isValidPersistedState(data: unknown): data is PersistedDiscussionState 
 
 /**
  * Save discussion state to localStorage.
- * Saves session metadata, exchanges, full transcript, keyNotes, and ceoPromptArtifact.
  */
 export function saveDiscussionState(
   session: DiscussionSession,
   exchanges: Exchange[],
   transcript: TranscriptEntry[],
-  keyNotes: KeyNotes | null = null,
-  ceoPromptArtifact: CeoPromptArtifact | null = null
+  keyNotes: KeyNotes | null = null
 ): void {
   try {
     const state: PersistedDiscussionState = {
@@ -142,7 +124,6 @@ export function saveDiscussionState(
       exchanges,
       transcript,
       keyNotes,
-      ceoPromptArtifact,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
@@ -161,21 +142,17 @@ export function loadDiscussionState(): PersistedDiscussionState | null {
 
     const parsed = JSON.parse(raw);
     if (!isValidPersistedState(parsed)) {
-      // Data is corrupted or wrong schema version — clear it
       clearDiscussionState();
       return null;
     }
 
-    // Handle backward compatibility: default transcript to empty array, keyNotes/ceoPromptArtifact to null
     return {
       session: parsed.session,
       exchanges: parsed.exchanges,
       transcript: parsed.transcript ?? [],
       keyNotes: parsed.keyNotes ?? null,
-      ceoPromptArtifact: parsed.ceoPromptArtifact ?? null,
     };
   } catch {
-    // JSON parse error or other issue — clear corrupted data
     clearDiscussionState();
     return null;
   }
@@ -208,8 +185,7 @@ const ROLE_LABELS: Record<string, string> = {
  */
 export function exportTranscriptAsJson(
   session: DiscussionSession,
-  transcript: TranscriptEntry[],
-  ceoPromptArtifact: CeoPromptArtifact | null = null
+  transcript: TranscriptEntry[]
 ): string {
   const exportData = {
     sessionId: session.id,
@@ -222,13 +198,6 @@ export function exportTranscriptAsJson(
       content: entry.content,
       timestamp: new Date(entry.timestamp).toISOString(),
     })),
-    ceoPromptArtifact: ceoPromptArtifact
-      ? {
-          text: ceoPromptArtifact.text,
-          version: ceoPromptArtifact.version,
-          createdAt: ceoPromptArtifact.createdAt,
-        }
-      : null,
   };
   return JSON.stringify(exportData, null, 2);
 }
@@ -238,8 +207,7 @@ export function exportTranscriptAsJson(
  */
 export function exportTranscriptAsMarkdown(
   session: DiscussionSession,
-  transcript: TranscriptEntry[],
-  ceoPromptArtifact: CeoPromptArtifact | null = null
+  transcript: TranscriptEntry[]
 ): string {
   const lines: string[] = [];
 
@@ -251,27 +219,11 @@ export function exportTranscriptAsMarkdown(
   lines.push(`**Total entries:** ${transcript.length}`);
   lines.push('');
 
-  // Include CEO Prompt Artifact if present
-  if (ceoPromptArtifact) {
-    lines.push('---');
-    lines.push('');
-    lines.push('## CEO Prompt Artifact');
-    lines.push('');
-    lines.push(`**Version:** ${ceoPromptArtifact.version}`);
-    lines.push(`**Created:** ${ceoPromptArtifact.createdAt}`);
-    lines.push('');
-    lines.push('```');
-    lines.push(ceoPromptArtifact.text);
-    lines.push('```');
-    lines.push('');
-  }
-
   lines.push('---');
   lines.push('');
 
   let currentExchangeId = '';
   for (const entry of transcript) {
-    // Add exchange separator
     if (entry.exchangeId !== currentExchangeId) {
       if (currentExchangeId !== '') {
         lines.push('');
