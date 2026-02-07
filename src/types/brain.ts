@@ -591,8 +591,6 @@ export interface BrainState {
   warningState: WarningState | null;
   error: string | null;
   clearBoardVersion: number;
-  /** Current operating mode (Phase 2) */
-  mode: BrainMode;
   /** Loop state (Phase 2C — Project mode only) */
   loopState: LoopState;
   /** Latest Claude Code execution result artifact (Phase 2C) */
@@ -644,7 +642,6 @@ export type BrainAction =
   | { type: 'CANCEL_COMPLETE'; runId: string }
   | { type: 'SET_WARNING'; runId: string; warning: WarningState | null }
   | { type: 'CLEAR' }
-  | { type: 'SET_MODE'; mode: BrainMode }
   | { type: 'START_EXECUTION_LOOP'; intent?: string }
   | { type: 'STOP_EXECUTION_LOOP' }
   | { type: 'PAUSE_EXECUTION_LOOP' }

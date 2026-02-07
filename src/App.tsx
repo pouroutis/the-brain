@@ -38,7 +38,6 @@ export function App(): JSX.Element {
           <HomeScreen onSelectMode={handleSelectMode} />
         ) : (
           <BrainChat
-            initialMode={selectedMode}
             onReturnHome={handleReturnHome}
           />
         )}

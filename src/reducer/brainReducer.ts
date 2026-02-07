@@ -10,12 +10,10 @@ import type {
   Carryover,
   ClarificationMessage,
   ClarificationState,
-  DecisionBlockingState,
   DecisionEpochPhase,
   DiscussionSession,
   Exchange,
   PendingExchange,
-  ProjectRun,
   ProjectInterrupt,
   ProjectState,
   SystemMessage,
@@ -40,7 +38,6 @@ export const initialBrainState: BrainState = {
   warningState: null,
   error: null,
   clearBoardVersion: 0,
-  mode: 'discussion',
   loopState: 'idle',
   resultArtifact: null,
   ceoExecutionPrompt: null,
@@ -85,23 +82,6 @@ function isTerminalPhase(phase: DecisionEpochPhase): boolean {
   return phase === 'EPOCH_COMPLETE' || phase === 'EPOCH_BLOCKED' || phase === 'EPOCH_STOPPED';
 }
 
-// -----------------------------------------------------------------------------
-// Helper: Create Initial Project Run
-// -----------------------------------------------------------------------------
-
-function createInitialProjectRun(intent: string, epochId: number = 1): ProjectRun {
-  return {
-    phase: 'INTENT_RECEIVED',
-    epochId,
-    microEpochId: 1,
-    revisionCount: 0,
-    interrupts: [],
-    lastIntent: intent,
-    ceoPromptArtifact: null,
-    executorOutput: null,
-    error: null,
-  };
-}
 
 // -----------------------------------------------------------------------------
 // Helper: Create or Update Discussion Session
@@ -331,17 +311,11 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
       const finalizedExchange = finalizePendingExchange(state.pendingExchange);
       const newExchanges = [...state.exchanges, finalizedExchange];
 
-      // Update discussion session metadata (Discussion mode only)
-      const updatedSession =
-        state.mode === 'discussion'
-          ? createOrUpdateSession(state.discussionSession, newExchanges.length)
-          : state.discussionSession;
+      // Update discussion session metadata
+      const updatedSession = createOrUpdateSession(state.discussionSession, newExchanges.length);
 
-      // Append to transcript (Discussion mode only, append-only)
-      const newTranscriptEntries =
-        state.mode === 'discussion'
-          ? exchangeToTranscriptEntries(finalizedExchange)
-          : [];
+      // Append to transcript (append-only)
+      const newTranscriptEntries = exchangeToTranscriptEntries(finalizedExchange);
       const updatedTranscript = [...state.transcript, ...newTranscriptEntries];
 
       return {
@@ -425,28 +399,13 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
       }
 
       // Reset discussion session (start fresh)
-      const clearedSession: DiscussionSession | null =
-        state.mode === 'discussion'
-          ? {
-              id: generateSessionId(),
-              createdAt: Date.now(),
-              lastUpdatedAt: Date.now(),
-              exchangeCount: 0,
-              schemaVersion: 1,
-            }
-          : state.discussionSession;
-
-      // Clear transcript in discussion mode (new session = new transcript)
-      const clearedTranscript = state.mode === 'discussion' ? [] : state.transcript;
-
-      // Clear keyNotes and systemMessages in discussion mode
-      const clearedKeyNotes = state.mode === 'discussion' ? null : state.keyNotes;
-      const clearedSystemMessages: SystemMessage[] = state.mode === 'discussion' ? [] : state.systemMessages;
-      // Clear CEO prompt artifact in discussion and decision modes (fresh session)
-      const clearedCeoPromptArtifact =
-        state.mode === 'discussion' || state.mode === 'decision'
-          ? null
-          : state.discussionCeoPromptArtifact;
+      const clearedSession: DiscussionSession | null = {
+        id: generateSessionId(),
+        createdAt: Date.now(),
+        lastUpdatedAt: Date.now(),
+        exchangeCount: 0,
+        schemaVersion: 1,
+      };
 
       return {
         ...state,
@@ -459,55 +418,13 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         error: null,
         clearBoardVersion: state.clearBoardVersion + 1,
         discussionSession: clearedSession,
-        transcript: clearedTranscript,
-        keyNotes: clearedKeyNotes,
-        systemMessages: clearedSystemMessages,
-        discussionCeoPromptArtifact: clearedCeoPromptArtifact,
-        // Clear clarification state in decision mode
-        clarificationState: state.mode === 'decision' ? null : state.clarificationState,
-        // Clear blocking state in decision mode
-        decisionBlockingState: state.mode === 'decision' ? null : state.decisionBlockingState,
-        // Clear decisionEpoch (Batch 4)
+        transcript: [],
+        keyNotes: null,
+        systemMessages: [],
+        discussionCeoPromptArtifact: null,
+        clarificationState: state.clarificationState,
+        decisionBlockingState: state.decisionBlockingState,
         decisionEpoch: null,
-        // Clear project-specific state when in project mode
-        ...(state.mode === 'project' && {
-          projectError: null,
-          ghostOutput: null,
-          lastProjectIntent: null,
-          projectRun: null,
-        }),
-      };
-    }
-
-    // -------------------------------------------------------------------------
-    // SET_MODE (Phase 2)
-    // -------------------------------------------------------------------------
-    case 'SET_MODE': {
-      // Guard: Block mode change while processing
-      if (state.isProcessing) {
-        return state;
-      }
-
-      // Guard: Block mode change while loop is running
-      if (state.loopState === 'running') {
-        return state;
-      }
-
-      return {
-        ...state,
-        mode: action.mode,
-        // Reset loop state when mode changes
-        loopState: 'idle',
-        // Clear project error when switching modes
-        projectError: null,
-        // Clear projectRun when leaving project mode
-        ...(action.mode !== 'project' && { projectRun: null }),
-        // Clear clarification state when leaving decision mode
-        ...(action.mode !== 'decision' && { clarificationState: null }),
-        // Clear blocking state when leaving decision mode
-        ...(action.mode !== 'decision' && { decisionBlockingState: null }),
-        // Clear decisionEpoch when leaving decision mode (Batch 4)
-        ...(action.mode !== 'decision' && { decisionEpoch: null }),
       };
     }
 
@@ -515,22 +432,8 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
     // START_EXECUTION_LOOP (Phase 2C — Project Mode Only)
     // -------------------------------------------------------------------------
     case 'START_EXECUTION_LOOP': {
-      // Guard: Only allowed in project mode
-      if (state.mode !== 'project') {
-        return state;
-      }
-
-      // Guard: Don't start if already running
-      if (state.loopState === 'running') {
-        return state;
-      }
-
-      return {
-        ...state,
-        loopState: 'running',
-        projectError: null,
-        lastProjectIntent: action.intent ?? state.lastProjectIntent,
-      };
+      // Guard: Only allowed in project mode (disabled)
+      return state;
     }
 
     // -------------------------------------------------------------------------
@@ -540,7 +443,6 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
       return {
         ...state,
         loopState: 'paused',
-        mode: 'discussion',
       };
     }
 
@@ -556,7 +458,6 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
       return {
         ...state,
         loopState: 'idle',
-        mode: 'discussion',
         // Reset loop-related state only, KEEP chat history (exchanges)
         pendingExchange: null,
         currentAgent: null,
@@ -615,8 +516,6 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         discussionSession: action.session,
         transcript: action.transcript,
         keyNotes: action.keyNotes,
-        // Ensure we're in discussion mode after rehydration
-        mode: 'discussion',
       };
     }
 
@@ -624,11 +523,6 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
     // COMPACTION_COMPLETED (Discussion mode — trim exchanges, update keyNotes)
     // -------------------------------------------------------------------------
     case 'COMPACTION_COMPLETED': {
-      // Guard: Only in discussion mode
-      if (state.mode !== 'discussion') {
-        return state;
-      }
-
       // Guard: Block if currently processing
       if (state.isProcessing) {
         return state;
@@ -646,11 +540,6 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
     // CREATE_CARRYOVER_FROM_DISCUSSION (Task 5.1 — Discussion→Project transfer)
     // -------------------------------------------------------------------------
     case 'CREATE_CARRYOVER_FROM_DISCUSSION': {
-      // Guard: Only allowed in discussion mode
-      if (state.mode !== 'discussion') {
-        return state;
-      }
-
       // Guard: Block if currently processing
       if (state.isProcessing) {
         return state;
@@ -732,21 +621,8 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
     // PROJECT_START_EPOCH — Start a new epoch with user intent
     // -------------------------------------------------------------------------
     case 'PROJECT_START_EPOCH': {
-      // Guard: Only in project mode
-      if (state.mode !== 'project') {
-        return state;
-      }
-
-      const nextEpochId = state.projectRun ? state.projectRun.epochId + 1 : 1;
-      const newRun = createInitialProjectRun(action.intent, nextEpochId);
-
-      return {
-        ...state,
-        projectRun: newRun,
-        loopState: 'running',
-        projectError: null,
-        lastProjectIntent: action.intent,
-      };
+      // Guard: Only in project mode (disabled)
+      return state;
     }
 
     // -------------------------------------------------------------------------
@@ -897,25 +773,8 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
     // PROJECT_NEW_DIRECTION — Start fresh epoch after DONE or FAILED
     // -------------------------------------------------------------------------
     case 'PROJECT_NEW_DIRECTION': {
-      // Guard: Only in project mode
-      if (state.mode !== 'project') {
-        return state;
-      }
-
-      const nextEpochId = state.projectRun ? state.projectRun.epochId + 1 : 1;
-      const newRun = createInitialProjectRun(action.intent, nextEpochId);
-
-      return {
-        ...state,
-        projectRun: newRun,
-        loopState: 'running',
-        projectError: null,
-        lastProjectIntent: action.intent,
-        // Clear previous artifacts
-        ghostOutput: null,
-        resultArtifact: null,
-        ceoExecutionPrompt: null,
-      };
+      // Guard: Only in project mode (disabled)
+      return state;
     }
 
     // -------------------------------------------------------------------------
@@ -962,11 +821,6 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
     // Note: This action is used in Decision mode for the CEO prompt panel
     // -------------------------------------------------------------------------
     case 'SET_DISCUSSION_CEO_PROMPT_ARTIFACT': {
-      // Guard: Only in discussion or decision mode
-      if (state.mode !== 'discussion' && state.mode !== 'decision') {
-        return state;
-      }
-
       return {
         ...state,
         discussionCeoPromptArtifact: action.artifact,
@@ -977,11 +831,6 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
     // START_CLARIFICATION — CEO outputs BLOCKED, enters clarification lane
     // -------------------------------------------------------------------------
     case 'START_CLARIFICATION': {
-      // Guard: Only in decision mode
-      if (state.mode !== 'decision') {
-        return state;
-      }
-
       // Guard: Block if clarification already active
       if (state.clarificationState?.isActive) {
         return state;
@@ -1115,22 +964,7 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
     // DECISION_BLOCK_SESSION — Block session due to invalid CEO output
     // -------------------------------------------------------------------------
     case 'DECISION_BLOCK_SESSION': {
-      // Guard: Only in decision mode
-      if (state.mode !== 'decision') {
-        return state;
-      }
-
-      const blockingState: DecisionBlockingState = {
-        isBlocked: true,
-        reason: action.reason,
-        exchangeId: action.exchangeId,
-        timestamp: Date.now(),
-      };
-
-      return {
-        ...state,
-        decisionBlockingState: blockingState,
-      };
+      return state;
     }
 
     // -------------------------------------------------------------------------
@@ -1320,35 +1154,8 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
     // EPOCH_START — Begin a new Decision Epoch
     // -------------------------------------------------------------------------
     case 'EPOCH_START': {
-      // Guard: only valid in Decision mode
-      if (state.mode !== 'decision') {
-        console.warn(`EPOCH_START ignored: mode is '${state.mode}', expected 'decision' (epochId: new)`);
-        return state;
-      }
-
-      // Guard: no epoch already active (must reset first)
-      if (state.decisionEpoch !== null && !isTerminalPhase(state.decisionEpoch.phase)) {
-        console.warn(`EPOCH_START ignored: epoch ${state.decisionEpoch.epochId} still active in phase '${state.decisionEpoch.phase}'`);
-        return state;
-      }
-
-      const prevId = state.decisionEpoch?.epochId ?? 0;
-
-      return {
-        ...state,
-        decisionEpoch: {
-          epochId: prevId + 1,
-          round: 1,
-          phase: action.ceoOnlyMode ? 'CEO_DRAFT' : 'ADVISORS',
-          maxRounds: EPOCH_DEFAULT_MAX_ROUNDS,
-          intent: action.intent,
-          ceoAgent: action.ceoAgent,
-          ceoOnlyMode: action.ceoOnlyMode,
-          startedAt: Date.now(),
-          completedAt: null,
-          terminalReason: null,
-        },
-      };
+      // Guard: only valid in Decision mode (disabled)
+      return state;
     }
 
     // -------------------------------------------------------------------------

@@ -19,22 +19,13 @@ import type {
   Agent,
   AgentResponse,
   AgentStatus,
-  BrainMode,
   BrainState,
   CeoPromptArtifact,
-  ClarificationState,
-  DecisionBlockingState,
-  DecisionEpoch,
-  DecisionMemo,
-  DecisionRecord,
   Exchange,
-  FileEntry,
   KeyNotes,
   LoopState,
-  ParsedAdvisorReview,
   PendingExchange,
   ProjectRun,
-  ProjectState,
   SystemMessage,
   WarningState,
   ErrorCode,
@@ -42,28 +33,13 @@ import type {
   InterruptSeverity,
   InterruptScope,
 } from '../types/brain';
-import { EPOCH_DEFAULT_MAX_ROUNDS } from '../types/brain';
-
 import { brainReducer, initialBrainState } from '../reducer/brainReducer';
-import { callAgent, CEO_REFORMAT_INSTRUCTION } from '../api/agentClient';
-import { callGhostOrchestrator, getGhostErrorMessage } from '../api/ghostClient';
-import type { GhostErrorCode } from '../types/ghost';
+import { callAgent } from '../api/agentClient';
 import { env } from '../config/env';
 import {
   loadDiscussionState,
   saveDiscussionState,
 } from '../utils/discussionPersistence';
-import {
-  generateProjectId,
-  generateDecisionId,
-  loadActiveProject,
-  loadProject,
-  saveProject,
-  setActiveProjectId,
-  clearActiveProject,
-  clearProjectById,
-  listProjects as listProjectsFromStorage,
-} from '../utils/decisionPersistence';
 import {
   shouldCompact,
   getExchangesToCompact,
@@ -72,9 +48,7 @@ import {
   parseKeyNotes,
   mergeKeyNotes,
 } from '../utils/compaction';
-import { buildDiscussionMemoryBlock, buildCarryoverMemoryBlock, buildProjectSummaryBlock, buildCeoFileContext } from '../utils/contextBuilder';
-import { parseCeoControlBlock } from '../utils/ceoControlBlockParser';
-import { parseAdvisorReview, buildAdvisorReviewSummary } from '../utils/advisorReviewParser';
+import { buildDiscussionMemoryBlock } from '../utils/contextBuilder';
 
 // -----------------------------------------------------------------------------
 // Constants
@@ -177,8 +151,6 @@ interface BrainActions {
   setProjectDiscussionMode: (enabled: boolean) => void;
   /** Set the CEO agent (speaks last, generates execution prompt) */
   setCeo: (agent: Agent) => void;
-  /** Set the operating mode (Phase 2) */
-  setMode: (mode: BrainMode) => void;
   /** Start the autonomous execution loop (Project mode only) */
   startExecutionLoop: (intent?: string) => void;
   /** Pause execution loop and return to Discussion mode */
@@ -191,10 +163,6 @@ interface BrainActions {
   setResultArtifact: (artifact: string | null) => void;
   /** Set the CEO execution prompt (Phase 2D — Executor Panel) */
   setCeoExecutionPrompt: (prompt: string | null) => void;
-  /** Switch from Discussion to Project mode with carryover (Task 5.3) */
-  switchToProject: () => void;
-  /** Return from Project to Discussion mode (Task 5.3) */
-  returnToDiscussion: () => void;
   /** Retry ghost orchestrator call after failure (STEP 3-4) */
   retryExecution: () => void;
   /** Start a new project epoch with user intent */
@@ -211,48 +179,6 @@ interface BrainActions {
   forceProjectFail: () => void;
   /** Set the discussion mode CEO prompt artifact */
   setDiscussionCeoPromptArtifact: (artifact: CeoPromptArtifact) => void;
-  /** Start clarification lane when CEO outputs BLOCKED (Decision mode only) */
-  startClarification: (questions: string[]) => void;
-  /** Send user message in clarification lane */
-  sendClarificationMessage: (content: string) => void;
-  /** Resolve clarification with Decision Memo */
-  resolveClarification: (memo: DecisionMemo) => void;
-  /** Cancel clarification lane */
-  cancelClarification: () => void;
-  /** Block Decision mode session due to invalid CEO output */
-  blockDecisionSession: (reason: string, exchangeId: string) => void;
-  /** Unblock Decision mode session (retry) */
-  unblockDecisionSession: () => void;
-  /** Retry CEO with reformat instruction (Decision mode only) */
-  retryCeoReformat: () => void;
-  /** Set CEO-only mode toggle (Decision mode only) */
-  setCeoOnlyMode: (enabled: boolean) => void;
-  /** Retry CEO in clarification lane (after timeout/error) */
-  retryCeoClarification: () => void;
-  /** Create a new project (ProjectState Persistence) */
-  createProject: () => string;
-  /** Clear the active project */
-  clearProject: () => void;
-  /** Create a new project, clear board, stay in Decision mode */
-  createNewProject: () => string;
-  /** Create a project from the current Decision mode result and switch to Project mode (Batch 9) */
-  createProjectFromDecision: () => void;
-  /** Switch to a different project by ID */
-  switchToProjectById: (projectId: string) => void;
-  /** Clear active project selection (for Project Dashboard empty state) */
-  clearActiveProjectSelection: () => void;
-  /** Delete a project by ID */
-  deleteProject: (projectId: string) => void;
-  /** Clear the blocked status on the active project */
-  clearProjectBlock: () => void;
-  /** Complete Decision Epoch with terminal reason (Batch 4+) */
-  completeDecisionEpoch: (reason: 'prompt_delivered' | 'blocked' | 'stopped' | 'cancelled') => void;
-  /** Add files to active project for CEO context injection (Batch 7) */
-  addProjectFiles: (files: FileEntry[]) => void;
-  /** Remove a file by ID from active project (Batch 7) */
-  removeProjectFile: (fileId: string) => void;
-  /** Clear all files from active project (Batch 7) */
-  clearProjectFiles: () => void;
 }
 
 /**
@@ -296,8 +222,6 @@ interface BrainSelectors {
   getProjectDiscussionMode: () => boolean;
   /** Get the current CEO agent */
   getCeo: () => Agent;
-  /** Get the current operating mode (Phase 2) */
-  getMode: () => BrainMode;
   /** Get the loop state (Phase 2C) */
   getLoopState: () => LoopState;
   /** Check if loop is running (convenience helper) */
@@ -324,24 +248,6 @@ interface BrainSelectors {
   getProjectRun: () => ProjectRun | null;
   /** Get discussion mode CEO prompt artifact */
   getDiscussionCeoPromptArtifact: () => CeoPromptArtifact | null;
-  /** Get clarification state (Decision mode only) */
-  getClarificationState: () => ClarificationState | null;
-  /** Check if clarification is active (main input disabled) */
-  isClarificationActive: () => boolean;
-  /** Get decision mode blocking state */
-  getDecisionBlockingState: () => DecisionBlockingState | null;
-  /** Check if decision session is blocked */
-  isDecisionBlocked: () => boolean;
-  /** Get Decision Epoch state (Batch 4+) */
-  getDecisionEpoch: () => DecisionEpoch | null;
-  /** Check if CEO-only mode is enabled */
-  isCeoOnlyMode: () => boolean;
-  /** Get active project state */
-  getActiveProject: () => ProjectState | null;
-  /** Check if there is an active project */
-  hasActiveProject: () => boolean;
-  /** List all saved projects from localStorage */
-  listProjects: () => ProjectState[];
 }
 
 /**
@@ -428,9 +334,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
   /** Run-scoped call counter for cost control (Phase 5) */
   const callIndexRef = useRef<number>(0);
 
-  /** Ghost orchestrator AbortController for Project mode (STEP 3-4) */
-  const ghostAbortControllerRef = useRef<AbortController | null>(null);
-
   // ---------------------------------------------------------------------------
   // Sync userCancelled state to ref (for reading during async operations)
   // ---------------------------------------------------------------------------
@@ -462,12 +365,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
         keyNotes: persisted.keyNotes,
       });
     }
-
-    // Also try to rehydrate active project
-    const activeProject = loadActiveProject();
-    if (activeProject) {
-      dispatch({ type: 'REHYDRATE_PROJECT', project: activeProject });
-    }
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -478,10 +375,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
   const prevExchangesLengthRef = useRef<number | null>(null);
 
   useEffect(() => {
-    // Skip if not in discussion mode
-    if (state.mode !== 'discussion') return;
-
-    // Skip if no session yet (initial state or non-discussion mode)
+    // Skip if no session yet (initial state)
     if (!state.discussionSession) return;
 
     // Skip during processing (mid-sequence)
@@ -507,82 +401,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       prevExchangesLengthRef.current = state.exchanges.length;
       saveDiscussionState(state.discussionSession, state.exchanges, state.transcript, state.keyNotes);
     }
-  }, [state.discussionSession, state.exchanges, state.transcript, state.keyNotes, state.mode, state.isProcessing]);
-
-  // ---------------------------------------------------------------------------
-  // Project Persistence: Save on activeProject changes
-  // ---------------------------------------------------------------------------
-
-  useEffect(() => {
-    // Skip if no active project
-    if (!state.activeProject) return;
-
-    // Save project to localStorage
-    saveProject(state.activeProject);
-    setActiveProjectId(state.activeProject.id);
-  }, [state.activeProject]);
-
-  // ---------------------------------------------------------------------------
-  // Decision Tracking: Append decision record when CEO finalizes in Decision mode
-  // ---------------------------------------------------------------------------
-
-  const lastDecisionTrackingExchangeIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    // Only in decision mode
-    if (state.mode !== 'decision') return;
-
-    // Skip during processing
-    if (state.isProcessing) return;
-
-    // Need at least one exchange
-    if (state.exchanges.length === 0) return;
-
-    // Get the last exchange
-    const lastExchange = state.exchanges[state.exchanges.length - 1];
-    if (!lastExchange) return;
-
-    // Skip if already tracked this exchange
-    if (lastDecisionTrackingExchangeIdRef.current === lastExchange.id) return;
-
-    // Need an active project
-    if (!state.activeProject) return;
-
-    // Get CEO response
-    const currentCeo = ceoRef.current;
-    const ceoResponse = lastExchange.responsesByAgent[currentCeo];
-    if (!ceoResponse || ceoResponse.status !== 'success' || !ceoResponse.content) return;
-
-    // Mark as tracked
-    lastDecisionTrackingExchangeIdRef.current = lastExchange.id;
-
-    // Parse CEO response to determine if prompt was produced or blocked
-    const parsed = parseCeoControlBlock(ceoResponse.content);
-
-    // Compute advisors (all agents except CEO)
-    const allAgents: Agent[] = ['gpt', 'claude', 'gemini'];
-    const advisors = allAgents.filter(a => a !== currentCeo);
-
-    // Create decision record
-    const decision: DecisionRecord = {
-      id: generateDecisionId(),
-      createdAt: Date.now(),
-      epochId: state.decisionEpoch?.epochId,
-      mode: state.mode,
-      promptProduced: parsed.hasPromptArtifact,
-      claudeCodePrompt: parsed.promptText ?? undefined,
-      blocked: parsed.isBlocked,
-      blockedReason: parsed.isBlocked ? 'CEO requested clarification' : undefined,
-      blockedPayload: parsed.isBlocked ? parsed.blockedQuestions : undefined,
-      ceoAgent: currentCeo,
-      advisors,
-      recentExchanges: state.exchanges.slice(-10),
-      keyNotes: state.keyNotes,
-    };
-
-    // Append decision to project
-    dispatch({ type: 'APPEND_PROJECT_DECISION', decision });
-  }, [state.mode, state.isProcessing, state.exchanges, state.activeProject, state.keyNotes]);
+  }, [state.discussionSession, state.exchanges, state.transcript, state.keyNotes, state.isProcessing]);
 
   // ---------------------------------------------------------------------------
   // Discussion Compaction: Trigger after SEQUENCE_COMPLETED when threshold met
@@ -592,9 +411,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
   const lastCompactedCountRef = useRef<number>(0);
 
   useEffect(() => {
-    // Skip if not in discussion mode
-    if (state.mode !== 'discussion') return;
-
     // Skip during processing (mid-sequence)
     if (state.isProcessing) return;
 
@@ -682,7 +498,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     };
 
     runCompaction();
-  }, [state.mode, state.isProcessing, state.exchanges, state.discussionSession, state.keyNotes]);
+  }, [state.isProcessing, state.exchanges, state.discussionSession, state.keyNotes]);
 
   // ---------------------------------------------------------------------------
   // Orchestrator: Main Sequence Effect
@@ -693,11 +509,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
   useEffect(() => {
     // Only trigger on runId transition (null → new runId)
     if (currentRunId === null) {
-      return;
-    }
-
-    // Guard: Skip main sequence if clarification is active (CEO-only lane)
-    if (state.clarificationState?.isActive) {
       return;
     }
 
@@ -729,10 +540,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     const handleCancel = (): void => {
       // Abort any in-flight request
       sequenceAbortController.abort();
-      // Batch 4: Terminal epoch on cancel
-      if (state.mode === 'decision') {
-        dispatch({ type: 'EPOCH_COMPLETE', reason: 'cancelled' });
-      }
       // Dispatch CANCEL_COMPLETE (runId-guarded by reducer)
       dispatch({ type: 'CANCEL_COMPLETE', runId });
       // Clear active ref
@@ -750,134 +557,38 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
      */
     const runSequence = async (): Promise<void> => {
       // -----------------------------------------------------------------------
-      // Ghost Mode Branch — DISABLED
-      // All modes (Discussion, Decision, Project) use client-side orchestration.
-      // All 3 agents (GPT, Claude, Gemini) are always called. CEO speaks LAST.
-      // -----------------------------------------------------------------------
-
-      // Capture mode early for client-side orchestration
-      const currentMode = state.mode;
-
-      // Ghost mode disabled for all modes — client-side handles all orchestration
-      if (false) {
-        // Dispatch AGENT_STARTED for GPT (Ghost orchestrator is GPT-led)
-        dispatch({ type: 'AGENT_STARTED', runId, agent: 'gpt' });
-
-        // Call Ghost orchestrator (server-side deliberation)
-        const ghostResult = await callGhostOrchestrator(userPrompt, sequenceAbortController);
-
-        // Check for cancellation
-        if (isCancelled()) {
-          handleCancel();
-          return;
-        }
-
-        // Handle Ghost response
-        if (ghostResult.status === 'success' && ghostResult.content) {
-          // Success: dispatch as GPT response (Ghost output is GPT-authored)
-          dispatch({
-            type: 'AGENT_COMPLETED',
-            runId,
-            response: {
-              agent: 'gpt',
-              timestamp: Date.now(),
-              status: 'success',
-              content: ghostResult.content as string, // Safe: guarded by if condition
-            },
-          });
-        } else {
-          // Error: dispatch as GPT error
-          dispatch({
-            type: 'AGENT_COMPLETED',
-            runId,
-            response: {
-              agent: 'gpt',
-              timestamp: Date.now(),
-              status: 'error',
-              errorCode: 'api',
-              errorMessage: ghostResult.error ?? 'Ghost orchestration failed',
-            },
-          });
-        }
-
-        // Complete sequence (Ghost handles all deliberation internally)
-        if (!isCancelled() && activeRunIdRef.current === runId) {
-          dispatch({ type: 'SEQUENCE_COMPLETED', runId });
-        }
-
-        // Clear refs
-        activeRunIdRef.current = null;
-        abortControllerRef.current = null;
-        return;
-      }
-
-      // -----------------------------------------------------------------------
       // Single-Pass Mode (CEO-ordered sequence)
       // CEO speaks LAST. Gatekeeping only works when GPT is first (CEO≠GPT).
       // -----------------------------------------------------------------------
 
+      const currentMode = 'discussion';
+
       let conversationContext = '';
 
-      // Capture settings at start of run (currentMode already captured above)
+      // Capture settings at start of run
       const useProjectContext = projectDiscussionModeRef.current;
       const currentCeo = ceoRef.current;
-      const currentLoopState = state.loopState;
-      // Note: forceAllAdvisorsRef removed — Phase 2F force-all makes it obsolete
 
       // -----------------------------------------------------------------------
-      // Task 4: Discussion Memory Injection (Discussion mode ONLY)
+      // Task 4: Discussion Memory Injection
       // Build memory block containing keyNotes + last 10 exchanges
       // Prepend to userPrompt so all agents receive context
       // -----------------------------------------------------------------------
 
       let promptWithMemory = userPrompt;
-      if (currentMode === 'discussion') {
-        const memoryBlock = buildDiscussionMemoryBlock({
-          keyNotes: state.keyNotes,
-          exchanges: state.exchanges,
-        });
-        if (memoryBlock) {
-          promptWithMemory = memoryBlock + userPrompt;
-        }
-      }
-
-      // -----------------------------------------------------------------------
-      // Decision Mode: Project Summary Injection (Decision mode ONLY)
-      // Prepend static project summary so all agents can produce accurate
-      // decisions and Claude Code prompts.
-      // -----------------------------------------------------------------------
-
-      if (currentMode === 'decision') {
-        const summaryBlock = buildProjectSummaryBlock();
-        promptWithMemory = summaryBlock + userPrompt;
-      }
-
-      // -----------------------------------------------------------------------
-      // Batch 7: Build CEO file context (Decision mode ONLY)
-      // Stored as local variable; injected into CEO coordination only.
-      // -----------------------------------------------------------------------
-      const ceoFileContext = currentMode === 'decision'
-        ? buildCeoFileContext(state.activeProject?.projectFiles ?? [])
-        : '';
-
-      // -----------------------------------------------------------------------
-      // Task 5.2: Project Carryover Injection (Project mode ONLY)
-      // Build carryover block containing discussion context
-      // Prepend to userPrompt so all agents receive context
-      // -----------------------------------------------------------------------
-
-      if (currentMode === 'project' && state.carryover) {
-        const carryoverBlock = buildCarryoverMemoryBlock(state.carryover);
-        if (carryoverBlock) {
-          promptWithMemory = carryoverBlock + promptWithMemory;
-        }
+      const memoryBlock = buildDiscussionMemoryBlock({
+        keyNotes: state.keyNotes,
+        exchanges: state.exchanges,
+      });
+      if (memoryBlock) {
+        promptWithMemory = memoryBlock + userPrompt;
       }
 
       // Compute agent order: advisors first, CEO last
       const agentOrder = getAgentOrder(currentCeo);
 
       // Helper to call an agent
-      const callAgentWithTimeout = async (agent: Agent, round?: number): Promise<AgentResponse> => {
+      const callAgentWithTimeout = async (agent: Agent): Promise<AgentResponse> => {
         const agentAbortController = new AbortController();
         sequenceAbortController.signal.addEventListener('abort', () => {
           agentAbortController.abort();
@@ -889,8 +600,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
 
         callIndexRef.current += 1;
 
-        // Use promptWithMemory for Discussion mode (includes memory block)
-        // Use original userPrompt for Project/Decision modes
         const response = await callAgent(
           agent,
           promptWithMemory,
@@ -903,8 +612,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
             projectDiscussionMode: useProjectContext,
             mode: currentMode,
             ceoAgent: currentCeo,
-            round,
-            fileContext: ceoFileContext,
           }
         );
 
@@ -912,162 +619,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
         return response;
       };
 
-      // Helper to check if agent should be called
-      const shouldCallAgent = (_agent: Agent, isCeo: boolean): boolean => {
-        // Decision mode with CEO-only toggle: skip non-CEO agents
-        if (currentMode === 'decision' && state.ceoOnlyModeEnabled && !isCeo) {
-          return false;
-        }
-        // All other cases: call the agent
-        return true;
-      };
-
       // -----------------------------------------------------------------------
-      // Decision Mode: Multi-Round Deliberation Loop (Batch 5)
-      // -----------------------------------------------------------------------
-
-      if (currentMode === 'decision') {
-        const advisors = agentOrder.slice(0, -1); // All agents except CEO (last)
-        const agentLabels: Record<Agent, string> = {
-          gpt: 'GPT',
-          claude: 'Claude',
-          gemini: 'Gemini',
-        };
-
-        let continueDeliberation = true;
-        let currentRound = 1;
-        const maxRounds = state.decisionEpoch?.maxRounds ?? EPOCH_DEFAULT_MAX_ROUNDS;
-
-        while (continueDeliberation && currentRound <= maxRounds) {
-          if (isCancelled()) { handleCancel(); return; }
-
-          // --- Call advisors (unless ceoOnlyMode) ---
-          // Collect local responses for Round 2+ review parsing (governance fix #1: no stale state reads)
-          const advisorResponses = new Map<Agent, string>();
-
-          if (!state.ceoOnlyModeEnabled) {
-            for (let i = 0; i < advisors.length; i++) {
-              const advisor = advisors[i];
-              if (isCancelled()) { handleCancel(); return; }
-
-              dispatch({ type: 'AGENT_STARTED', runId, agent: advisor });
-              const response = await callAgentWithTimeout(advisor, currentRound);
-              if (isCancelled()) { handleCancel(); return; }
-              if (!response) continue;
-              dispatch({ type: 'AGENT_COMPLETED', runId, response });
-
-              if (response.status === 'success' && response.content) {
-                conversationContext += `${agentLabels[advisor]}: ${response.content}\n\n`;
-                advisorResponses.set(advisor, response.content);
-              }
-            }
-          }
-
-          // --- Round 2+: Parse advisor reviews and build structured summary for CEO ---
-          if (currentRound >= 2 && advisorResponses.size > 0) {
-            const parsedReviews: Partial<Record<Agent, ParsedAdvisorReview>> = {};
-            for (const [advisor, content] of advisorResponses) {
-              parsedReviews[advisor] = parseAdvisorReview(content);
-            }
-
-            // Build and append structured summary to conversationContext
-            const reviewSummary = buildAdvisorReviewSummary(parsedReviews);
-            conversationContext += `\n${reviewSummary}\n\n`;
-
-            // Store reviews in epoch state (observational)
-            dispatch({ type: 'EPOCH_SET_ADVISOR_REVIEWS', reviews: parsedReviews });
-          }
-
-          // --- Advance epoch phase: advisors done → CEO phase ---
-          const ceoPhase = currentRound === 1 ? 'CEO_DRAFT' as const : 'CEO_FINAL' as const;
-          dispatch({ type: 'EPOCH_ADVANCE_PHASE', phase: ceoPhase });
-
-          // --- Call CEO ---
-          if (isCancelled()) { handleCancel(); return; }
-          dispatch({ type: 'AGENT_STARTED', runId, agent: currentCeo });
-          const ceoResponse = await callAgentWithTimeout(currentCeo, currentRound);
-          if (isCancelled()) { handleCancel(); return; }
-
-          if (!ceoResponse) {
-            continueDeliberation = false;
-            break;
-          }
-
-          dispatch({ type: 'AGENT_COMPLETED', runId, response: ceoResponse });
-
-          // --- Parse CEO output and decide next action ---
-          if (ceoResponse.status === 'success' && ceoResponse.content) {
-            conversationContext += `${agentLabels[currentCeo]}: ${ceoResponse.content}\n\n`;
-            const parsed = parseCeoControlBlock(ceoResponse.content);
-
-            if (parsed.hasPromptArtifact) {
-              // FINAL — terminal: prompt delivered
-              dispatch({ type: 'EPOCH_COMPLETE', reason: 'prompt_delivered' });
-              continueDeliberation = false;
-            } else if (parsed.isStopped) {
-              // STOP_NOW — terminal: CEO aborted
-              dispatch({ type: 'EPOCH_COMPLETE', reason: 'stopped' });
-              continueDeliberation = false;
-            } else if (parsed.hasDraftArtifact && currentRound === 1) {
-              // DRAFT in Round 1 — continue to Round 2 for advisor review
-              dispatch({ type: 'EPOCH_ADVANCE_ROUND' });
-              currentRound++;
-              // conversationContext already contains the draft for Round 2 advisors
-
-              // Inject advisor review header into prompt for Round 2
-              promptWithMemory = `=== ADVISOR REVIEW ROUND ===
-The CEO has produced a DRAFT prompt for Claude Code. Review it and provide structured feedback.
-
-You MUST respond with EXACTLY this format:
-
-=== ADVISOR_REVIEW_START ===
-DECISION: APPROVE | REVISE | REJECT
-RATIONALE:
-- [Your first point]
-- [Additional points]
-REQUIRED_CHANGES:
-- [Only if DECISION is REVISE — list specific changes needed]
-RISKS:
-- [Any risks you identify, or "None identified"]
-CONFIDENCE: HIGH | MEDIUM | LOW
-=== ADVISOR_REVIEW_END ===
-
-RULES:
-- DECISION: APPROVE if the draft is ready. REVISE if changes needed. REJECT if fundamentally wrong.
-- RATIONALE: At least 1 bullet explaining your decision.
-- REQUIRED_CHANGES: Required if REVISE. List specific, actionable changes.
-- RISKS: Any technical, security, or completeness risks.
-- CONFIDENCE: How confident you are in your assessment.
-- Include ONLY the marker block above. No other text.
-=== END ADVISOR REVIEW HEADER ===
-
-` + userPrompt;
-
-              // Re-inject project summary for Round 2
-              const summaryBlock2 = buildProjectSummaryBlock();
-              promptWithMemory = summaryBlock2 + promptWithMemory;
-            } else if (parsed.isBlocked) {
-              // BLOCKED — terminal: needs clarification
-              dispatch({ type: 'EPOCH_COMPLETE', reason: 'blocked' });
-              continueDeliberation = false;
-            } else if (parsed.hasDraftArtifact && currentRound >= 2) {
-              // DRAFT in Round 2+ is a contract violation — exit loop
-              // BrainChat hard gate will block session (no valid FINAL markers)
-              continueDeliberation = false;
-            } else {
-              // No valid markers — exit loop
-              // BrainChat hard gate will block session
-              continueDeliberation = false;
-            }
-          } else {
-            // CEO error/timeout — stop deliberation
-            continueDeliberation = false;
-          }
-        }
-      } else {
-
-      // -----------------------------------------------------------------------
-      // Discussion / Project Mode: Single-Pass (unchanged)
+      // Discussion Mode: Single-Pass
       // -----------------------------------------------------------------------
 
       // Gatekeeping flags (only populated if GPT speaks first)
@@ -1080,18 +633,12 @@ RULES:
 
       for (let i = 0; i < agentOrder.length; i++) {
         const agent = agentOrder[i];
-        const isCeoAgent = agent === currentCeo;
         const isFirstAgent = i === 0;
 
         // Check cancellation before each agent
         if (isCancelled()) {
           handleCancel();
           return;
-        }
-
-        // Check if agent should be called (gatekeeping for non-CEO)
-        if (!shouldCallAgent(agent, isCeoAgent)) {
-          continue;
         }
 
         dispatch({ type: 'AGENT_STARTED', runId, agent });
@@ -1119,17 +666,6 @@ RULES:
             gemini: 'Gemini',
           };
           conversationContext += `${agentLabels[agent]}: ${response.content}\n\n`;
-
-          // DONE detection: If CEO outputs "DONE" keyword in Project mode while running
-          // Case-insensitive, word-boundary match
-          if (
-            isCeoAgent &&
-            currentMode === 'project' &&
-            currentLoopState === 'running' &&
-            /\bDONE\b/i.test(response.content)
-          ) {
-            dispatch({ type: 'CEO_DONE_DETECTED' });
-          }
         }
 
         // Parse gatekeeping flags if GPT spoke first
@@ -1159,8 +695,6 @@ RULES:
           }
         }
       }
-
-      } // end of if/else decision vs discussion/project
 
       // -----------------------------------------------------------------------
       // Complete sequence
@@ -1203,234 +737,6 @@ RULES:
   }, [currentRunId]);
 
   // ---------------------------------------------------------------------------
-  // STEP 3-4: Ghost Orchestrator Effect for Project Mode
-  // Triggered when loopState transitions to 'running' in project mode
-  // ---------------------------------------------------------------------------
-
-  useEffect(() => {
-    // Only trigger in project mode when running
-    if (state.mode !== 'project' || state.loopState !== 'running') {
-      return;
-    }
-
-    // Skip if already processing (prevents re-trigger)
-    if (ghostAbortControllerRef.current) {
-      return;
-    }
-
-    // Create abort controller for ghost call
-    const ghostAbortController = new AbortController();
-    ghostAbortControllerRef.current = ghostAbortController;
-
-    const runGhostOrchestrator = async () => {
-      try {
-        // Build effective prompt with carryover injection
-        let effectivePrompt = state.lastProjectIntent ?? '';
-
-        // Inject carryover context if available
-        if (state.carryover) {
-          const carryoverBlock = buildCarryoverMemoryBlock(state.carryover);
-          if (carryoverBlock) {
-            effectivePrompt = carryoverBlock + effectivePrompt;
-          }
-        }
-
-        // Call ghost orchestrator
-        const result = await callGhostOrchestrator(effectivePrompt, ghostAbortController);
-
-        // Check if aborted
-        if (ghostAbortController.signal.aborted) {
-          return;
-        }
-
-        // Handle result
-        if (result.status === 'success' && result.content) {
-          dispatch({ type: 'PROJECT_GHOST_SUCCESS', content: result.content });
-        } else {
-          // Map error code to user-friendly message
-          const errorMessage = result.errorCode
-            ? getGhostErrorMessage(result.errorCode as GhostErrorCode)
-            : result.error ?? 'Ghost orchestration failed';
-          dispatch({ type: 'PROJECT_GHOST_FAILED', error: errorMessage });
-        }
-      } catch (error) {
-        // Handle unexpected errors
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        dispatch({ type: 'PROJECT_GHOST_FAILED', error: errorMessage });
-      } finally {
-        ghostAbortControllerRef.current = null;
-      }
-    };
-
-    runGhostOrchestrator();
-
-    // Cleanup: abort on unmount or mode change
-    return () => {
-      ghostAbortController.abort();
-      ghostAbortControllerRef.current = null;
-    };
-  }, [state.mode, state.loopState, state.lastProjectIntent, state.carryover]);
-
-  // ---------------------------------------------------------------------------
-  // CEO-Only Clarification Effect (Decision mode only)
-  // Triggered when user sends a message in clarification lane
-  // Calls ONLY the CEO agent (not all 3 agents)
-  // ---------------------------------------------------------------------------
-
-  const clarificationAbortControllerRef = useRef<AbortController | null>(null);
-  const lastClarificationMessageCountRef = useRef<number>(0);
-
-  useEffect(() => {
-    // Only in decision mode with active clarification
-    if (state.mode !== 'decision' || !state.clarificationState?.isActive) {
-      return;
-    }
-
-    // Skip if CEO is already processing
-    if (state.clarificationState.isProcessing) {
-      return;
-    }
-
-    // Get user messages only
-    const userMessages = state.clarificationState.messages.filter(m => m.role === 'user');
-    const currentUserMessageCount = userMessages.length;
-
-    // Skip if no new user messages
-    if (currentUserMessageCount <= lastClarificationMessageCountRef.current) {
-      return;
-    }
-
-    // Skip if already processing this message
-    if (clarificationAbortControllerRef.current) {
-      return;
-    }
-
-    // Update message count
-    lastClarificationMessageCountRef.current = currentUserMessageCount;
-
-    // Get the last user message
-    const lastUserMessage = userMessages[userMessages.length - 1];
-    if (!lastUserMessage) return;
-
-    // Create abort controller for this call
-    const clarificationAbortController = new AbortController();
-    clarificationAbortControllerRef.current = clarificationAbortController;
-
-    // Mark CEO as processing
-    dispatch({ type: 'CLARIFICATION_CEO_STARTED' });
-
-    const runCeoClarification = async () => {
-      try {
-        const currentCeo = ceoRef.current;
-
-        // Build context from clarification history
-        let clarificationContext = `[CLARIFICATION LANE - CEO ONLY]\n`;
-        clarificationContext += `Questions: ${state.clarificationState!.blockedQuestions.join(', ')}\n\n`;
-        for (const msg of state.clarificationState!.messages) {
-          const roleLabel = msg.role === 'user' ? 'USER' : 'CEO';
-          clarificationContext += `${roleLabel}: ${msg.content}\n`;
-        }
-
-        // Call CEO agent only (with Decision-mode context for marker prompt)
-        const response = await callAgent(
-          currentCeo,
-          lastUserMessage.content,
-          clarificationContext,
-          clarificationAbortController,
-          {
-            runId: `clarification-${Date.now()}`,
-            callIndex: 1,
-            exchanges: state.exchanges,
-            projectDiscussionMode: false,
-            mode: 'decision',
-            ceoAgent: currentCeo,
-          }
-        );
-
-        // Check if aborted - dispatch timeout message instead of silent return
-        if (clarificationAbortController.signal.aborted) {
-          dispatch({
-            type: 'CLARIFICATION_CEO_RESPONSE',
-            content: '[CEO response timed out. Click Retry to try again.]',
-          });
-          return;
-        }
-
-        // Handle response
-        if (response.status === 'success' && response.content) {
-          // Parse CEO response for control blocks
-          const parsed = parseCeoControlBlock(response.content);
-
-          // CEO published a Claude Code prompt - resolve clarification
-          if (parsed.hasPromptArtifact && parsed.promptText) {
-            // Add CEO response to messages
-            dispatch({ type: 'CLARIFICATION_CEO_RESPONSE', content: response.content });
-
-            // Create Decision Memo
-            const memo: DecisionMemo = {
-              clarificationSummary: 'Clarification completed. CEO has finalized the prompt.',
-              finalDecision: parsed.promptText.slice(0, 200) + (parsed.promptText.length > 200 ? '...' : ''),
-              nextStep: 'Execute the Claude Code prompt.',
-              timestamp: Date.now(),
-            };
-
-            // Resolve clarification with memo
-            dispatch({ type: 'RESOLVE_CLARIFICATION', memo });
-
-            // Update CEO prompt artifact
-            dispatch({
-              type: 'SET_DISCUSSION_CEO_PROMPT_ARTIFACT',
-              artifact: {
-                text: parsed.promptText,
-                version: 1,
-                createdAt: new Date().toISOString(),
-              },
-            });
-            return;
-          }
-
-          // CEO asked more questions - update blocked questions but keep clarification active
-          if (parsed.isBlocked && parsed.blockedQuestions.length > 0) {
-            // Add CEO response to messages
-            dispatch({ type: 'CLARIFICATION_CEO_RESPONSE', content: response.content });
-            // Update the blocked questions (handled by re-triggering START_CLARIFICATION would lose history)
-            // For now, just keep the clarification active with the new questions shown in response
-            return;
-          }
-
-          // CEO didn't provide valid output - just add response to messages
-          // This enforces that clarification continues until CEO provides proper output
-          dispatch({ type: 'CLARIFICATION_CEO_RESPONSE', content: response.content });
-        } else {
-          // Error: dispatch a brief error message
-          dispatch({
-            type: 'CLARIFICATION_CEO_RESPONSE',
-            content: '[CEO response failed. Please try again.]',
-          });
-        }
-      } catch {
-        // Error during clarification
-        dispatch({
-          type: 'CLARIFICATION_CEO_RESPONSE',
-          content: '[CEO response failed. Please try again.]',
-        });
-      } finally {
-        clarificationAbortControllerRef.current = null;
-      }
-    };
-
-    runCeoClarification();
-    // No cleanup abort - cancel/retry already abort via controller ref; finally clears ref
-  }, [state.mode, state.clarificationState, state.exchanges]);
-
-  // Reset clarification message count when clarification ends
-  useEffect(() => {
-    if (!state.clarificationState?.isActive) {
-      lastClarificationMessageCountRef.current = 0;
-    }
-  }, [state.clarificationState?.isActive]);
-
-  // ---------------------------------------------------------------------------
   // Action Creators
   // ---------------------------------------------------------------------------
 
@@ -1439,37 +745,12 @@ RULES:
     if (state.isProcessing) {
       return '';
     }
-    // Guard: Block if clarification is active (CEO-only lane)
-    if (state.clarificationState?.isActive) {
-      return '';
-    }
-    // Guard: Block if session is blocked due to invalid CEO output (Decision mode)
-    if (state.decisionBlockingState?.isBlocked) {
-      return '';
-    }
-
-    // Implicit project creation: Create project if in Decision mode and no active project
-    if (state.mode === 'decision' && !state.activeProject) {
-      const projectId = generateProjectId();
-      const title = userPrompt.slice(0, 60);
-      dispatch({ type: 'CREATE_PROJECT', projectId, title });
-    }
 
     const runId = generateRunId();
     dispatch({ type: 'SUBMIT_START', runId, userPrompt });
 
-    // Batch 4: Start Decision Epoch (observational tracking)
-    if (state.mode === 'decision') {
-      dispatch({
-        type: 'EPOCH_START',
-        intent: userPrompt,
-        ceoAgent: ceoRef.current,
-        ceoOnlyMode: state.ceoOnlyModeEnabled,
-      });
-    }
-
     return runId;
-  }, [state.isProcessing, state.clarificationState, state.decisionBlockingState, state.mode, state.activeProject, state.ceoOnlyModeEnabled]);
+  }, [state.isProcessing]);
 
   const cancelSequence = useCallback((): void => {
     // No-op if no active sequence
@@ -1511,10 +792,6 @@ RULES:
     setCeoState(agent);
   }, []);
 
-  const setMode = useCallback((mode: BrainMode): void => {
-    dispatch({ type: 'SET_MODE', mode });
-  }, []);
-
   const startExecutionLoop = useCallback((intent?: string): void => {
     dispatch({ type: 'START_EXECUTION_LOOP', intent });
   }, []);
@@ -1539,20 +816,6 @@ RULES:
 
   const setCeoExecutionPrompt = useCallback((prompt: string | null): void => {
     dispatch({ type: 'SET_CEO_EXECUTION_PROMPT', prompt });
-  }, []);
-
-  const switchToProject = useCallback((): void => {
-    // Task 5.3: Switch from Discussion to Project mode
-    // 1. Attempt to create carryover (best-effort; may no-op due to guards)
-    dispatch({ type: 'CREATE_CARRYOVER_FROM_DISCUSSION' });
-    // 2. Always switch to project mode
-    dispatch({ type: 'SET_MODE', mode: 'project' });
-  }, []);
-
-  const returnToDiscussion = useCallback((): void => {
-    // Task 5.3: Return from Project to Discussion mode
-    // Do NOT clear carryover — preserve for potential re-entry
-    dispatch({ type: 'SET_MODE', mode: 'discussion' });
   }, []);
 
   const retryExecution = useCallback((): void => {
@@ -1592,269 +855,6 @@ RULES:
 
   const setDiscussionCeoPromptArtifact = useCallback((artifact: CeoPromptArtifact): void => {
     dispatch({ type: 'SET_DISCUSSION_CEO_PROMPT_ARTIFACT', artifact });
-  }, []);
-
-  const startClarification = useCallback((questions: string[]): void => {
-    dispatch({ type: 'START_CLARIFICATION', questions });
-  }, []);
-
-  const sendClarificationMessage = useCallback((content: string): void => {
-    // Add user message to clarification lane
-    dispatch({ type: 'CLARIFICATION_USER_MESSAGE', content });
-    // Trigger CEO-only call (will be handled by separate effect)
-  }, []);
-
-  const resolveClarification = useCallback((memo: DecisionMemo): void => {
-    dispatch({ type: 'RESOLVE_CLARIFICATION', memo });
-  }, []);
-
-  const cancelClarification = useCallback((): void => {
-    // Abort any in-progress CEO call
-    if (clarificationAbortControllerRef.current) {
-      clarificationAbortControllerRef.current.abort();
-      clarificationAbortControllerRef.current = null;
-    }
-    dispatch({ type: 'CANCEL_CLARIFICATION' });
-  }, []);
-
-  const retryCeoClarification = useCallback((): void => {
-    // Guard: Only in decision mode with active clarification
-    if (state.mode !== 'decision' || !state.clarificationState?.isActive) {
-      return;
-    }
-
-    // Abort any in-progress call first
-    if (clarificationAbortControllerRef.current) {
-      clarificationAbortControllerRef.current.abort();
-      clarificationAbortControllerRef.current = null;
-    }
-
-    // Create a synthetic "retry" message to trigger the CEO effect
-    // The effect watches for new user messages, so we add a retry request
-    dispatch({ type: 'CLARIFICATION_USER_MESSAGE', content: '[Retry requested]' });
-  }, [state.mode, state.clarificationState?.isActive]);
-
-  const blockDecisionSession = useCallback((reason: string, exchangeId: string): void => {
-    dispatch({ type: 'DECISION_BLOCK_SESSION', reason, exchangeId });
-  }, []);
-
-  const unblockDecisionSession = useCallback((): void => {
-    dispatch({ type: 'DECISION_UNBLOCK_SESSION' });
-  }, []);
-
-  // Ref for CEO retry in progress
-  const ceoRetryAbortControllerRef = useRef<AbortController | null>(null);
-
-  const retryCeoReformat = useCallback((): void => {
-    // Guard: Only in decision mode with blocking state
-    if (state.mode !== 'decision' || !state.decisionBlockingState?.isBlocked) {
-      return;
-    }
-
-    // Guard: Don't retry if already retrying
-    if (ceoRetryAbortControllerRef.current) {
-      return;
-    }
-
-    // Get last exchange to find CEO's original response
-    const lastExchange = state.exchanges[state.exchanges.length - 1];
-    if (!lastExchange) return;
-
-    const currentCeo = ceoRef.current;
-    const ceoResponse = lastExchange.responsesByAgent[currentCeo];
-    if (!ceoResponse || ceoResponse.status !== 'success' || !ceoResponse.content) {
-      return;
-    }
-
-    // Create abort controller
-    const abortController = new AbortController();
-    ceoRetryAbortControllerRef.current = abortController;
-
-    // Run CEO retry
-    const runCeoRetry = async () => {
-      try {
-        // Build the retry prompt with CEO's original response and reformat instruction
-        const retryPrompt = `${CEO_REFORMAT_INSTRUCTION}\n\nYour previous response was:\n${ceoResponse.content}`;
-
-        const response = await callAgent(
-          currentCeo,
-          retryPrompt,
-          '', // No context needed for reformat
-          abortController,
-          {
-            runId: `ceo-retry-${Date.now()}`,
-            callIndex: 1,
-            exchanges: state.exchanges,
-            projectDiscussionMode: false,
-            mode: 'decision',
-            ceoAgent: currentCeo,
-          }
-        );
-
-        if (abortController.signal.aborted) return;
-
-        if (response.status === 'success' && response.content) {
-          const parsed = parseCeoControlBlock(response.content);
-
-          if (parsed.hasPromptArtifact && parsed.promptText) {
-            // Success: Update prompt artifact and unblock
-            dispatch({
-              type: 'SET_DISCUSSION_CEO_PROMPT_ARTIFACT',
-              artifact: {
-                text: parsed.promptText,
-                version: (state.discussionCeoPromptArtifact?.version ?? 0) + 1,
-                createdAt: new Date().toISOString(),
-              },
-            });
-            dispatch({ type: 'DECISION_UNBLOCK_SESSION' });
-          } else if (parsed.isBlocked && parsed.blockedQuestions.length > 0) {
-            // CEO asked questions - start clarification
-            dispatch({ type: 'DECISION_UNBLOCK_SESSION' });
-            dispatch({ type: 'START_CLARIFICATION', questions: parsed.blockedQuestions });
-          }
-          // If still invalid, session remains blocked
-        }
-      } finally {
-        ceoRetryAbortControllerRef.current = null;
-      }
-    };
-
-    runCeoRetry();
-  }, [state.mode, state.decisionBlockingState, state.exchanges, state.discussionCeoPromptArtifact]);
-
-  const setCeoOnlyMode = useCallback((enabled: boolean): void => {
-    dispatch({ type: 'SET_CEO_ONLY_MODE', enabled });
-  }, []);
-
-  const createProject = useCallback((): string => {
-    const projectId = generateProjectId();
-    dispatch({ type: 'CREATE_PROJECT', projectId });
-    return projectId;
-  }, []);
-
-  const clearProject = useCallback((): void => {
-    // Clear active project pointer from localStorage
-    clearActiveProject();
-    // Clear from state
-    dispatch({ type: 'CLEAR_PROJECT' });
-  }, []);
-
-  const createNewProject = useCallback((): string => {
-    // Clear the board first
-    if (!state.isProcessing) {
-      dispatch({ type: 'CLEAR' });
-    }
-    // Create a new project
-    const projectId = generateProjectId();
-    dispatch({ type: 'CREATE_PROJECT', projectId });
-    return projectId;
-  }, [state.isProcessing]);
-
-  // ---------------------------------------------------------------------------
-  // Batch 9: Auto-handoff from Decision to Project
-  // Creates a project (if needed) seeded with the FINAL prompt, then switches
-  // to Project mode. If a project already exists AND decision tracking already
-  // fired, just navigates.
-  // ---------------------------------------------------------------------------
-
-  const createProjectFromDecision = useCallback((): void => {
-    const artifact = state.discussionCeoPromptArtifact;
-
-    // Case 1: Project already exists — decision tracking effect already
-    // appended the DecisionRecord. Just navigate.
-    if (state.activeProject) {
-      dispatch({ type: 'SET_MODE', mode: 'project' });
-      return;
-    }
-
-    // Case 2: No project exists — create one and seed with decision.
-    // This covers users who entered Decision mode without first creating a project.
-    const epoch = state.decisionEpoch;
-    const currentCeo = ceoRef.current;
-
-    // Create project with title from epoch intent (truncated)
-    const projectId = generateProjectId();
-    const title = epoch?.intent
-      ? epoch.intent.slice(0, 100)
-      : 'Decision Project';
-    dispatch({ type: 'CREATE_PROJECT', projectId, title });
-
-    // Build and append decision record (mirrors decision tracking effect logic)
-    if (artifact) {
-      const allAgents: Agent[] = ['gpt', 'claude', 'gemini'];
-      const advisors = allAgents.filter(a => a !== currentCeo);
-
-      const decision: DecisionRecord = {
-        id: generateDecisionId(),
-        createdAt: Date.now(),
-        epochId: epoch?.epochId,
-        mode: 'decision',
-        promptProduced: true,
-        claudeCodePrompt: artifact.text,
-        blocked: false,
-        ceoAgent: currentCeo,
-        advisors,
-        recentExchanges: state.exchanges.slice(-10),
-        keyNotes: state.keyNotes,
-      };
-
-      dispatch({ type: 'APPEND_PROJECT_DECISION', decision });
-    }
-
-    // Switch to project mode
-    dispatch({ type: 'SET_MODE', mode: 'project' });
-  }, [
-    state.discussionCeoPromptArtifact,
-    state.activeProject,
-    state.decisionEpoch,
-    state.exchanges,
-    state.keyNotes,
-  ]);
-
-  const switchToProjectById = useCallback((projectId: string): void => {
-    // Load project from localStorage
-    const project = loadProject(projectId);
-    if (project) {
-      dispatch({ type: 'REHYDRATE_PROJECT', project });
-      setActiveProjectId(projectId);
-    }
-  }, []);
-
-  const clearActiveProjectSelection = useCallback((): void => {
-    // Clear active project pointer but keep data in localStorage
-    clearActiveProject();
-    dispatch({ type: 'CLEAR_PROJECT' });
-  }, []);
-
-  const deleteProject = useCallback((projectId: string): void => {
-    // Remove from localStorage
-    clearProjectById(projectId);
-    // If this was the active project, clear it from state too
-    if (state.activeProject?.id === projectId) {
-      clearActiveProject();
-      dispatch({ type: 'CLEAR_PROJECT' });
-    }
-  }, [state.activeProject?.id]);
-
-  const clearProjectBlock = useCallback((): void => {
-    // Clear blocked status on active project (sets status back to 'active')
-    dispatch({ type: 'SET_PROJECT_BLOCKED', blocked: false });
-  }, []);
-
-  const completeDecisionEpoch = useCallback((reason: 'prompt_delivered' | 'blocked' | 'stopped' | 'cancelled'): void => {
-    dispatch({ type: 'EPOCH_COMPLETE', reason });
-  }, []);
-
-  const addProjectFiles = useCallback((files: FileEntry[]) => {
-    dispatch({ type: 'ADD_PROJECT_FILES', files });
-  }, []);
-
-  const removeProjectFile = useCallback((fileId: string) => {
-    dispatch({ type: 'REMOVE_PROJECT_FILE', fileId });
-  }, []);
-
-  const clearProjectFiles = useCallback(() => {
-    dispatch({ type: 'CLEAR_PROJECT_FILES' });
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -1970,10 +970,6 @@ RULES:
     return ceo;
   }, [ceo]);
 
-  const getMode = useCallback((): BrainMode => {
-    return state.mode;
-  }, [state.mode]);
-
   const getLoopState = useCallback((): LoopState => {
     return state.loopState;
   }, [state.loopState]);
@@ -1984,8 +980,9 @@ RULES:
 
   const canGenerateExecutionPrompt = useCallback((): boolean => {
     // Only CEO can generate execution prompts, and only in Project mode
-    return state.mode === 'project' && !state.isProcessing && state.exchanges.length > 0;
-  }, [state.mode, state.isProcessing, state.exchanges]);
+    // Currently always discussion mode, so always false
+    return false;
+  }, []);
 
   const getResultArtifact = useCallback((): string | null => {
     return state.resultArtifact;
@@ -2027,42 +1024,6 @@ RULES:
     return state.discussionCeoPromptArtifact;
   }, [state.discussionCeoPromptArtifact]);
 
-  const getClarificationState = useCallback((): ClarificationState | null => {
-    return state.clarificationState;
-  }, [state.clarificationState]);
-
-  const isClarificationActive = useCallback((): boolean => {
-    return state.clarificationState?.isActive ?? false;
-  }, [state.clarificationState]);
-
-  const getDecisionBlockingState = useCallback((): DecisionBlockingState | null => {
-    return state.decisionBlockingState;
-  }, [state.decisionBlockingState]);
-
-  const isDecisionBlocked = useCallback((): boolean => {
-    return state.decisionBlockingState?.isBlocked ?? false;
-  }, [state.decisionBlockingState]);
-
-  const getDecisionEpoch = useCallback((): DecisionEpoch | null => {
-    return state.decisionEpoch;
-  }, [state.decisionEpoch]);
-
-  const isCeoOnlyMode = useCallback((): boolean => {
-    return state.ceoOnlyModeEnabled;
-  }, [state.ceoOnlyModeEnabled]);
-
-  const getActiveProject = useCallback((): ProjectState | null => {
-    return state.activeProject;
-  }, [state.activeProject]);
-
-  const hasActiveProject = useCallback((): boolean => {
-    return state.activeProject !== null;
-  }, [state.activeProject]);
-
-  const listProjects = useCallback((): ProjectState[] => {
-    return listProjectsFromStorage();
-  }, []);
-
   // ---------------------------------------------------------------------------
   // Memoized Context Value
   // ---------------------------------------------------------------------------
@@ -2077,15 +1038,12 @@ RULES:
       setForceAllAdvisors,
       setProjectDiscussionMode,
       setCeo,
-      setMode,
       startExecutionLoop,
       pauseExecutionLoop,
       stopExecutionLoop,
       markDone,
       setResultArtifact,
       setCeoExecutionPrompt,
-      switchToProject,
-      returnToDiscussion,
       retryExecution,
       startProjectEpoch,
       addProjectInterrupt,
@@ -2094,26 +1052,6 @@ RULES:
       markProjectDone,
       forceProjectFail,
       setDiscussionCeoPromptArtifact,
-      startClarification,
-      sendClarificationMessage,
-      resolveClarification,
-      cancelClarification,
-      retryCeoClarification,
-      blockDecisionSession,
-      unblockDecisionSession,
-      retryCeoReformat,
-      setCeoOnlyMode,
-      createProject,
-      clearProject,
-      createNewProject,
-      createProjectFromDecision,
-      switchToProjectById,
-      clearActiveProjectSelection,
-      deleteProject,
-      clearProjectBlock,
-      addProjectFiles,
-      removeProjectFile,
-      clearProjectFiles,
       // Selectors
       getState,
       getActiveRunId,
@@ -2133,7 +1071,6 @@ RULES:
       getForceAllAdvisors,
       getProjectDiscussionMode,
       getCeo,
-      getMode,
       getLoopState,
       isLoopRunning,
       canGenerateExecutionPrompt,
@@ -2147,16 +1084,6 @@ RULES:
       getLastProjectIntent,
       getProjectRun,
       getDiscussionCeoPromptArtifact,
-      getClarificationState,
-      isClarificationActive,
-      getDecisionBlockingState,
-      isDecisionBlocked,
-      getDecisionEpoch,
-      isCeoOnlyMode,
-      getActiveProject,
-      hasActiveProject,
-      listProjects,
-      completeDecisionEpoch,
     }),
     [
       submitPrompt,
@@ -2166,15 +1093,12 @@ RULES:
       setForceAllAdvisors,
       setProjectDiscussionMode,
       setCeo,
-      setMode,
       startExecutionLoop,
       pauseExecutionLoop,
       stopExecutionLoop,
       markDone,
       setResultArtifact,
       setCeoExecutionPrompt,
-      switchToProject,
-      returnToDiscussion,
       retryExecution,
       startProjectEpoch,
       addProjectInterrupt,
@@ -2183,26 +1107,6 @@ RULES:
       markProjectDone,
       forceProjectFail,
       setDiscussionCeoPromptArtifact,
-      startClarification,
-      sendClarificationMessage,
-      resolveClarification,
-      cancelClarification,
-      retryCeoClarification,
-      blockDecisionSession,
-      unblockDecisionSession,
-      retryCeoReformat,
-      setCeoOnlyMode,
-      createProject,
-      clearProject,
-      createNewProject,
-      createProjectFromDecision,
-      switchToProjectById,
-      clearActiveProjectSelection,
-      deleteProject,
-      clearProjectBlock,
-      addProjectFiles,
-      removeProjectFile,
-      clearProjectFiles,
       getState,
       getActiveRunId,
       getPendingExchange,
@@ -2221,7 +1125,6 @@ RULES:
       getForceAllAdvisors,
       getProjectDiscussionMode,
       getCeo,
-      getMode,
       getLoopState,
       isLoopRunning,
       canGenerateExecutionPrompt,
@@ -2235,16 +1138,6 @@ RULES:
       getLastProjectIntent,
       getProjectRun,
       getDiscussionCeoPromptArtifact,
-      getClarificationState,
-      isClarificationActive,
-      getDecisionBlockingState,
-      isDecisionBlocked,
-      getDecisionEpoch,
-      isCeoOnlyMode,
-      getActiveProject,
-      hasActiveProject,
-      listProjects,
-      completeDecisionEpoch,
     ]
   );
 

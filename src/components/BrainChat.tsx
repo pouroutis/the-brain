@@ -1,46 +1,26 @@
 // =============================================================================
 // The Brain — Multi-AI Sequential Chat System
-// BrainChat Container Component (Mode Reset — No Switching)
+// BrainChat Container Component (Discussion Mode Only)
 // =============================================================================
 
-import { useCallback, useMemo, useState, useRef, useEffect } from 'react';
+import { useCallback } from 'react';
 import { useBrain } from '../context/BrainContext';
 import { ExchangeList } from './ExchangeList';
 import { PromptInput } from './PromptInput';
 import { ActionBar } from './ActionBar';
 import { WarningBanner } from './WarningBanner';
-import { ProjectModeLayout } from './ProjectModeLayout';
-import { DecisionModeLayout } from './DecisionModeLayout';
 import {
   exportTranscriptAsJson,
   exportTranscriptAsMarkdown,
   downloadFile,
 } from '../utils/discussionPersistence';
-import {
-  parseCeoControlBlock,
-  createCeoPromptArtifact,
-  PROMPT_START_MARKER,
-  PROMPT_END_MARKER,
-} from '../utils/ceoControlBlockParser';
-import {
-  parseExecutionReview,
-  buildReviewPrompt,
-  REVIEW_PROMPT_PREFIX,
-  computeVerdictResolution,
-  parseCeoSynthesis,
-  buildSynthesisPrompt,
-  SYNTHESIS_PROMPT_PREFIX,
-} from '../utils/executionReviewParser';
-import type { ParsedExecutionReview, VerdictResolution } from '../utils/executionReviewParser';
-import type { Agent, BrainMode } from '../types/brain';
+import type { Agent } from '../types/brain';
 
 // -----------------------------------------------------------------------------
 // Types
 // -----------------------------------------------------------------------------
 
 interface BrainChatProps {
-  /** Initial mode selected from Home screen */
-  initialMode: BrainMode;
   /** Callback to return to Home screen */
   onReturnHome: () => void;
 }
@@ -49,7 +29,7 @@ interface BrainChatProps {
 // Component
 // -----------------------------------------------------------------------------
 
-export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.Element {
+export function BrainChat({ onReturnHome }: BrainChatProps): JSX.Element {
   const {
     // Action creators
     submitPrompt,
@@ -57,14 +37,6 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     clearBoard,
     dismissWarning,
     setCeo,
-    setMode,
-    startExecutionLoop,
-    pauseExecutionLoop,
-    stopExecutionLoop,
-    markDone,
-    // Project phase actions
-    markProjectDone,
-    forceProjectFail,
     // Selectors
     getState,
     canSubmit,
@@ -73,60 +45,9 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     getWarning,
     getPendingExchange,
     getExchanges,
-    getLastExchange,
     getCeo,
-    getMode,
-    getLoopState,
-    isLoopRunning,
     getSystemMessages,
-    getProjectRun,
-    getDiscussionCeoPromptArtifact,
-    setDiscussionCeoPromptArtifact,
-    // Clarification actions
-    sendClarificationMessage,
-    cancelClarification,
-    retryCeoClarification,
-    getClarificationState,
-    isClarificationActive,
-    startClarification,
-    // Decision mode blocking + epoch
-    getDecisionEpoch,
-    blockDecisionSession,
-    unblockDecisionSession,
-    getDecisionBlockingState,
-    isDecisionBlocked,
-    retryCeoReformat,
-    // CEO-only mode toggle
-    setCeoOnlyMode,
-    isCeoOnlyMode,
-    // Execution result
-    setResultArtifact,
-    // Project management
-    getActiveProject,
-    listProjects,
-    createNewProject,
-    createProjectFromDecision,
-    switchToProjectById,
-    deleteProject,
-    clearProjectBlock,
-    // File management (Batch 7)
-    addProjectFiles,
-    removeProjectFile,
-    clearProjectFiles,
   } = useBrain();
-
-  // ---------------------------------------------------------------------------
-  // Set initial mode on mount
-  // ---------------------------------------------------------------------------
-
-  const hasSetInitialModeRef = useRef(false);
-
-  useEffect(() => {
-    if (!hasSetInitialModeRef.current) {
-      hasSetInitialModeRef.current = true;
-      setMode(initialMode);
-    }
-  }, [initialMode, setMode]);
 
   // ---------------------------------------------------------------------------
   // Derived state from selectors
@@ -135,49 +56,12 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
   const state = getState();
   const exchanges = getExchanges();
   const pendingExchange = getPendingExchange();
-  const lastExchange = getLastExchange();
   const currentAgent = state.currentAgent;
   const warning = getWarning();
   const processing = isProcessing();
   const ceo = getCeo();
-  const mode = getMode();
-  const loopState = getLoopState();
-  const loopRunning = isLoopRunning();
+  const mode = 'discussion';
   const systemMessages = getSystemMessages();
-  const projectRun = getProjectRun();
-  const discussionCeoPromptArtifact = getDiscussionCeoPromptArtifact();
-  const clarificationState = getClarificationState();
-  const clarificationActive = isClarificationActive();
-  const decisionBlockingState = getDecisionBlockingState();
-  const decisionBlocked = isDecisionBlocked();
-  const ceoOnlyModeEnabled = isCeoOnlyMode();
-  const activeProject = getActiveProject();
-  const projects = listProjects();
-  const decisionEpoch = getDecisionEpoch();
-  const resultArtifact = state.resultArtifact;
-
-  // Batch 11: AI Review state
-  const reviewRequestedRef = useRef(false);
-  const [reviewVerdicts, setReviewVerdicts] = useState<Partial<Record<Agent, ParsedExecutionReview>> | null>(null);
-  const isReviewing = reviewRequestedRef.current && processing;
-
-  // Batch 12: CEO Synthesis + Verdict Gate
-  const synthesisRequestedRef = useRef(false);
-  const [verdictResolution, setVerdictResolution] = useState<VerdictResolution | null>(null);
-  const isSynthesizing = synthesisRequestedRef.current && processing;
-
-  // ---------------------------------------------------------------------------
-  // Extract last CEO questions (for CeoClarificationPanel display)
-  // Shown even when CEO-only toggle is OFF
-  // ---------------------------------------------------------------------------
-
-  const lastCeoQuestions = useMemo((): string[] => {
-    if (mode !== 'decision' || !lastExchange) return [];
-    const ceoResponse = lastExchange.responsesByAgent[ceo];
-    if (!ceoResponse || ceoResponse.status !== 'success' || !ceoResponse.content) return [];
-    const parsed = parseCeoControlBlock(ceoResponse.content);
-    return parsed.blockedQuestions;
-  }, [mode, lastExchange, ceo]);
 
   // ---------------------------------------------------------------------------
   // Warning display rule (GPT mandate):
@@ -189,18 +73,9 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
 
   // ---------------------------------------------------------------------------
   // Input Control
-  // Block advisor input during execution loop (read-only mode)
-  // Block main input during clarification (Decision mode)
-  // Block main input after decision is finalized (has prompt artifact)
   // ---------------------------------------------------------------------------
 
-  // Decision is finalized when we have a prompt artifact and clarification is NOT active
-  const isDecisionFinalized = mode === 'decision' &&
-    discussionCeoPromptArtifact !== null &&
-    !clarificationActive &&
-    !processing;
-
-  const canSubmitPrompt = canSubmit() && !loopRunning && !clarificationActive && !decisionBlocked && !isDecisionFinalized;
+  const canSubmitPrompt = canSubmit();
 
   // ---------------------------------------------------------------------------
   // Handlers
@@ -208,17 +83,9 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
 
   const handleSubmit = useCallback(
     (prompt: string) => {
-      // Hard block: No input during execution loop
-      if (loopRunning) return;
-      // Hard block: No input during clarification (CEO-only lane)
-      if (clarificationActive) return;
-      // Hard block: No input when session is blocked (invalid CEO output)
-      if (decisionBlocked) return;
-      // Hard block: No input after decision is finalized
-      if (isDecisionFinalized) return;
       submitPrompt(prompt);
     },
-    [submitPrompt, loopRunning, clarificationActive, decisionBlocked, isDecisionFinalized]
+    [submitPrompt]
   );
 
   const handleCancel = useCallback(() => {
@@ -235,187 +102,9 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
 
   const handleCeoChange = useCallback(
     (agent: Agent) => {
-      // Hard block: No CEO changes during execution loop
-      if (loopRunning) return;
       setCeo(agent);
     },
-    [setCeo, loopRunning]
-  );
-
-  // ---------------------------------------------------------------------------
-  // Executor Panel: Generate Prompt Logic (used in Decision mode warning)
-  // ---------------------------------------------------------------------------
-
-  const generatedForExchangeRef = useRef<Set<string>>(new Set());
-
-  // ---------------------------------------------------------------------------
-  // CEO Prompt Warning (Decision mode only)
-  // Shown when CEO response doesn't contain required markers
-  // ---------------------------------------------------------------------------
-
-  const [ceoPromptWarning, setCeoPromptWarning] = useState<string | null>(null);
-
-  // Reset tracking when exchanges are cleared
-  useEffect(() => {
-    if (!lastExchange?.id) {
-      generatedForExchangeRef.current.clear();
-    }
-  }, [lastExchange?.id]);
-
-  // ---------------------------------------------------------------------------
-  // Decision Mode: Parse CEO responses for Claude Code prompt (HARD DELIMITERS)
-  // (Only in Decision mode - NOT Discussion mode)
-  // CEO MUST use: === CLAUDE_CODE_PROMPT_START === ... === CLAUDE_CODE_PROMPT_END ===
-  // ---------------------------------------------------------------------------
-
-  const lastParsedExchangeRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    // Only in decision mode
-    if (mode !== 'decision') return;
-
-    // Only when not processing (sequence completed)
-    if (processing) return;
-
-    // Need a last exchange with CEO response
-    if (!lastExchange?.id) return;
-
-    // Skip if already parsed this exchange
-    if (lastParsedExchangeRef.current === lastExchange.id) return;
-
-    // Get CEO's response (ONLY CEO messages are eligible for extraction)
-    const ceoResponse = lastExchange.responsesByAgent[ceo];
-    if (!ceoResponse || ceoResponse.status !== 'success' || !ceoResponse.content) return;
-
-    // Mark as parsed
-    lastParsedExchangeRef.current = lastExchange.id;
-
-    // Parse for markers (HARD DELIMITERS - deterministic extraction)
-    const parsed = parseCeoControlBlock(ceoResponse.content);
-
-    // Check for BLOCKED state (trigger clarification lane) - takes precedence
-    if (parsed.isBlocked && parsed.blockedQuestions.length > 0) {
-      setCeoPromptWarning(null);
-      startClarification(parsed.blockedQuestions);
-      // Note: EPOCH_COMPLETE('blocked') is dispatched by orchestrator, not BrainChat
-      return;
-    }
-
-    // Check for Claude Code prompt with required markers (FINAL)
-    if (parsed.hasPromptArtifact && parsed.promptText) {
-      setCeoPromptWarning(null);
-      const newArtifact = createCeoPromptArtifact(parsed.promptText, discussionCeoPromptArtifact);
-      setDiscussionCeoPromptArtifact(newArtifact);
-      // Note: EPOCH_COMPLETE('prompt_delivered') is dispatched by orchestrator, not BrainChat
-      return;
-    }
-
-    // Check for STOP_NOW — intentional CEO abort, NOT an error
-    if (parsed.isStopped) {
-      setCeoPromptWarning('CEO stopped the process. No prompt will be generated for this task.');
-      // Note: EPOCH_COMPLETE('stopped') is dispatched by orchestrator, not BrainChat
-      // Do NOT trigger hard gate — STOP_NOW is intentional
-      return;
-    }
-
-    // Check for DRAFT artifact — display it but don't block
-    // (In multi-round, the orchestrator handles DRAFT → Round 2 transition.
-    //  BrainChat only sees DRAFT if it leaked to a terminal exchange — e.g., DRAFT in Round 2.
-    //  In that case, fall through to hard gate below.)
-    if (parsed.hasDraftArtifact) {
-      // DRAFT in a terminal exchange means contract violation — fall through to hard gate
-    }
-
-    // CEO HARD GATE: Invalid output - block session
-    let blockReason: string;
-    const hasPartialStart = ceoResponse.content.includes('CLAUDE_CODE_PROMPT');
-    const hasStartMarker = ceoResponse.content.includes(PROMPT_START_MARKER);
-    const hasEndMarker = ceoResponse.content.includes(PROMPT_END_MARKER);
-
-    if (parsed.hasDraftArtifact) {
-      // DRAFT in terminal position = contract violation (governance ruling #5)
-      blockReason = `CEO produced a DRAFT in the final round. DRAFT is only allowed in Round 1. Session blocked.`;
-    } else if (hasPartialStart || hasStartMarker || hasEndMarker) {
-      blockReason = `CEO prompt has malformed markers. Required format:\n${PROMPT_START_MARKER}\n(prompt)\n${PROMPT_END_MARKER}`;
-    } else {
-      blockReason = `CEO must output a Claude Code prompt (with markers) or clarification questions. Session blocked.`;
-    }
-
-    setCeoPromptWarning(blockReason);
-    blockDecisionSession(blockReason, lastExchange.id);
-  }, [mode, processing, lastExchange, ceo, discussionCeoPromptArtifact, setDiscussionCeoPromptArtifact, startClarification, blockDecisionSession]);
-
-  // Clear warning and unblock when mode changes or board is cleared
-  useEffect(() => {
-    if (mode !== 'decision' || exchanges.length === 0) {
-      setCeoPromptWarning(null);
-      // Also unblock if blocked
-      if (decisionBlocked) {
-        unblockDecisionSession();
-      }
-    }
-  }, [mode, exchanges.length, decisionBlocked, unblockDecisionSession]);
-
-  const handleStartExecution = useCallback(() => {
-    startExecutionLoop();
-  }, [startExecutionLoop]);
-
-  const handlePauseExecution = useCallback(() => {
-    pauseExecutionLoop();
-  }, [pauseExecutionLoop]);
-
-  const handleStopExecution = useCallback(() => {
-    // Use forceProjectFail for phase machine if projectRun exists
-    if (projectRun) {
-      forceProjectFail();
-    } else {
-      stopExecutionLoop();
-    }
-  }, [stopExecutionLoop, forceProjectFail, projectRun]);
-
-  const handleMarkDone = useCallback(() => {
-    // Use markProjectDone for phase machine if projectRun exists
-    if (projectRun) {
-      markProjectDone();
-    } else {
-      markDone();
-    }
-  }, [markDone, markProjectDone, projectRun]);
-
-  // ---------------------------------------------------------------------------
-  // Clarification Handlers (Decision Mode)
-  // ---------------------------------------------------------------------------
-
-  const handleSendClarificationMessage = useCallback(
-    (content: string) => {
-      sendClarificationMessage(content);
-    },
-    [sendClarificationMessage]
-  );
-
-  const handleCancelClarification = useCallback(() => {
-    cancelClarification();
-  }, [cancelClarification]);
-
-  const handleRetryCeoClarification = useCallback(() => {
-    retryCeoClarification();
-  }, [retryCeoClarification]);
-
-  const handleClearAndUnblock = useCallback(() => {
-    // Clear board and unblock session
-    clearBoard();
-    unblockDecisionSession();
-  }, [clearBoard, unblockDecisionSession]);
-
-  const handleRetryCeoReformat = useCallback(() => {
-    retryCeoReformat();
-  }, [retryCeoReformat]);
-
-  const handleToggleCeoOnlyMode = useCallback(
-    (enabled: boolean) => {
-      setCeoOnlyMode(enabled);
-    },
-    [setCeoOnlyMode]
+    [setCeo]
   );
 
   // ---------------------------------------------------------------------------
@@ -440,370 +129,13 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     downloadFile(mdContent, `brain-transcript-${timestamp}.md`, 'text/markdown');
   }, [state.discussionSession, state.transcript]);
 
-  // Can export if in discussion mode with transcript
-  const canExportDiscussion = mode === 'discussion' && state.transcript.length > 0;
+  // Can export if there is transcript data
+  const canExportDiscussion = state.transcript.length > 0;
 
   // ---------------------------------------------------------------------------
-  // Project Management Handlers
+  // Render — Discussion mode only
   // ---------------------------------------------------------------------------
 
-  const handleSelectProject = useCallback(
-    (projectId: string) => {
-      switchToProjectById(projectId);
-      setMode('project');
-    },
-    [switchToProjectById, setMode]
-  );
-
-  const handleNewProject = useCallback(() => {
-    createNewProject();
-    // Switch to Decision mode for new project
-    setMode('decision');
-  }, [createNewProject, setMode]);
-
-  const handleDeleteProject = useCallback(
-    (projectId: string) => {
-      deleteProject(projectId);
-    },
-    [deleteProject]
-  );
-
-  const handleContinueInDecisionMode = useCallback(() => {
-    // Clear board first to reset isDecisionFinalized, then switch to Decision mode
-    clearBoard();
-    setMode('decision');
-  }, [clearBoard, setMode]);
-
-  const handleViewInProject = useCallback(() => {
-    // Batch 9: Auto-handoff — creates project if needed, seeds with FINAL prompt
-    createProjectFromDecision();
-  }, [createProjectFromDecision]);
-
-  const handleSubmitExecutionResult = useCallback((result: string) => {
-    setResultArtifact(result);
-  }, [setResultArtifact]);
-
-  const handleMarkExecutionDone = useCallback(() => {
-    // Execution acknowledged as complete — panel handles visual state internally
-    // No global state change needed for MVP
-  }, []);
-
-  const handleRequestReview = useCallback(() => {
-    // Find latest prompt decision
-    const latestDecision = activeProject?.decisions
-      ? [...activeProject.decisions].reverse().find(d => d.promptProduced && d.claudeCodePrompt)
-      : null;
-
-    if (!latestDecision?.claudeCodePrompt || !resultArtifact) return;
-
-    // Clear previous verdicts
-    setReviewVerdicts(null);
-
-    // Mark review as requested
-    reviewRequestedRef.current = true;
-
-    // Build and submit review prompt
-    const reviewPrompt = buildReviewPrompt(latestDecision.claudeCodePrompt, resultArtifact);
-    submitPrompt(reviewPrompt);
-  }, [activeProject, resultArtifact, submitPrompt]);
-
-  // Batch 11: Parse review verdicts when review sequence completes
-  useEffect(() => {
-    // Only process when review was requested and processing just completed
-    if (!reviewRequestedRef.current || processing) return;
-
-    // Reset flag
-    reviewRequestedRef.current = false;
-
-    // Get the last exchange (should be the review exchange)
-    const exchange = lastExchange;
-    if (!exchange) return;
-
-    // Verify this is a review exchange (user prompt starts with review prefix)
-    if (!exchange.userPrompt.startsWith(REVIEW_PROMPT_PREFIX)) return;
-
-    // Parse each agent's response
-    const verdicts: Partial<Record<Agent, ParsedExecutionReview>> = {};
-    const agents: Agent[] = ['gpt', 'claude', 'gemini'];
-
-    for (const agent of agents) {
-      const response = exchange.responsesByAgent[agent];
-      if (response && response.status === 'success' && response.content) {
-        verdicts[agent] = parseExecutionReview(response.content);
-      }
-    }
-
-    if (Object.keys(verdicts).length > 0) {
-      setReviewVerdicts(verdicts);
-    }
-  }, [processing, lastExchange]);
-
-  // Batch 12: Auto-resolve verdict on consensus (Tier 1)
-  useEffect(() => {
-    if (!reviewVerdicts || Object.keys(reviewVerdicts).length === 0) {
-      setVerdictResolution(null);
-      return;
-    }
-
-    const resolution = computeVerdictResolution(reviewVerdicts, ceo);
-    if (resolution.resolved) {
-      setVerdictResolution(resolution);
-    } else {
-      // Disagreement — show unresolved state, user can request CEO synthesis
-      setVerdictResolution(resolution);
-    }
-  }, [reviewVerdicts, ceo]);
-
-  const handleRequestCeoVerdict = useCallback(() => {
-    if (!reviewVerdicts) return;
-
-    // Clear previous verdict
-    setVerdictResolution(null);
-
-    // Mark synthesis as requested
-    synthesisRequestedRef.current = true;
-
-    // Build and submit synthesis prompt
-    const synthesisPrompt = buildSynthesisPrompt(reviewVerdicts, ceo);
-    submitPrompt(synthesisPrompt);
-  }, [reviewVerdicts, ceo, submitPrompt]);
-
-  // Batch 12: Parse CEO synthesis when synthesis sequence completes
-  useEffect(() => {
-    if (!synthesisRequestedRef.current || processing) return;
-
-    synthesisRequestedRef.current = false;
-
-    const exchange = lastExchange;
-    if (!exchange) return;
-
-    // Verify this is a synthesis exchange
-    if (!exchange.userPrompt.startsWith(SYNTHESIS_PROMPT_PREFIX)) return;
-
-    // Parse CEO's response only
-    const ceoResponse = exchange.responsesByAgent[ceo];
-    if (!ceoResponse || ceoResponse.status !== 'success' || !ceoResponse.content) {
-      // CEO failed to respond — show unresolved with error rationale
-      setVerdictResolution({
-        resolved: false,
-        verdict: null,
-        source: null,
-        ceoAgent: ceo,
-        rationale: 'CEO synthesis failed — no response received',
-        nextAction: null,
-      });
-      return;
-    }
-
-    const parsed = parseCeoSynthesis(ceoResponse.content);
-
-    if (parsed.valid && parsed.verdict) {
-      setVerdictResolution({
-        resolved: true,
-        verdict: parsed.verdict,
-        source: 'ceo_synthesis',
-        ceoAgent: ceo,
-        rationale: parsed.rationale.join('. '),
-        nextAction: parsed.nextAction,
-      });
-    } else {
-      // Parse failed — show unresolved with raw text excerpt
-      setVerdictResolution({
-        resolved: false,
-        verdict: null,
-        source: null,
-        ceoAgent: ceo,
-        rationale: `CEO synthesis could not be parsed: ${parsed.errors.join('; ')}`,
-        nextAction: null,
-      });
-    }
-  }, [processing, lastExchange, ceo]);
-
-  const handleClearProjectBlock = useCallback(() => {
-    // Clear blocked status on active project (sets status back to 'active')
-    clearProjectBlock();
-  }, [clearProjectBlock]);
-
-  // ---------------------------------------------------------------------------
-  // Persisted Project Blocked State
-  // When project is loaded with blocked status, show banner in Decision mode
-  // ---------------------------------------------------------------------------
-
-  const isProjectBlocked = activeProject?.status === 'blocked';
-
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
-
-  // Project mode: Read-only Project Dashboard
-  if (mode === 'project') {
-    return (
-      <div className="brain-chat brain-chat--project">
-        {/* Warning Banner (runId-scoped display) */}
-        {shouldShowWarning && (
-          <WarningBanner warning={warning} onDismiss={handleDismissWarning} />
-        )}
-
-        {/* Project Dashboard Layout */}
-        <ProjectModeLayout
-          projects={projects}
-          activeProject={activeProject}
-          onSelectProject={handleSelectProject}
-          onNewProject={handleNewProject}
-          onDeleteProject={handleDeleteProject}
-          onContinueInDecisionMode={handleContinueInDecisionMode}
-          resultArtifact={resultArtifact}
-          onSubmitResult={handleSubmitExecutionResult}
-          onMarkExecutionDone={handleMarkExecutionDone}
-          isReviewing={isReviewing}
-          reviewVerdicts={reviewVerdicts}
-          onRequestReview={handleRequestReview}
-          verdictResolution={verdictResolution}
-          isSynthesizing={isSynthesizing}
-          onRequestCeoVerdict={handleRequestCeoVerdict}
-        />
-
-        {/* Action Bar (Project Mode - minimal controls) */}
-        <ActionBar
-          canClear={false}
-          isProcessing={false}
-          onClear={handleClear}
-          onCancel={handleCancel}
-          mode={mode}
-          loopState={loopState}
-          onStartExecution={handleStartExecution}
-          onPauseExecution={handlePauseExecution}
-          onStopExecution={handleStopExecution}
-          onMarkDone={handleMarkDone}
-          onReturnHome={onReturnHome}
-        />
-      </div>
-    );
-  }
-
-  // Decision mode: Two-pane layout with CEO Prompt Panel
-  if (mode === 'decision') {
-    return (
-      <div className="brain-chat brain-chat--decision">
-        {/* Warning Banner (runId-scoped display) */}
-        {shouldShowWarning && (
-          <WarningBanner warning={warning} onDismiss={handleDismissWarning} />
-        )}
-
-        {/* Persisted Project Blocked Banner */}
-        {isProjectBlocked && (
-          <div className="brain-chat__project-blocked-banner" data-testid="project-blocked-banner">
-            <div className="brain-chat__project-blocked-icon">⛔</div>
-            <div className="brain-chat__project-blocked-content">
-              <h3 className="brain-chat__project-blocked-title">Project Blocked</h3>
-              <p className="brain-chat__project-blocked-desc">
-                This project was saved in a blocked state. Clear the block to continue or view the project dashboard.
-              </p>
-            </div>
-            <div className="brain-chat__project-blocked-actions">
-              <button
-                className="brain-chat__project-blocked-btn brain-chat__project-blocked-btn--primary"
-                onClick={handleClearProjectBlock}
-                data-testid="clear-project-block-btn"
-              >
-                Clear Block
-              </button>
-              <button
-                className="brain-chat__project-blocked-btn brain-chat__project-blocked-btn--secondary"
-                onClick={handleViewInProject}
-                data-testid="go-to-project-btn"
-              >
-                Go to Project
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Three-Pane Decision Layout */}
-        <DecisionModeLayout
-          exchanges={exchanges}
-          pendingExchange={pendingExchange}
-          currentAgent={currentAgent}
-          mode={mode}
-          ceo={ceo}
-          systemMessages={systemMessages}
-          ceoPromptArtifact={discussionCeoPromptArtifact}
-          clarificationState={clarificationState}
-          onSendClarificationMessage={handleSendClarificationMessage}
-          onCancelClarification={handleCancelClarification}
-          ceoPromptWarning={ceoPromptWarning}
-          blockingState={decisionBlockingState}
-          onClearAndUnblock={handleClearAndUnblock}
-          onRetryCeoReformat={handleRetryCeoReformat}
-          ceoOnlyModeEnabled={ceoOnlyModeEnabled}
-          onToggleCeoOnlyMode={handleToggleCeoOnlyMode}
-          lastCeoQuestions={lastCeoQuestions}
-          onRetryCeoClarification={handleRetryCeoClarification}
-          projects={projects}
-          activeProjectId={activeProject?.id ?? null}
-          onSelectProject={handleSelectProject}
-          onNewProject={handleNewProject}
-          onDeleteProject={handleDeleteProject}
-          activeProject={activeProject}
-          onAddFiles={addProjectFiles}
-          onRemoveFile={removeProjectFile}
-          onClearFiles={clearProjectFiles}
-          decisionEpoch={decisionEpoch}
-        />
-
-        {/* Decision Finalized — Auto-Handoff (Batch 9) */}
-        {isDecisionFinalized && (
-          <div className="brain-chat__decision-finalized" data-testid="decision-finalized-message">
-            <span className="brain-chat__decision-finalized-text">
-              ✅ Decision finalized. Prompt ready for Claude Code.
-            </span>
-            <div className="brain-chat__decision-finalized-actions">
-              <button
-                className="brain-chat__create-project-btn"
-                onClick={handleViewInProject}
-                data-testid="create-project-from-decision-btn"
-              >
-                {activeProject ? '→ View in Project' : '+ Create Project'}
-              </button>
-              <button
-                className="brain-chat__clear-board-btn"
-                onClick={() => clearBoard()}
-                data-testid="clear-board-btn"
-              >
-                Clear Board
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Prompt Input (with summary indicator in Decision mode) */}
-        <PromptInput
-          canSubmit={canSubmitPrompt}
-          onSubmit={handleSubmit}
-          showSummaryIndicator={true}
-        />
-
-        {/* Action Bar (No mode switching) */}
-        <ActionBar
-          canClear={canClear()}
-          isProcessing={processing}
-          onClear={handleClear}
-          onCancel={handleCancel}
-          mode={mode}
-          loopState={loopState}
-          onStartExecution={handleStartExecution}
-          onPauseExecution={handlePauseExecution}
-          onStopExecution={handleStopExecution}
-          onMarkDone={handleMarkDone}
-          ceo={ceo}
-          onCeoChange={handleCeoChange}
-          onReturnHome={onReturnHome}
-        />
-      </div>
-    );
-  }
-
-  // Discussion mode: Single-pane layout (no prompt panel)
   return (
     <div className="brain-chat">
       {/* Warning Banner (runId-scoped display) */}
@@ -824,18 +156,20 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
       {/* Prompt Input */}
       <PromptInput canSubmit={canSubmitPrompt} onSubmit={handleSubmit} />
 
-      {/* Action Bar (No mode switching) */}
+      {/* Action Bar (Discussion mode) */}
       <ActionBar
         canClear={canClear()}
         isProcessing={processing}
         onClear={handleClear}
         onCancel={handleCancel}
         mode={mode}
-        loopState={loopState}
-        onStartExecution={handleStartExecution}
-        onPauseExecution={handlePauseExecution}
-        onStopExecution={handleStopExecution}
-        onMarkDone={handleMarkDone}
+        loopState={'idle'}
+        onStartExecution={() => {}}
+        onPauseExecution={() => {}}
+        onStopExecution={() => {}}
+        onMarkDone={() => {}}
+        ceo={ceo}
+        onCeoChange={handleCeoChange}
         onFinishDiscussion={handleFinishDiscussion}
         canExport={canExportDiscussion}
         onReturnHome={onReturnHome}

@@ -242,7 +242,6 @@ describe('brainReducer persistence actions', () => {
     it('creates/updates discussionSession and appends transcript in discussion mode', () => {
       const stateWithPending: BrainState = {
         ...initialBrainState,
-        mode: 'discussion',
         isProcessing: true,
         pendingExchange: {
           runId: 'run-123',
@@ -273,25 +272,6 @@ describe('brainReducer persistence actions', () => {
       expect(result.transcript[1].role).toBe('gpt');
     });
 
-    it('does not update discussionSession in project mode', () => {
-      const stateWithPending: BrainState = {
-        ...initialBrainState,
-        mode: 'project',
-        isProcessing: true,
-        pendingExchange: {
-          runId: 'run-123',
-          userPrompt: 'Test',
-          responsesByAgent: {},
-        },
-      };
-
-      const result = brainReducer(stateWithPending, {
-        type: 'SEQUENCE_COMPLETED',
-        runId: 'run-123',
-      });
-
-      expect(result.discussionSession).toBeNull();
-    });
   });
 
   describe('REHYDRATE_DISCUSSION', () => {
@@ -313,7 +293,6 @@ describe('brainReducer persistence actions', () => {
       expect(result.exchanges).toEqual(exchanges);
       expect(result.transcript).toEqual(transcript);
       expect(result.keyNotes).toEqual(keyNotes);
-      expect(result.mode).toBe('discussion');
     });
 
     it('does not rehydrate while processing', () => {
@@ -345,7 +324,6 @@ describe('brainReducer persistence actions', () => {
     it('resets discussionSession with new ID and clears transcript in discussion mode', () => {
       const stateWithSession: BrainState = {
         ...initialBrainState,
-        mode: 'discussion',
         discussionSession: createMockSession(),
         exchanges: [createMockExchange()],
         transcript: createMockTranscript(),
