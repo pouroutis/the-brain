@@ -3,6 +3,7 @@
 // AgentCard Component (Phase 2 — Step 5)
 // =============================================================================
 
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { Agent, AgentResponse, BrainMode } from '../types/brain';
 
 // -----------------------------------------------------------------------------
@@ -132,6 +133,12 @@ function sanitizeGatekeepingFlags(content: string): string {
 }
 
 // -----------------------------------------------------------------------------
+// Copy Button State
+// -----------------------------------------------------------------------------
+
+type CopyState = 'idle' | 'copied' | 'failed';
+
+// -----------------------------------------------------------------------------
 // Component
 // -----------------------------------------------------------------------------
 
@@ -143,7 +150,7 @@ export function AgentCard({ agent, response, isActive, mode: _mode, isCeo = fals
   const rawContent = response?.status === 'success' ? response.content : response?.content;
 
   // Sanitize gatekeeping flags in ALL modes (CALL_CLAUDE, CALL_GEMINI, REASON_TAG)
-  let content = rawContent
+  const content = rawContent
     ? sanitizeGatekeepingFlags(rawContent)
     : rawContent;
 
@@ -153,9 +160,45 @@ export function AgentCard({ agent, response, isActive, mode: _mode, isCeo = fals
   // Show FINAL DECISION badge for CEO with completed response (decision mode only — currently unused)
   const showFinalBadge = false;
 
+  // Copy button state
+  const [copyState, setCopyState] = useState<CopyState>('idle');
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear timer on unmount
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) {
+        clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleCopy = useCallback(() => {
+    if (!content) return;
+    (async () => {
+      try {
+        await navigator.clipboard.writeText(content);
+        setCopyState('copied');
+      } catch {
+        setCopyState('failed');
+      }
+      if (copyTimerRef.current !== null) {
+        clearTimeout(copyTimerRef.current);
+      }
+      copyTimerRef.current = setTimeout(() => {
+        setCopyState('idle');
+        copyTimerRef.current = null;
+      }, 2000);
+    })();
+  }, [content]);
+
   // Build class names
   const cardClasses = ['agent-card'];
   if (isCeo) cardClasses.push('agent-card--ceo');
+
+  // Copy button label
+  const copyLabel = copyState === 'copied' ? 'Copied!' : copyState === 'failed' ? 'Failed' : 'Copy';
+  const copyBtnClass = `agent-card__copy-btn${copyState === 'copied' ? ' agent-card__copy-btn--copied' : ''}`;
 
   return (
     <div className={cardClasses.join(' ')}>
@@ -169,6 +212,11 @@ export function AgentCard({ agent, response, isActive, mode: _mode, isCeo = fals
         <span className={`agent-card__status agent-card__status--${status}`}>
           {statusLabel}
         </span>
+        {content && (
+          <button className={copyBtnClass} onClick={handleCopy}>
+            {copyLabel}
+          </button>
+        )}
       </div>
 
       {content && (

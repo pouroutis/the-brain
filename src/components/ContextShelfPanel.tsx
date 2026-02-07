@@ -2,7 +2,9 @@
 // The Brain — Context Shelf Panel (V2-C — Read-Only)
 // =============================================================================
 
+import { useState, useCallback } from 'react';
 import type { WorkItem } from '../types/workItem';
+import { useWorkItems } from '../context/WorkItemContext';
 
 // -----------------------------------------------------------------------------
 // Types
@@ -17,6 +19,49 @@ interface ContextShelfPanelProps {
 // -----------------------------------------------------------------------------
 
 export function ContextShelfPanel({ selectedItem }: ContextShelfPanelProps): JSX.Element {
+  const { updateShelf } = useWorkItems();
+
+  const [isEditingTask, setIsEditingTask] = useState(false);
+  const [taskDraft, setTaskDraft] = useState('');
+
+  const handleStartEdit = useCallback(() => {
+    if (!selectedItem) return;
+    setTaskDraft(selectedItem.shelf.task ?? '');
+    setIsEditingTask(true);
+  }, [selectedItem]);
+
+  const handleSaveTask = useCallback(() => {
+    if (!selectedItem) return;
+    const trimmed = taskDraft.trim();
+    updateShelf(selectedItem.id, { task: trimmed || null });
+    setIsEditingTask(false);
+  }, [selectedItem, taskDraft, updateShelf]);
+
+  const handleCancelEdit = useCallback(() => {
+    setIsEditingTask(false);
+  }, []);
+
+  const handleTaskKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+        handleSaveTask();
+      } else if (e.key === 'Escape') {
+        handleCancelEdit();
+      }
+    },
+    [handleSaveTask, handleCancelEdit],
+  );
+
+  const handleClearPinnedPrompt = useCallback(() => {
+    if (!selectedItem) return;
+    updateShelf(selectedItem.id, { pinnedPrompt: null });
+  }, [selectedItem, updateShelf]);
+
+  const handleClearExecutionNotes = useCallback(() => {
+    if (!selectedItem) return;
+    updateShelf(selectedItem.id, { executionNotes: null });
+  }, [selectedItem, updateShelf]);
+
   if (!selectedItem) {
     return (
       <div className="context-shelf">
@@ -55,8 +100,24 @@ export function ContextShelfPanel({ selectedItem }: ContextShelfPanelProps): JSX
 
       {/* Task */}
       <div className="context-shelf__section">
-        <h3 className="context-shelf__section-label">Task</h3>
-        {shelf.task ? (
+        <div className="context-shelf__section-header">
+          <h3 className="context-shelf__section-label">Task</h3>
+          {!isEditingTask && (
+            <button className="context-shelf__edit-btn" onClick={handleStartEdit}>
+              Edit
+            </button>
+          )}
+        </div>
+        {isEditingTask ? (
+          <input
+            className="context-shelf__task-input"
+            value={taskDraft}
+            onChange={(e) => setTaskDraft(e.target.value)}
+            onKeyDown={handleTaskKeyDown}
+            onBlur={handleSaveTask}
+            autoFocus
+          />
+        ) : shelf.task ? (
           <p className="context-shelf__text">{shelf.task}</p>
         ) : (
           <p className="context-shelf__placeholder">No task set</p>
@@ -79,7 +140,14 @@ export function ContextShelfPanel({ selectedItem }: ContextShelfPanelProps): JSX
 
       {/* Pinned Prompt */}
       <div className="context-shelf__section">
-        <h3 className="context-shelf__section-label">Pinned Prompt</h3>
+        <div className="context-shelf__section-header">
+          <h3 className="context-shelf__section-label">Pinned Prompt</h3>
+          {shelf.pinnedPrompt && (
+            <button className="context-shelf__clear-btn" onClick={handleClearPinnedPrompt}>
+              Clear
+            </button>
+          )}
+        </div>
         {shelf.pinnedPrompt ? (
           <pre className="context-shelf__pre">{shelf.pinnedPrompt}</pre>
         ) : (
@@ -89,7 +157,14 @@ export function ContextShelfPanel({ selectedItem }: ContextShelfPanelProps): JSX
 
       {/* Execution Notes */}
       <div className="context-shelf__section">
-        <h3 className="context-shelf__section-label">Execution Notes</h3>
+        <div className="context-shelf__section-header">
+          <h3 className="context-shelf__section-label">Execution Notes</h3>
+          {shelf.executionNotes && (
+            <button className="context-shelf__clear-btn" onClick={handleClearExecutionNotes}>
+              Clear
+            </button>
+          )}
+        </div>
         {shelf.executionNotes ? (
           <pre className="context-shelf__pre">{shelf.executionNotes}</pre>
         ) : (
