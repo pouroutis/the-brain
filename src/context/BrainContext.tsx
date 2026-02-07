@@ -30,6 +30,7 @@ import type {
   Exchange,
   KeyNotes,
   LoopState,
+  ParsedAdvisorReview,
   PendingExchange,
   ProjectRun,
   ProjectState,
@@ -72,6 +73,7 @@ import {
 } from '../utils/compaction';
 import { buildDiscussionMemoryBlock, buildCarryoverMemoryBlock, buildProjectSummaryBlock } from '../utils/contextBuilder';
 import { parseCeoControlBlock } from '../utils/ceoControlBlockParser';
+import { parseAdvisorReview, buildAdvisorReviewSummary } from '../utils/advisorReviewParser';
 
 // -----------------------------------------------------------------------------
 // Constants
@@ -922,6 +924,9 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
           if (isCancelled()) { handleCancel(); return; }
 
           // --- Call advisors (unless ceoOnlyMode) ---
+          // Collect local responses for Round 2+ review parsing (governance fix #1: no stale state reads)
+          const advisorResponses = new Map<Agent, string>();
+
           if (!state.ceoOnlyModeEnabled) {
             for (let i = 0; i < advisors.length; i++) {
               const advisor = advisors[i];
@@ -935,8 +940,24 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
 
               if (response.status === 'success' && response.content) {
                 conversationContext += `${agentLabels[advisor]}: ${response.content}\n\n`;
+                advisorResponses.set(advisor, response.content);
               }
             }
+          }
+
+          // --- Round 2+: Parse advisor reviews and build structured summary for CEO ---
+          if (currentRound >= 2 && advisorResponses.size > 0) {
+            const parsedReviews: Partial<Record<Agent, ParsedAdvisorReview>> = {};
+            for (const [advisor, content] of advisorResponses) {
+              parsedReviews[advisor] = parseAdvisorReview(content);
+            }
+
+            // Build and append structured summary to conversationContext
+            const reviewSummary = buildAdvisorReviewSummary(parsedReviews);
+            conversationContext += `\n${reviewSummary}\n\n`;
+
+            // Store reviews in epoch state (observational)
+            dispatch({ type: 'EPOCH_SET_ADVISOR_REVIEWS', reviews: parsedReviews });
           }
 
           // --- Advance epoch phase: advisors done → CEO phase ---
@@ -976,7 +997,33 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
               // conversationContext already contains the draft for Round 2 advisors
 
               // Inject advisor review header into prompt for Round 2
-              promptWithMemory = `=== ADVISOR REVIEW ROUND ===\nThe CEO has produced a DRAFT prompt for Claude Code. Review it and provide feedback.\nFocus on: correctness, completeness, risks, and potential improvements.\nThe CEO will read your feedback and produce a FINAL prompt.\n=== END ADVISOR REVIEW HEADER ===\n\n` + userPrompt;
+              promptWithMemory = `=== ADVISOR REVIEW ROUND ===
+The CEO has produced a DRAFT prompt for Claude Code. Review it and provide structured feedback.
+
+You MUST respond with EXACTLY this format:
+
+=== ADVISOR_REVIEW_START ===
+DECISION: APPROVE | REVISE | REJECT
+RATIONALE:
+- [Your first point]
+- [Additional points]
+REQUIRED_CHANGES:
+- [Only if DECISION is REVISE — list specific changes needed]
+RISKS:
+- [Any risks you identify, or "None identified"]
+CONFIDENCE: HIGH | MEDIUM | LOW
+=== ADVISOR_REVIEW_END ===
+
+RULES:
+- DECISION: APPROVE if the draft is ready. REVISE if changes needed. REJECT if fundamentally wrong.
+- RATIONALE: At least 1 bullet explaining your decision.
+- REQUIRED_CHANGES: Required if REVISE. List specific, actionable changes.
+- RISKS: Any technical, security, or completeness risks.
+- CONFIDENCE: How confident you are in your assessment.
+- Include ONLY the marker block above. No other text.
+=== END ADVISOR REVIEW HEADER ===
+
+` + userPrompt;
 
               // Re-inject project summary for Round 2
               const summaryBlock2 = buildProjectSummaryBlock();

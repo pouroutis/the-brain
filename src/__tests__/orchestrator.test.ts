@@ -1133,3 +1133,162 @@ describe('Orchestrator — Multi-Round Decision Mode (Batch 5)', () => {
     expect(result.current.getDecisionEpoch()).toBeNull();
   });
 });
+
+// =============================================================================
+// Batch 6: Structured Advisor Review Integration Tests
+// =============================================================================
+
+describe('Orchestrator — Structured Advisor Review (Batch 6)', () => {
+  // Helper: Create advisor response with valid structured review
+  function createAdvisorReviewResponse(
+    agent: Agent,
+    decision: string,
+    rationale: string[],
+    confidence: string,
+    requiredChanges?: string[],
+    risks?: string[]
+  ): AgentResponse {
+    const lines = [
+      '=== ADVISOR_REVIEW_START ===',
+      `DECISION: ${decision}`,
+      'RATIONALE:',
+      ...rationale.map(r => `- ${r}`),
+    ];
+    if (requiredChanges && requiredChanges.length > 0) {
+      lines.push('REQUIRED_CHANGES:');
+      lines.push(...requiredChanges.map(c => `- ${c}`));
+    }
+    if (risks && risks.length > 0) {
+      lines.push('RISKS:');
+      lines.push(...risks.map(r => `- ${r}`));
+    }
+    lines.push(`CONFIDENCE: ${confidence}`);
+    lines.push('=== ADVISOR_REVIEW_END ===');
+
+    return createMockResponse(agent, lines.join('\n'));
+  }
+
+  // Helper: Create advisor response with freeform (invalid schema)
+  function createFreeformAdvisorResponse(agent: Agent, text: string): AgentResponse {
+    return createMockResponse(agent, text);
+  }
+
+  it('Round 2 with valid structured reviews: CEO receives summary', async () => {
+    // Advisor order: gemini, claude (priority order with gpt as CEO)
+    // Round 1: advisors + CEO DRAFT
+    const r1Gemini = createMockResponse('gemini', 'Round 1 analysis');
+    const r1Claude = createMockResponse('claude', 'Round 1 analysis');
+    const r1CeoDraft = createMockResponse('gpt',
+      'My draft:\n\n=== CEO_DRAFT_START ===\nBuild a login page\n=== CEO_DRAFT_END ===');
+
+    // Round 2: structured advisor reviews + CEO FINAL
+    const r2Gemini = createAdvisorReviewResponse('gemini', 'REVISE',
+      ['Missing validation'], 'MEDIUM', ['Add input validation']);
+    const r2Claude = createAdvisorReviewResponse('claude', 'APPROVE', ['Looks good'], 'HIGH');
+    const r2CeoFinal = createMockResponse('gpt',
+      '=== CLAUDE_CODE_PROMPT_START ===\nBuild a login page with validation\n=== CLAUDE_CODE_PROMPT_END ===');
+
+    mockCallAgent
+      .mockResolvedValueOnce(r1Gemini)     // Round 1 advisor (gemini first)
+      .mockResolvedValueOnce(r1Claude)     // Round 1 advisor (claude second)
+      .mockResolvedValueOnce(r1CeoDraft)   // Round 1 CEO → DRAFT
+      .mockResolvedValueOnce(r2Gemini)     // Round 2 advisor (gemini first)
+      .mockResolvedValueOnce(r2Claude)     // Round 2 advisor (claude second)
+      .mockResolvedValueOnce(r2CeoFinal);  // Round 2 CEO → FINAL
+
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    act(() => { result.current.setMode('decision'); });
+    act(() => { result.current.submitPrompt('Build a login page'); });
+
+    await waitFor(() => {
+      expect(result.current.isProcessing()).toBe(false);
+    });
+
+    expect(mockCallAgent).toHaveBeenCalledTimes(6);
+
+    // Verify CEO received the structured summary in context
+    const ceoCall = mockCallAgent.mock.calls[5]; // 6th call = Round 2 CEO
+    const ceoContext = ceoCall[2]; // conversationContext arg
+    expect(ceoContext).toContain('ADVISOR REVIEWS SUMMARY');
+    expect(ceoContext).toContain('Claude (VALID)');
+    expect(ceoContext).toContain('DECISION: APPROVE');
+
+    // Verify epoch completed
+    const epoch = result.current.getDecisionEpoch();
+    expect(epoch!.phase).toBe('EPOCH_COMPLETE');
+    expect(epoch!.terminalReason).toBe('prompt_delivered');
+  });
+
+  it('Round 2 with invalid advisor review: soft fallback (no block)', async () => {
+    // Advisor order: gemini, claude (priority order with gpt as CEO)
+    const r1Gemini = createMockResponse('gemini', 'Analysis');
+    const r1Claude = createMockResponse('claude', 'Analysis');
+    const r1CeoDraft = createMockResponse('gpt',
+      '=== CEO_DRAFT_START ===\nDraft prompt\n=== CEO_DRAFT_END ===');
+
+    // Round 2: one valid (gemini), one freeform/invalid (claude)
+    const r2Gemini = createAdvisorReviewResponse('gemini', 'APPROVE', ['Good'], 'HIGH');
+    const r2Claude = createFreeformAdvisorResponse('claude', 'I think it looks fine overall.');
+    const r2CeoFinal = createMockResponse('gpt',
+      '=== CLAUDE_CODE_PROMPT_START ===\nFinal prompt\n=== CLAUDE_CODE_PROMPT_END ===');
+
+    mockCallAgent
+      .mockResolvedValueOnce(r1Gemini)
+      .mockResolvedValueOnce(r1Claude)
+      .mockResolvedValueOnce(r1CeoDraft)
+      .mockResolvedValueOnce(r2Gemini)
+      .mockResolvedValueOnce(r2Claude)
+      .mockResolvedValueOnce(r2CeoFinal);
+
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    act(() => { result.current.setMode('decision'); });
+    act(() => { result.current.submitPrompt('Test task'); });
+
+    await waitFor(() => {
+      expect(result.current.isProcessing()).toBe(false);
+    });
+
+    // Should NOT be blocked — soft fallback
+    expect(mockCallAgent).toHaveBeenCalledTimes(6);
+
+    // CEO still called and completed
+    const epoch = result.current.getDecisionEpoch();
+    expect(epoch!.phase).toBe('EPOCH_COMPLETE');
+
+    // Verify summary contains both valid and invalid
+    const ceoCall = mockCallAgent.mock.calls[5];
+    const ceoContext = ceoCall[2];
+    expect(ceoContext).toContain('Gemini (VALID)');
+    expect(ceoContext).toContain('Claude (INVALID_SCHEMA)');
+  });
+
+  it('Batch 5 fast path (CEO FINAL in Round 1): no review parsing', async () => {
+    // Advisor order: gemini, claude
+    const geminiResponse = createMockResponse('gemini', 'Analysis');
+    const claudeResponse = createMockResponse('claude', 'Analysis');
+    const gptFinal = createMockResponse('gpt',
+      '=== CLAUDE_CODE_PROMPT_START ===\nDirect prompt\n=== CLAUDE_CODE_PROMPT_END ===');
+
+    mockCallAgent
+      .mockResolvedValueOnce(geminiResponse)
+      .mockResolvedValueOnce(claudeResponse)
+      .mockResolvedValueOnce(gptFinal);
+
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    act(() => { result.current.setMode('decision'); });
+    act(() => { result.current.submitPrompt('Simple task'); });
+
+    await waitFor(() => {
+      expect(result.current.isProcessing()).toBe(false);
+    });
+
+    expect(mockCallAgent).toHaveBeenCalledTimes(3);
+
+    // No advisor reviews stored (single round)
+    const epoch = result.current.getDecisionEpoch();
+    expect(epoch!.advisorReviews).toBeUndefined();
+  });
+});

@@ -369,6 +369,41 @@ export interface DecisionEpoch {
   completedAt: number | null;
   /** Terminal reason (populated when phase is terminal) */
   terminalReason: 'prompt_delivered' | 'blocked' | 'stopped' | 'cancelled' | null;
+  /** Parsed advisor reviews from Round 2+ (Batch 6, optional) */
+  advisorReviews?: Partial<Record<Agent, ParsedAdvisorReview>>;
+}
+
+// -----------------------------------------------------------------------------
+// Structured Advisor Review (Batch 6)
+// -----------------------------------------------------------------------------
+
+/** Advisor's review decision */
+export type AdvisorDecision = 'APPROVE' | 'REVISE' | 'REJECT';
+
+/** Advisor's confidence level */
+export type AdvisorConfidence = 'HIGH' | 'MEDIUM' | 'LOW';
+
+/**
+ * Parsed result of an advisor's Round 2 structured review.
+ * Always includes rawText. Structured fields populated only if valid.
+ */
+export interface ParsedAdvisorReview {
+  /** Whether the review conformed to the schema */
+  valid: boolean;
+  /** Parsing errors (if invalid) */
+  errors: string[];
+  /** Raw text of the advisor response (always populated) */
+  rawText: string;
+  /** Advisor's decision (null if invalid) */
+  decision: AdvisorDecision | null;
+  /** Rationale bullets */
+  rationale: string[];
+  /** Required changes (only for REVISE) */
+  requiredChanges: string[];
+  /** Identified risks */
+  risks: string[];
+  /** Confidence level (null if invalid) */
+  confidence: AdvisorConfidence | null;
 }
 
 /**
@@ -632,7 +667,9 @@ export type BrainAction =
   | { type: 'EPOCH_ADVANCE_ROUND' }
   | { type: 'EPOCH_EXTEND_MAX_ROUNDS' }
   | { type: 'EPOCH_COMPLETE'; reason: 'prompt_delivered' | 'blocked' | 'stopped' | 'cancelled' }
-  | { type: 'EPOCH_RESET' };
+  | { type: 'EPOCH_RESET' }
+  // Structured Advisor Review (Batch 6)
+  | { type: 'EPOCH_SET_ADVISOR_REVIEWS'; reviews: Partial<Record<Agent, ParsedAdvisorReview>> };
 
 // -----------------------------------------------------------------------------
 // Brain Events (Logging / Debugging) — 6 variants, contract-locked

@@ -1426,6 +1426,29 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
     }
 
     // -------------------------------------------------------------------------
+    // EPOCH_SET_ADVISOR_REVIEWS — Store parsed advisor reviews (Batch 6)
+    // -------------------------------------------------------------------------
+    case 'EPOCH_SET_ADVISOR_REVIEWS': {
+      if (!state.decisionEpoch) {
+        console.warn('EPOCH_SET_ADVISOR_REVIEWS ignored: no active epoch');
+        return state;
+      }
+
+      if (isTerminalPhase(state.decisionEpoch.phase)) {
+        console.warn(`EPOCH_SET_ADVISOR_REVIEWS ignored: epoch ${state.decisionEpoch.epochId} is terminal`);
+        return state;
+      }
+
+      return {
+        ...state,
+        decisionEpoch: {
+          ...state.decisionEpoch,
+          advisorReviews: action.reviews,
+        },
+      };
+    }
+
+    // -------------------------------------------------------------------------
     // EPOCH_RESET — Clear epoch state
     // -------------------------------------------------------------------------
     case 'EPOCH_RESET': {
