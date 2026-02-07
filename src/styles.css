@@ -2250,3 +2250,252 @@ body {
   color: #aaa;
   line-height: 1.4;
 }
+
+/* =============================================================================
+   Batch 8 — Epoch Status Badge
+   ============================================================================= */
+
+.epoch-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  margin-bottom: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.epoch-status-badge__icon {
+  font-size: 0.9rem;
+}
+
+.epoch-status-badge__label {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.epoch-status-badge--active {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.epoch-status-badge--complete {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.epoch-status-badge--blocked {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.epoch-status-badge--stopped {
+  background: rgba(156, 163, 175, 0.15);
+  border-color: rgba(156, 163, 175, 0.3);
+}
+
+.epoch-status-badge--idle {
+  background: rgba(156, 163, 175, 0.1);
+  border-color: rgba(156, 163, 175, 0.2);
+}
+
+/* =============================================================================
+   Batch 8 — Advisor Review Cards
+   ============================================================================= */
+
+.decision-mode-layout__reviews {
+  padding: 8px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.decision-mode-layout__reviews-title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0 0 8px 0;
+}
+
+.advisor-review-card {
+  padding: 10px 12px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.82rem;
+}
+
+.advisor-review-card--approve {
+  border-color: rgba(34, 197, 94, 0.3);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.advisor-review-card--revise {
+  border-color: rgba(234, 179, 8, 0.3);
+  background: rgba(234, 179, 8, 0.08);
+}
+
+.advisor-review-card--reject {
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.advisor-review-card--invalid {
+  border-color: rgba(234, 179, 8, 0.3);
+  background: rgba(234, 179, 8, 0.05);
+}
+
+.advisor-review-card--unknown {
+  border-color: rgba(156, 163, 175, 0.2);
+}
+
+.advisor-review-card__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.advisor-review-card__agent {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.advisor-review-card__badge {
+  font-size: 0.72rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.advisor-review-card__badge--approve {
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+}
+
+.advisor-review-card__badge--revise {
+  background: rgba(234, 179, 8, 0.2);
+  color: #fbbf24;
+}
+
+.advisor-review-card__badge--reject {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+.advisor-review-card__badge--invalid {
+  background: rgba(234, 179, 8, 0.15);
+  color: #fbbf24;
+}
+
+.advisor-review-card__confidence {
+  font-size: 0.7rem;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.advisor-review-card__confidence--high {
+  color: #4ade80;
+}
+
+.advisor-review-card__confidence--medium {
+  color: #fbbf24;
+}
+
+.advisor-review-card__confidence--low {
+  color: #f87171;
+}
+
+.advisor-review-card__section {
+  margin-top: 6px;
+}
+
+.advisor-review-card__section-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 3px;
+}
+
+.advisor-review-card__list {
+  margin: 0;
+  padding-left: 16px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.advisor-review-card__list li {
+  margin-bottom: 2px;
+}
+
+.advisor-review-card__list--changes {
+  color: #fbbf24;
+}
+
+.advisor-review-card__list--risks {
+  color: rgba(239, 68, 68, 0.8);
+}
+
+.advisor-review-card__errors {
+  margin: 4px 0;
+  font-size: 0.75rem;
+  color: #fbbf24;
+}
+
+.advisor-review-card__error {
+  margin-bottom: 2px;
+}
+
+.advisor-review-card__raw {
+  margin-top: 6px;
+}
+
+.advisor-review-card__raw-label {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 2px;
+}
+
+.advisor-review-card__raw-text {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(0, 0, 0, 0.2);
+  padding: 6px 8px;
+  border-radius: 4px;
+  max-height: 100px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+/* =============================================================================
+   Batch 8 — CEO Prompt Panel Framing (DRAFT / FINAL)
+   ============================================================================= */
+
+.ceo-prompt-panel--draft {
+  border-color: rgba(234, 179, 8, 0.3);
+}
+
+.ceo-prompt-panel--draft .ceo-prompt-panel__title {
+  color: #fbbf24;
+}
+
+.ceo-prompt-panel--final {
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.ceo-prompt-panel--final .ceo-prompt-panel__title {
+  color: #4ade80;
+}
+
+/* =============================================================================
+   Batch 8 — Blocking Overlay Epoch Context
+   ============================================================================= */
+
+.decision-mode-layout__blocking-epoch {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0 0 8px 0;
+}

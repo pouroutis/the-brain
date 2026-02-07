@@ -79,7 +79,8 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     getClarificationState,
     isClarificationActive,
     startClarification,
-    // Decision mode blocking
+    // Decision mode blocking + epoch
+    getDecisionEpoch,
     blockDecisionSession,
     unblockDecisionSession,
     getDecisionBlockingState,
@@ -139,6 +140,7 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
   const ceoOnlyModeEnabled = isCeoOnlyMode();
   const activeProject = getActiveProject();
   const projects = listProjects();
+  const decisionEpoch = getDecisionEpoch();
 
   // ---------------------------------------------------------------------------
   // Extract last CEO questions (for CeoClarificationPanel display)
@@ -573,6 +575,7 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
           onAddFiles={addProjectFiles}
           onRemoveFile={removeProjectFile}
           onClearFiles={clearProjectFiles}
+          decisionEpoch={decisionEpoch}
         />
 
         {/* Decision Finalized Message + View Project Button */}

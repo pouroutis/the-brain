@@ -14,14 +14,22 @@ interface CeoPromptPanelProps {
   artifact: CeoPromptArtifact | null;
   /** Warning message when CEO prompt is missing required markers */
   warning?: string | null;
+  /** Current epoch phase for visual framing (Batch 8) */
+  epochPhase?: string | null;
 }
 
 // -----------------------------------------------------------------------------
 // Component
 // -----------------------------------------------------------------------------
 
-export function CeoPromptPanel({ artifact, warning }: CeoPromptPanelProps): JSX.Element {
+export function CeoPromptPanel({ artifact, warning, epochPhase }: CeoPromptPanelProps): JSX.Element {
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+
+  // Batch 8: Visual framing for DRAFT vs FINAL
+  const isDraftPhase = epochPhase === 'CEO_DRAFT' || epochPhase === 'ADVISORS';
+  const isComplete = epochPhase === 'EPOCH_COMPLETE';
+  const frameClass = isComplete ? 'ceo-prompt-panel--final' : isDraftPhase ? 'ceo-prompt-panel--draft' : '';
+  const titleLabel = isComplete ? 'Final Prompt ✓' : isDraftPhase ? 'CEO Draft (Round 1)' : 'Claude Code Prompt';
 
   const handleCopy = useCallback(async () => {
     if (!artifact) return;
@@ -43,11 +51,11 @@ export function CeoPromptPanel({ artifact, warning }: CeoPromptPanelProps): JSX.
   if (!artifact) {
     return (
       <div
-        className={`ceo-prompt-panel ceo-prompt-panel--empty ${warning ? 'ceo-prompt-panel--warning' : ''}`}
+        className={`ceo-prompt-panel ceo-prompt-panel--empty ${warning ? 'ceo-prompt-panel--warning' : ''} ${frameClass}`}
         data-testid="ceo-prompt-panel"
       >
         <div className="ceo-prompt-panel__header">
-          <h3 className="ceo-prompt-panel__title">Claude Code Prompt</h3>
+          <h3 className="ceo-prompt-panel__title">{titleLabel}</h3>
         </div>
         {warning ? (
           <div className="ceo-prompt-panel__warning" data-testid="ceo-prompt-warning">
@@ -73,9 +81,9 @@ export function CeoPromptPanel({ artifact, warning }: CeoPromptPanelProps): JSX.
   const formattedTime = new Date(artifact.createdAt).toLocaleString();
 
   return (
-    <div className="ceo-prompt-panel" data-testid="ceo-prompt-panel">
+    <div className={`ceo-prompt-panel ${frameClass}`} data-testid="ceo-prompt-panel">
       <div className="ceo-prompt-panel__header">
-        <h3 className="ceo-prompt-panel__title">Claude Code Prompt</h3>
+        <h3 className="ceo-prompt-panel__title">{titleLabel}</h3>
         <div className="ceo-prompt-panel__meta">
           <span className="ceo-prompt-panel__version">v{artifact.version}</span>
           <span className="ceo-prompt-panel__timestamp">{formattedTime}</span>

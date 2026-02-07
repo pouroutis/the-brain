@@ -7,12 +7,15 @@ import { ExchangeList } from './ExchangeList';
 import { CeoPromptPanel } from './CeoPromptPanel';
 import { CeoClarificationPanel } from './CeoClarificationPanel';
 import { ProjectSidebar } from './ProjectSidebar';
+import { EpochStatusBadge } from './EpochStatusBadge';
+import { AdvisorReviewCard } from './AdvisorReviewCard';
 import type {
   Agent,
   BrainMode,
   CeoPromptArtifact,
   ClarificationState,
   DecisionBlockingState,
+  DecisionEpoch,
   Exchange,
   FileEntry,
   PendingExchange,
@@ -69,6 +72,8 @@ interface DecisionModeLayoutProps {
   onRemoveFile: (fileId: string) => void;
   /** Callback to clear all project files */
   onClearFiles: () => void;
+  /** Decision epoch state (Batch 8, read-only) */
+  decisionEpoch?: DecisionEpoch | null;
 }
 
 // -----------------------------------------------------------------------------
@@ -103,6 +108,7 @@ export function DecisionModeLayout({
   onAddFiles,
   onRemoveFile,
   onClearFiles,
+  decisionEpoch,
 }: DecisionModeLayoutProps): JSX.Element {
   const isBlocked = blockingState?.isBlocked ?? false;
 
@@ -114,6 +120,11 @@ export function DecisionModeLayout({
           <div className="decision-mode-layout__blocking-content">
             <div className="decision-mode-layout__blocking-icon">⛔</div>
             <h3 className="decision-mode-layout__blocking-title">Session Blocked</h3>
+            {decisionEpoch && (
+              <p className="decision-mode-layout__blocking-epoch">
+                Epoch #{decisionEpoch.epochId} · Round {decisionEpoch.round}
+              </p>
+            )}
             <p className="decision-mode-layout__blocking-reason">{blockingState?.reason}</p>
             <p className="decision-mode-layout__blocking-help">
               CEO must output either a valid Claude Code prompt (with markers) or clarification questions.
@@ -153,6 +164,7 @@ export function DecisionModeLayout({
 
       {/* Center Pane: Discussion Thread */}
       <div className="decision-mode-layout__center">
+        <EpochStatusBadge epoch={decisionEpoch ?? null} />
         <ExchangeList
           exchanges={exchanges}
           pendingExchange={pendingExchange}
@@ -163,9 +175,27 @@ export function DecisionModeLayout({
         />
       </div>
 
-      {/* Right Pane: CEO Prompt + Clarification */}
+      {/* Right Pane: CEO Prompt + Reviews + Clarification */}
       <div className="decision-mode-layout__right">
-        <CeoPromptPanel artifact={ceoPromptArtifact} warning={ceoPromptWarning} />
+        <CeoPromptPanel
+          artifact={ceoPromptArtifact}
+          warning={ceoPromptWarning}
+          epochPhase={decisionEpoch?.phase ?? null}
+        />
+
+        {/* Advisor Review Cards (Batch 8) — visible when reviews exist */}
+        {decisionEpoch?.advisorReviews && Object.keys(decisionEpoch.advisorReviews).length > 0 && (
+          <div className="decision-mode-layout__reviews" data-testid="advisor-reviews-section">
+            <h4 className="decision-mode-layout__reviews-title">Advisor Reviews</h4>
+            {(['gpt', 'claude', 'gemini'] as const).map((agent) => {
+              const review = decisionEpoch.advisorReviews?.[agent];
+              return review ? (
+                <AdvisorReviewCard key={agent} agent={agent} review={review} />
+              ) : null;
+            })}
+          </div>
+        )}
+
         <CeoClarificationPanel
           clarificationState={clarificationState}
           onSendMessage={onSendClarificationMessage}
