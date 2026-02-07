@@ -1,13 +1,10 @@
 // =============================================================================
 // The Brain — Multi-AI Sequential Chat System
-// App Component (Home Screen + Mode-Based Routing)
+// App Component (V2-C — Unified 3-Column Layout)
 // =============================================================================
 
-import { useState, useCallback } from 'react';
 import { BrainProvider } from './context/BrainContext';
-import { BrainChat } from './components/BrainChat';
-import { HomeScreen } from './components/HomeScreen';
-import type { BrainMode } from './types/brain';
+import { AppLayout } from './components/AppLayout';
 import './styles.css';
 
 // -----------------------------------------------------------------------------
@@ -15,17 +12,6 @@ import './styles.css';
 // -----------------------------------------------------------------------------
 
 export function App(): JSX.Element {
-  // Track which mode user selected (null = show home screen)
-  const [selectedMode, setSelectedMode] = useState<BrainMode | null>(null);
-
-  const handleSelectMode = useCallback((mode: BrainMode) => {
-    setSelectedMode(mode);
-  }, []);
-
-  const handleReturnHome = useCallback(() => {
-    setSelectedMode(null);
-  }, []);
-
   return (
     <BrainProvider>
       <div className="brain-app">
@@ -34,13 +20,7 @@ export function App(): JSX.Element {
           <p>Multi-AI Sequential Chat System</p>
         </header>
 
-        {selectedMode === null ? (
-          <HomeScreen onSelectMode={handleSelectMode} />
-        ) : (
-          <BrainChat
-            onReturnHome={handleReturnHome}
-          />
-        )}
+        <AppLayout />
       </div>
     </BrainProvider>
   );

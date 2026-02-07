@@ -26,9 +26,9 @@ body {
    ----------------------------------------------------------------------------- */
 
 .brain-app {
-  max-width: 1280px;
+  max-width: 100%;
   margin: 0 auto;
-  padding: 20px 32px;
+  padding: 20px 24px;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -3115,4 +3115,280 @@ body {
 .verdict-banner__btn--secondary:hover {
   background: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.8);
+}
+
+/* =============================================================================
+   V2-C — 3-Column App Layout
+   ============================================================================= */
+
+.app-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 16px;
+}
+
+.app-layout__sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.app-layout__center {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-layout__shelf {
+  width: 300px;
+  flex-shrink: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* -----------------------------------------------------------------------------
+   Work Item Sidebar
+   ----------------------------------------------------------------------------- */
+
+.work-item-sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border: 1px solid #333;
+  border-radius: 8px;
+  background-color: #16162a;
+  padding: 12px;
+}
+
+.work-item-sidebar__header {
+  margin-bottom: 12px;
+}
+
+.work-item-sidebar__title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #eaeaea;
+  margin-bottom: 8px;
+}
+
+.work-item-sidebar__toggle {
+  display: flex;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #444;
+}
+
+.work-item-sidebar__toggle-btn {
+  flex: 1;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  border: none;
+  background: transparent;
+  color: #888;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.work-item-sidebar__toggle-btn--active {
+  background: #2a2a4a;
+  color: #eaeaea;
+}
+
+.work-item-sidebar__toggle-btn:hover:not(.work-item-sidebar__toggle-btn--active) {
+  color: #ccc;
+}
+
+.work-item-sidebar__new-btn {
+  width: 100%;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  font-size: 0.8125rem;
+  border: 1px dashed #555;
+  border-radius: 6px;
+  background: transparent;
+  color: #aaa;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.work-item-sidebar__new-btn:hover {
+  background: #2a2a4a;
+  color: #eaeaea;
+  border-color: #777;
+}
+
+.work-item-sidebar__list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.work-item-sidebar__empty {
+  text-align: center;
+  color: #666;
+  font-size: 0.8125rem;
+  padding: 16px 8px;
+}
+
+.work-item-sidebar__item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.work-item-sidebar__item:hover {
+  background: #222244;
+}
+
+.work-item-sidebar__item--selected {
+  background: #2a2a52;
+  border-color: #5a5a8a;
+}
+
+.work-item-sidebar__item-title {
+  font-size: 0.8125rem;
+  color: #ddd;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.work-item-sidebar__item-date {
+  font-size: 0.6875rem;
+  color: #666;
+  margin-top: 2px;
+}
+
+/* -----------------------------------------------------------------------------
+   Context Shelf Panel
+   ----------------------------------------------------------------------------- */
+
+.context-shelf {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border: 1px solid #333;
+  border-radius: 8px;
+  background-color: #16162a;
+  padding: 12px;
+}
+
+.context-shelf__header {
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #333;
+}
+
+.context-shelf__title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #eaeaea;
+}
+
+.context-shelf__signals {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.context-shelf__signal-tag {
+  font-size: 0.6875rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #2a2a4a;
+  color: #8b8bbd;
+  border: 1px solid #444;
+}
+
+.context-shelf__empty-state {
+  color: #666;
+  font-size: 0.8125rem;
+  text-align: center;
+  padding: 24px 8px;
+}
+
+.context-shelf__section {
+  margin-bottom: 14px;
+}
+
+.context-shelf__section-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.context-shelf__text {
+  font-size: 0.8125rem;
+  color: #ccc;
+  line-height: 1.5;
+}
+
+.context-shelf__placeholder {
+  font-size: 0.8125rem;
+  color: #555;
+  font-style: italic;
+}
+
+.context-shelf__file-list {
+  list-style: none;
+  padding: 0;
+}
+
+.context-shelf__file-item {
+  font-size: 0.8125rem;
+  color: #aaa;
+  padding: 3px 0;
+  border-bottom: 1px solid #2a2a3e;
+}
+
+.context-shelf__file-item:last-child {
+  border-bottom: none;
+}
+
+.context-shelf__pre {
+  font-size: 0.8125rem;
+  color: #ccc;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #1a1a30;
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid #2a2a3e;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* Responsive: collapse to single column on small screens */
+@media (max-width: 900px) {
+  .app-layout {
+    flex-direction: column;
+  }
+
+  .app-layout__sidebar {
+    width: 100%;
+    max-height: 200px;
+  }
+
+  .app-layout__shelf {
+    width: 100%;
+    max-height: 300px;
+  }
 }

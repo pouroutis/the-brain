@@ -3,8 +3,9 @@
 // BrainChat Container Component (Discussion Mode Only)
 // =============================================================================
 
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { useBrain } from '../context/BrainContext';
+import { useWorkItems } from '../context/WorkItemContext';
 import { ExchangeList } from './ExchangeList';
 import { PromptInput } from './PromptInput';
 import { ActionBar } from './ActionBar';
@@ -49,6 +50,10 @@ export function BrainChat({ onReturnHome }: BrainChatProps): JSX.Element {
     getSystemMessages,
   } = useBrain();
 
+  // WorkItem binding (V2-C — title derivation on first prompt)
+  const { workItems, selectedWorkItemId, rename, updateShelf } = useWorkItems();
+  const hasSetTitleRef = useRef<string | null>(null);
+
   // ---------------------------------------------------------------------------
   // Derived state from selectors
   // ---------------------------------------------------------------------------
@@ -83,9 +88,23 @@ export function BrainChat({ onReturnHome }: BrainChatProps): JSX.Element {
 
   const handleSubmit = useCallback(
     (prompt: string) => {
+      // V2-C: Derive work item title from first prompt
+      if (selectedWorkItemId && hasSetTitleRef.current !== selectedWorkItemId) {
+        const item = workItems.find((w) => w.id === selectedWorkItemId);
+        if (item) {
+          const trimmed = prompt.trim();
+          if (trimmed && (item.title === 'Untitled' || item.title === '')) {
+            rename(selectedWorkItemId, trimmed.slice(0, 60));
+          }
+          if (item.shelf.task === null && trimmed) {
+            updateShelf(selectedWorkItemId, { task: trimmed });
+          }
+          hasSetTitleRef.current = selectedWorkItemId;
+        }
+      }
       submitPrompt(prompt);
     },
-    [submitPrompt]
+    [submitPrompt, selectedWorkItemId, workItems, rename, updateShelf]
   );
 
   const handleCancel = useCallback(() => {
