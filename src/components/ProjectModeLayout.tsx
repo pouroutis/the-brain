@@ -6,7 +6,8 @@
 import { useState } from 'react';
 import { ProjectSidebar } from './ProjectSidebar';
 import { ExecutionPanel } from './ExecutionPanel';
-import type { ProjectState, DecisionRecord, Exchange } from '../types/brain';
+import type { Agent, ProjectState, DecisionRecord, Exchange } from '../types/brain';
+import type { ParsedExecutionReview } from '../utils/executionReviewParser';
 
 // -----------------------------------------------------------------------------
 // Types
@@ -31,6 +32,12 @@ interface ProjectModeLayoutProps {
   onSubmitResult: (result: string) => void;
   /** Callback to mark execution as done */
   onMarkExecutionDone: () => void;
+  /** Whether AI review is in progress (Batch 11) */
+  isReviewing?: boolean;
+  /** Parsed execution review verdicts (Batch 11) */
+  reviewVerdicts?: Partial<Record<Agent, ParsedExecutionReview>> | null;
+  /** Callback to request AI review (Batch 11) */
+  onRequestReview?: () => void;
 }
 
 // -----------------------------------------------------------------------------
@@ -150,6 +157,9 @@ export function ProjectModeLayout({
   resultArtifact,
   onSubmitResult,
   onMarkExecutionDone,
+  isReviewing,
+  reviewVerdicts,
+  onRequestReview,
 }: ProjectModeLayoutProps): JSX.Element {
   const statusDisplay = activeProject ? getStatusDisplay(activeProject.status) : null;
 
@@ -244,6 +254,9 @@ export function ProjectModeLayout({
               onSubmitResult={onSubmitResult}
               onMarkDone={onMarkExecutionDone}
               onIterate={onContinueInDecisionMode}
+              isReviewing={isReviewing}
+              reviewVerdicts={reviewVerdicts}
+              onRequestReview={onRequestReview}
             />
 
             {/* Project Header */}

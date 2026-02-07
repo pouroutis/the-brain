@@ -5,13 +5,15 @@
 // =============================================================================
 
 import { useCallback, useState } from 'react';
-import type { DecisionRecord } from '../types/brain';
+import { ExecutionReviewCard } from './ExecutionReviewCard';
+import type { Agent, DecisionRecord } from '../types/brain';
+import type { ParsedExecutionReview } from '../utils/executionReviewParser';
 
 // -----------------------------------------------------------------------------
 // Types
 // -----------------------------------------------------------------------------
 
-type ExecutionStatus = 'pending' | 'executing' | 'results_submitted' | 'done';
+type ExecutionStatus = 'pending' | 'executing' | 'results_submitted' | 'reviewing' | 'done';
 
 interface ExecutionPanelProps {
   /** The latest decision that produced a Claude Code prompt */
@@ -24,6 +26,12 @@ interface ExecutionPanelProps {
   onMarkDone: () => void;
   /** Callback to iterate (return to Decision mode for refinement) */
   onIterate: () => void;
+  /** Whether AI review is in progress */
+  isReviewing?: boolean;
+  /** Parsed review verdicts from agents (after review completes) */
+  reviewVerdicts?: Partial<Record<Agent, ParsedExecutionReview>> | null;
+  /** Callback to request AI review of execution results */
+  onRequestReview?: () => void;
 }
 
 // -----------------------------------------------------------------------------
@@ -36,6 +44,9 @@ export function ExecutionPanel({
   onSubmitResult,
   onMarkDone,
   onIterate,
+  isReviewing = false,
+  reviewVerdicts = null,
+  onRequestReview,
 }: ExecutionPanelProps): JSX.Element | null {
   // No decision with prompt = nothing to show
   if (!decision || !decision.promptProduced || !decision.claudeCodePrompt) {
@@ -177,6 +188,42 @@ export function ExecutionPanel({
           <pre className="execution-panel__submitted-text" data-testid="submitted-results-text">
             {resultText}
           </pre>
+
+          {/* AI Review Section (Batch 11) */}
+          <div className="execution-panel__review-section">
+            {/* Review Loading */}
+            {isReviewing && (
+              <div className="execution-panel__reviewing" data-testid="reviewing-indicator">
+                <span className="execution-panel__reviewing-icon">🔍</span>
+                <span className="execution-panel__reviewing-text">AI team is reviewing execution results...</span>
+              </div>
+            )}
+
+            {/* Review Verdicts (after review completes) */}
+            {!isReviewing && reviewVerdicts && Object.keys(reviewVerdicts).length > 0 && (
+              <div className="execution-panel__verdicts" data-testid="review-verdicts">
+                <h4 className="execution-panel__verdicts-title">AI Review Verdicts</h4>
+                {(['gpt', 'claude', 'gemini'] as const).map((agent) => {
+                  const review = reviewVerdicts[agent];
+                  return review ? (
+                    <ExecutionReviewCard key={agent} agent={agent} review={review} />
+                  ) : null;
+                })}
+              </div>
+            )}
+
+            {/* Request Review Button (only when no review in progress and no verdicts yet) */}
+            {!isReviewing && (!reviewVerdicts || Object.keys(reviewVerdicts).length === 0) && onRequestReview && (
+              <button
+                className="execution-panel__btn execution-panel__btn--review"
+                onClick={onRequestReview}
+                data-testid="request-review-btn"
+              >
+                🔍 Request AI Review
+              </button>
+            )}
+          </div>
+
           <div className="execution-panel__actions">
             <button
               className="execution-panel__btn execution-panel__btn--success"

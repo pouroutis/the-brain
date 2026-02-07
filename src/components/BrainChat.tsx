@@ -22,6 +22,8 @@ import {
   PROMPT_START_MARKER,
   PROMPT_END_MARKER,
 } from '../utils/ceoControlBlockParser';
+import { parseExecutionReview, buildReviewPrompt, REVIEW_PROMPT_PREFIX } from '../utils/executionReviewParser';
+import type { ParsedExecutionReview } from '../utils/executionReviewParser';
 import type { Agent, BrainMode } from '../types/brain';
 
 // -----------------------------------------------------------------------------
@@ -145,6 +147,11 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
   const projects = listProjects();
   const decisionEpoch = getDecisionEpoch();
   const resultArtifact = state.resultArtifact;
+
+  // Batch 11: AI Review state
+  const reviewRequestedRef = useRef(false);
+  const [reviewVerdicts, setReviewVerdicts] = useState<Partial<Record<Agent, ParsedExecutionReview>> | null>(null);
+  const isReviewing = reviewRequestedRef.current && processing;
 
   // ---------------------------------------------------------------------------
   // Extract last CEO questions (for CeoClarificationPanel display)
@@ -468,6 +475,56 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     // No global state change needed for MVP
   }, []);
 
+  const handleRequestReview = useCallback(() => {
+    // Find latest prompt decision
+    const latestDecision = activeProject?.decisions
+      ? [...activeProject.decisions].reverse().find(d => d.promptProduced && d.claudeCodePrompt)
+      : null;
+
+    if (!latestDecision?.claudeCodePrompt || !resultArtifact) return;
+
+    // Clear previous verdicts
+    setReviewVerdicts(null);
+
+    // Mark review as requested
+    reviewRequestedRef.current = true;
+
+    // Build and submit review prompt
+    const reviewPrompt = buildReviewPrompt(latestDecision.claudeCodePrompt, resultArtifact);
+    submitPrompt(reviewPrompt);
+  }, [activeProject, resultArtifact, submitPrompt]);
+
+  // Batch 11: Parse review verdicts when review sequence completes
+  useEffect(() => {
+    // Only process when review was requested and processing just completed
+    if (!reviewRequestedRef.current || processing) return;
+
+    // Reset flag
+    reviewRequestedRef.current = false;
+
+    // Get the last exchange (should be the review exchange)
+    const exchange = lastExchange;
+    if (!exchange) return;
+
+    // Verify this is a review exchange (user prompt starts with review prefix)
+    if (!exchange.userPrompt.startsWith(REVIEW_PROMPT_PREFIX)) return;
+
+    // Parse each agent's response
+    const verdicts: Partial<Record<Agent, ParsedExecutionReview>> = {};
+    const agents: Agent[] = ['gpt', 'claude', 'gemini'];
+
+    for (const agent of agents) {
+      const response = exchange.responsesByAgent[agent];
+      if (response && response.status === 'success' && response.content) {
+        verdicts[agent] = parseExecutionReview(response.content);
+      }
+    }
+
+    if (Object.keys(verdicts).length > 0) {
+      setReviewVerdicts(verdicts);
+    }
+  }, [processing, lastExchange]);
+
   const handleClearProjectBlock = useCallback(() => {
     // Clear blocked status on active project (sets status back to 'active')
     clearProjectBlock();
@@ -504,6 +561,9 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
           resultArtifact={resultArtifact}
           onSubmitResult={handleSubmitExecutionResult}
           onMarkExecutionDone={handleMarkExecutionDone}
+          isReviewing={isReviewing}
+          reviewVerdicts={reviewVerdicts}
+          onRequestReview={handleRequestReview}
         />
 
         {/* Action Bar (Project Mode - minimal controls) */}
