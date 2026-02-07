@@ -6,8 +6,9 @@
 
 import { useCallback, useState } from 'react';
 import { ExecutionReviewCard } from './ExecutionReviewCard';
+import { VerdictBanner } from './VerdictBanner';
 import type { Agent, DecisionRecord } from '../types/brain';
-import type { ParsedExecutionReview } from '../utils/executionReviewParser';
+import type { ParsedExecutionReview, VerdictResolution } from '../utils/executionReviewParser';
 
 // -----------------------------------------------------------------------------
 // Types
@@ -32,6 +33,12 @@ interface ExecutionPanelProps {
   reviewVerdicts?: Partial<Record<Agent, ParsedExecutionReview>> | null;
   /** Callback to request AI review of execution results */
   onRequestReview?: () => void;
+  /** Resolved verdict (Batch 12 — auto-resolved or CEO synthesis) */
+  verdictResolution?: VerdictResolution | null;
+  /** Whether CEO synthesis is in progress (Batch 12) */
+  isSynthesizing?: boolean;
+  /** Callback to request CEO verdict synthesis (Batch 12) */
+  onRequestCeoVerdict?: () => void;
 }
 
 // -----------------------------------------------------------------------------
@@ -47,6 +54,9 @@ export function ExecutionPanel({
   isReviewing = false,
   reviewVerdicts = null,
   onRequestReview,
+  verdictResolution = null,
+  isSynthesizing = false,
+  onRequestCeoVerdict,
 }: ExecutionPanelProps): JSX.Element | null {
   // No decision with prompt = nothing to show
   if (!decision || !decision.promptProduced || !decision.claudeCodePrompt) {
@@ -224,22 +234,36 @@ export function ExecutionPanel({
             )}
           </div>
 
-          <div className="execution-panel__actions">
-            <button
-              className="execution-panel__btn execution-panel__btn--success"
-              onClick={handleMarkDone}
-              data-testid="mark-done-btn"
-            >
-              ✅ Mark Done
-            </button>
-            <button
-              className="execution-panel__btn execution-panel__btn--primary"
-              onClick={onIterate}
-              data-testid="iterate-btn-results"
-            >
-              🔄 Iterate (New Decision)
-            </button>
-          </div>
+          {/* Verdict Gate (Batch 12) — shows after review verdicts exist or on synthesis */}
+          {(verdictResolution || isSynthesizing) && (
+            <VerdictBanner
+              resolution={verdictResolution ?? { resolved: false, verdict: null, source: null, ceoAgent: '', rationale: null, nextAction: null }}
+              isSynthesizing={isSynthesizing}
+              onAccept={handleMarkDone}
+              onIterate={onIterate}
+              onRequestCeoVerdict={onRequestCeoVerdict}
+            />
+          )}
+
+          {/* Original actions (hidden when verdict is active) */}
+          {!verdictResolution && !isSynthesizing && (
+            <div className="execution-panel__actions">
+              <button
+                className="execution-panel__btn execution-panel__btn--success"
+                onClick={handleMarkDone}
+                data-testid="mark-done-btn"
+              >
+                ✅ Mark Done
+              </button>
+              <button
+                className="execution-panel__btn execution-panel__btn--primary"
+                onClick={onIterate}
+                data-testid="iterate-btn-results"
+              >
+                🔄 Iterate (New Decision)
+              </button>
+            </div>
+          )}
         </div>
       )}
 

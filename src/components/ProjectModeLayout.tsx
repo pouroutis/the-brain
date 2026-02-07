@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { ProjectSidebar } from './ProjectSidebar';
 import { ExecutionPanel } from './ExecutionPanel';
 import type { Agent, ProjectState, DecisionRecord, Exchange } from '../types/brain';
-import type { ParsedExecutionReview } from '../utils/executionReviewParser';
+import type { ParsedExecutionReview, VerdictResolution } from '../utils/executionReviewParser';
 
 // -----------------------------------------------------------------------------
 // Types
@@ -38,6 +38,12 @@ interface ProjectModeLayoutProps {
   reviewVerdicts?: Partial<Record<Agent, ParsedExecutionReview>> | null;
   /** Callback to request AI review (Batch 11) */
   onRequestReview?: () => void;
+  /** Resolved verdict from review (Batch 12) */
+  verdictResolution?: VerdictResolution | null;
+  /** Whether CEO synthesis is in progress (Batch 12) */
+  isSynthesizing?: boolean;
+  /** Callback to request CEO verdict (Batch 12) */
+  onRequestCeoVerdict?: () => void;
 }
 
 // -----------------------------------------------------------------------------
@@ -160,6 +166,9 @@ export function ProjectModeLayout({
   isReviewing,
   reviewVerdicts,
   onRequestReview,
+  verdictResolution,
+  isSynthesizing,
+  onRequestCeoVerdict,
 }: ProjectModeLayoutProps): JSX.Element {
   const statusDisplay = activeProject ? getStatusDisplay(activeProject.status) : null;
 
@@ -257,6 +266,9 @@ export function ProjectModeLayout({
               isReviewing={isReviewing}
               reviewVerdicts={reviewVerdicts}
               onRequestReview={onRequestReview}
+              verdictResolution={verdictResolution}
+              isSynthesizing={isSynthesizing}
+              onRequestCeoVerdict={onRequestCeoVerdict}
             />
 
             {/* Project Header */}

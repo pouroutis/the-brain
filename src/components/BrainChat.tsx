@@ -22,8 +22,16 @@ import {
   PROMPT_START_MARKER,
   PROMPT_END_MARKER,
 } from '../utils/ceoControlBlockParser';
-import { parseExecutionReview, buildReviewPrompt, REVIEW_PROMPT_PREFIX } from '../utils/executionReviewParser';
-import type { ParsedExecutionReview } from '../utils/executionReviewParser';
+import {
+  parseExecutionReview,
+  buildReviewPrompt,
+  REVIEW_PROMPT_PREFIX,
+  computeVerdictResolution,
+  parseCeoSynthesis,
+  buildSynthesisPrompt,
+  SYNTHESIS_PROMPT_PREFIX,
+} from '../utils/executionReviewParser';
+import type { ParsedExecutionReview, VerdictResolution } from '../utils/executionReviewParser';
 import type { Agent, BrainMode } from '../types/brain';
 
 // -----------------------------------------------------------------------------
@@ -152,6 +160,11 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
   const reviewRequestedRef = useRef(false);
   const [reviewVerdicts, setReviewVerdicts] = useState<Partial<Record<Agent, ParsedExecutionReview>> | null>(null);
   const isReviewing = reviewRequestedRef.current && processing;
+
+  // Batch 12: CEO Synthesis + Verdict Gate
+  const synthesisRequestedRef = useRef(false);
+  const [verdictResolution, setVerdictResolution] = useState<VerdictResolution | null>(null);
+  const isSynthesizing = synthesisRequestedRef.current && processing;
 
   // ---------------------------------------------------------------------------
   // Extract last CEO questions (for CeoClarificationPanel display)
@@ -525,6 +538,87 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     }
   }, [processing, lastExchange]);
 
+  // Batch 12: Auto-resolve verdict on consensus (Tier 1)
+  useEffect(() => {
+    if (!reviewVerdicts || Object.keys(reviewVerdicts).length === 0) {
+      setVerdictResolution(null);
+      return;
+    }
+
+    const resolution = computeVerdictResolution(reviewVerdicts, ceo);
+    if (resolution.resolved) {
+      setVerdictResolution(resolution);
+    } else {
+      // Disagreement — show unresolved state, user can request CEO synthesis
+      setVerdictResolution(resolution);
+    }
+  }, [reviewVerdicts, ceo]);
+
+  const handleRequestCeoVerdict = useCallback(() => {
+    if (!reviewVerdicts) return;
+
+    // Clear previous verdict
+    setVerdictResolution(null);
+
+    // Mark synthesis as requested
+    synthesisRequestedRef.current = true;
+
+    // Build and submit synthesis prompt
+    const synthesisPrompt = buildSynthesisPrompt(reviewVerdicts, ceo);
+    submitPrompt(synthesisPrompt);
+  }, [reviewVerdicts, ceo, submitPrompt]);
+
+  // Batch 12: Parse CEO synthesis when synthesis sequence completes
+  useEffect(() => {
+    if (!synthesisRequestedRef.current || processing) return;
+
+    synthesisRequestedRef.current = false;
+
+    const exchange = lastExchange;
+    if (!exchange) return;
+
+    // Verify this is a synthesis exchange
+    if (!exchange.userPrompt.startsWith(SYNTHESIS_PROMPT_PREFIX)) return;
+
+    // Parse CEO's response only
+    const ceoResponse = exchange.responsesByAgent[ceo];
+    if (!ceoResponse || ceoResponse.status !== 'success' || !ceoResponse.content) {
+      // CEO failed to respond — show unresolved with error rationale
+      setVerdictResolution({
+        resolved: false,
+        verdict: null,
+        source: null,
+        ceoAgent: ceo,
+        rationale: 'CEO synthesis failed — no response received',
+        nextAction: null,
+      });
+      return;
+    }
+
+    const parsed = parseCeoSynthesis(ceoResponse.content);
+
+    if (parsed.valid && parsed.verdict) {
+      setVerdictResolution({
+        resolved: true,
+        verdict: parsed.verdict,
+        source: 'ceo_synthesis',
+        ceoAgent: ceo,
+        rationale: parsed.rationale.join('. '),
+        nextAction: parsed.nextAction,
+      });
+    } else {
+      // Parse failed — show unresolved with raw text excerpt
+      setVerdictResolution({
+        resolved: false,
+        verdict: null,
+        source: null,
+        ceoAgent: ceo,
+        rationale: `CEO synthesis could not be parsed: ${parsed.errors.join('; ')}`,
+        nextAction: null,
+      });
+    }
+  }, [processing, lastExchange, ceo]);
+
   const handleClearProjectBlock = useCallback(() => {
     // Clear blocked status on active project (sets status back to 'active')
     clearProjectBlock();
@@ -564,6 +658,9 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
           isReviewing={isReviewing}
           reviewVerdicts={reviewVerdicts}
           onRequestReview={handleRequestReview}
+          verdictResolution={verdictResolution}
+          isSynthesizing={isSynthesizing}
+          onRequestCeoVerdict={handleRequestCeoVerdict}
         />
 
         {/* Action Bar (Project Mode - minimal controls) */}
