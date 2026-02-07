@@ -235,6 +235,8 @@ interface BrainActions {
   clearProject: () => void;
   /** Create a new project, clear board, stay in Decision mode */
   createNewProject: () => string;
+  /** Create a project from the current Decision mode result and switch to Project mode (Batch 9) */
+  createProjectFromDecision: () => void;
   /** Switch to a different project by ID */
   switchToProjectById: (projectId: string) => void;
   /** Clear active project selection (for Project Dashboard empty state) */
@@ -1748,6 +1750,67 @@ RULES:
     return projectId;
   }, [state.isProcessing]);
 
+  // ---------------------------------------------------------------------------
+  // Batch 9: Auto-handoff from Decision to Project
+  // Creates a project (if needed) seeded with the FINAL prompt, then switches
+  // to Project mode. If a project already exists AND decision tracking already
+  // fired, just navigates.
+  // ---------------------------------------------------------------------------
+
+  const createProjectFromDecision = useCallback((): void => {
+    const artifact = state.discussionCeoPromptArtifact;
+
+    // Case 1: Project already exists — decision tracking effect already
+    // appended the DecisionRecord. Just navigate.
+    if (state.activeProject) {
+      dispatch({ type: 'SET_MODE', mode: 'project' });
+      return;
+    }
+
+    // Case 2: No project exists — create one and seed with decision.
+    // This covers users who entered Decision mode without first creating a project.
+    const epoch = state.decisionEpoch;
+    const currentCeo = ceoRef.current;
+
+    // Create project with title from epoch intent (truncated)
+    const projectId = generateProjectId();
+    const title = epoch?.intent
+      ? epoch.intent.slice(0, 100)
+      : 'Decision Project';
+    dispatch({ type: 'CREATE_PROJECT', projectId, title });
+
+    // Build and append decision record (mirrors decision tracking effect logic)
+    if (artifact) {
+      const allAgents: Agent[] = ['gpt', 'claude', 'gemini'];
+      const advisors = allAgents.filter(a => a !== currentCeo);
+
+      const decision: DecisionRecord = {
+        id: generateDecisionId(),
+        createdAt: Date.now(),
+        epochId: epoch?.epochId,
+        mode: 'decision',
+        promptProduced: true,
+        claudeCodePrompt: artifact.text,
+        blocked: false,
+        ceoAgent: currentCeo,
+        advisors,
+        recentExchanges: state.exchanges.slice(-10),
+        keyNotes: state.keyNotes,
+      };
+
+      dispatch({ type: 'APPEND_PROJECT_DECISION', decision });
+    }
+
+    // Switch to project mode
+    dispatch({ type: 'SET_MODE', mode: 'project' });
+  }, [
+    state.discussionCeoPromptArtifact,
+    state.activeProject,
+    state.decisionEpoch,
+    state.exchanges,
+    state.keyNotes,
+  ]);
+
   const switchToProjectById = useCallback((projectId: string): void => {
     // Load project from localStorage
     const project = loadProject(projectId);
@@ -2043,6 +2106,7 @@ RULES:
       createProject,
       clearProject,
       createNewProject,
+      createProjectFromDecision,
       switchToProjectById,
       clearActiveProjectSelection,
       deleteProject,
@@ -2131,6 +2195,7 @@ RULES:
       createProject,
       clearProject,
       createNewProject,
+      createProjectFromDecision,
       switchToProjectById,
       clearActiveProjectSelection,
       deleteProject,

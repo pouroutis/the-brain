@@ -2499,3 +2499,52 @@ body {
   color: rgba(255, 255, 255, 0.5);
   margin: 0 0 8px 0;
 }
+
+/* =============================================================================
+   Batch 9 — Decision Finalized Auto-Handoff
+   ============================================================================= */
+
+.brain-chat__decision-finalized-text {
+  font-size: 0.9rem;
+  color: #4ade80;
+  font-weight: 500;
+}
+
+.brain-chat__decision-finalized-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.brain-chat__create-project-btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: rgba(59, 130, 246, 0.8);
+  color: white;
+  transition: background 0.15s;
+}
+
+.brain-chat__create-project-btn:hover {
+  background: rgba(59, 130, 246, 1);
+}
+
+.brain-chat__clear-board-btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  transition: background 0.15s, color 0.15s;
+}
+
+.brain-chat__clear-board-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+}

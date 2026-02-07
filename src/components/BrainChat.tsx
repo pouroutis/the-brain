@@ -93,6 +93,7 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     getActiveProject,
     listProjects,
     createNewProject,
+    createProjectFromDecision,
     switchToProjectById,
     deleteProject,
     clearProjectBlock,
@@ -451,9 +452,9 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
   }, [clearBoard, setMode]);
 
   const handleViewInProject = useCallback(() => {
-    // Switch to Project mode to view project dashboard
-    setMode('project');
-  }, [setMode]);
+    // Batch 9: Auto-handoff — creates project if needed, seeds with FINAL prompt
+    createProjectFromDecision();
+  }, [createProjectFromDecision]);
 
   const handleClearProjectBlock = useCallback(() => {
     // Clear blocked status on active project (sets status back to 'active')
@@ -578,17 +579,28 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
           decisionEpoch={decisionEpoch}
         />
 
-        {/* Decision Finalized Message + View Project Button */}
+        {/* Decision Finalized — Auto-Handoff (Batch 9) */}
         {isDecisionFinalized && (
           <div className="brain-chat__decision-finalized" data-testid="decision-finalized-message">
-            <span>Decision finalized. Copy the Claude Code prompt or Clear Board to continue.</span>
-            <button
-              className="brain-chat__view-project-btn"
-              onClick={handleViewInProject}
-              data-testid="view-in-project-btn"
-            >
-              View in Project
-            </button>
+            <span className="brain-chat__decision-finalized-text">
+              ✅ Decision finalized. Prompt ready for Claude Code.
+            </span>
+            <div className="brain-chat__decision-finalized-actions">
+              <button
+                className="brain-chat__create-project-btn"
+                onClick={handleViewInProject}
+                data-testid="create-project-from-decision-btn"
+              >
+                {activeProject ? '→ View in Project' : '+ Create Project'}
+              </button>
+              <button
+                className="brain-chat__clear-board-btn"
+                onClick={() => clearBoard()}
+                data-testid="clear-board-btn"
+              >
+                Clear Board
+              </button>
+            </div>
           </div>
         )}
 
