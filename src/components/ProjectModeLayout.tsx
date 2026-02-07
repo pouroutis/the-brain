@@ -5,6 +5,7 @@
 
 import { useState } from 'react';
 import { ProjectSidebar } from './ProjectSidebar';
+import { ExecutionPanel } from './ExecutionPanel';
 import type { ProjectState, DecisionRecord, Exchange } from '../types/brain';
 
 // -----------------------------------------------------------------------------
@@ -24,6 +25,12 @@ interface ProjectModeLayoutProps {
   onDeleteProject: (projectId: string) => void;
   /** Callback to enter Decision mode for this project */
   onContinueInDecisionMode: () => void;
+  /** Existing execution result artifact (survives mode switches) */
+  resultArtifact: string | null;
+  /** Callback to store execution results */
+  onSubmitResult: (result: string) => void;
+  /** Callback to mark execution as done */
+  onMarkExecutionDone: () => void;
 }
 
 // -----------------------------------------------------------------------------
@@ -140,6 +147,9 @@ export function ProjectModeLayout({
   onNewProject,
   onDeleteProject,
   onContinueInDecisionMode,
+  resultArtifact,
+  onSubmitResult,
+  onMarkExecutionDone,
 }: ProjectModeLayoutProps): JSX.Element {
   const statusDisplay = activeProject ? getStatusDisplay(activeProject.status) : null;
 
@@ -166,6 +176,11 @@ export function ProjectModeLayout({
   // Get recent exchanges count
   const recentExchanges = activeProject?.projectMemory.recentExchanges ?? [];
   const exchangeCount = recentExchanges.length;
+
+  // Find the latest decision that produced a Claude Code prompt
+  const latestPromptDecision = activeProject
+    ? [...activeProject.decisions].reverse().find(d => d.promptProduced && d.claudeCodePrompt)
+    : null;
 
   return (
     <div className="project-mode-layout" data-testid="project-mode-layout">
@@ -221,6 +236,15 @@ export function ProjectModeLayout({
                 </button>
               </div>
             )}
+
+            {/* Execution Panel (Batch 10) */}
+            <ExecutionPanel
+              decision={latestPromptDecision ?? null}
+              existingResult={resultArtifact}
+              onSubmitResult={onSubmitResult}
+              onMarkDone={onMarkExecutionDone}
+              onIterate={onContinueInDecisionMode}
+            />
 
             {/* Project Header */}
             <div className="project-dashboard__header">

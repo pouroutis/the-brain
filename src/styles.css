@@ -2548,3 +2548,231 @@ body {
   background: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.9);
 }
+
+/* =============================================================================
+   Batch 10 — Execution Panel
+   ============================================================================= */
+
+.execution-panel {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.execution-panel--pending {
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+.execution-panel--executing {
+  border-color: rgba(251, 191, 36, 0.4);
+}
+
+.execution-panel--results_submitted {
+  border-color: rgba(168, 85, 247, 0.4);
+}
+
+.execution-panel--done {
+  border-color: rgba(74, 222, 128, 0.4);
+}
+
+.execution-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.execution-panel__title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  margin: 0;
+}
+
+.execution-panel__meta {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* Prompt Section */
+.execution-panel__prompt-section {
+  margin-bottom: 12px;
+}
+
+.execution-panel__prompt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.execution-panel__prompt-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.execution-panel__copy-btn {
+  padding: 4px 12px;
+  border-radius: 4px;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  background: rgba(59, 130, 246, 0.1);
+  color: rgba(59, 130, 246, 0.9);
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: background 0.15s;
+}
+
+.execution-panel__copy-btn:hover {
+  background: rgba(59, 130, 246, 0.2);
+}
+
+.execution-panel__prompt-text {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 12px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.8);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  max-height: 300px;
+  overflow-y: auto;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Actions */
+.execution-panel__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.execution-panel__btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.execution-panel__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.execution-panel__btn--primary {
+  background: rgba(59, 130, 246, 0.8);
+  color: white;
+}
+
+.execution-panel__btn--primary:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 1);
+}
+
+.execution-panel__btn--secondary {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.execution-panel__btn--secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.execution-panel__btn--success {
+  background: rgba(74, 222, 128, 0.7);
+  color: rgba(0, 0, 0, 0.9);
+  font-weight: 600;
+}
+
+.execution-panel__btn--success:hover {
+  background: rgba(74, 222, 128, 0.9);
+}
+
+/* Results Input */
+.execution-panel__results-section {
+  margin-top: 12px;
+}
+
+.execution-panel__results-label {
+  display: block;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 8px;
+}
+
+.execution-panel__results-input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  padding: 12px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.8);
+  resize: vertical;
+  min-height: 120px;
+  box-sizing: border-box;
+}
+
+.execution-panel__results-input:focus {
+  outline: none;
+  border-color: rgba(59, 130, 246, 0.5);
+}
+
+.execution-panel__results-input::placeholder {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+/* Submitted Results */
+.execution-panel__submitted-section {
+  margin-top: 8px;
+}
+
+.execution-panel__submitted-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 8px;
+}
+
+.execution-panel__submitted-text {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  border-radius: 6px;
+  padding: 12px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.8);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+  margin: 0;
+}
+
+/* Done State */
+.execution-panel__done-section {
+  text-align: center;
+  padding: 12px 0;
+}
+
+.execution-panel__done-message {
+  color: rgba(74, 222, 128, 0.9);
+  font-size: 0.9rem;
+  margin-bottom: 12px;
+}
+
+.execution-panel__done-section .execution-panel__actions {
+  justify-content: center;
+}

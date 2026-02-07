@@ -89,6 +89,8 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     // CEO-only mode toggle
     setCeoOnlyMode,
     isCeoOnlyMode,
+    // Execution result
+    setResultArtifact,
     // Project management
     getActiveProject,
     listProjects,
@@ -142,6 +144,7 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
   const activeProject = getActiveProject();
   const projects = listProjects();
   const decisionEpoch = getDecisionEpoch();
+  const resultArtifact = state.resultArtifact;
 
   // ---------------------------------------------------------------------------
   // Extract last CEO questions (for CeoClarificationPanel display)
@@ -456,6 +459,15 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     createProjectFromDecision();
   }, [createProjectFromDecision]);
 
+  const handleSubmitExecutionResult = useCallback((result: string) => {
+    setResultArtifact(result);
+  }, [setResultArtifact]);
+
+  const handleMarkExecutionDone = useCallback(() => {
+    // Execution acknowledged as complete — panel handles visual state internally
+    // No global state change needed for MVP
+  }, []);
+
   const handleClearProjectBlock = useCallback(() => {
     // Clear blocked status on active project (sets status back to 'active')
     clearProjectBlock();
@@ -489,6 +501,9 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
           onNewProject={handleNewProject}
           onDeleteProject={handleDeleteProject}
           onContinueInDecisionMode={handleContinueInDecisionMode}
+          resultArtifact={resultArtifact}
+          onSubmitResult={handleSubmitExecutionResult}
+          onMarkExecutionDone={handleMarkExecutionDone}
         />
 
         {/* Action Bar (Project Mode - minimal controls) */}
