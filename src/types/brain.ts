@@ -406,6 +406,31 @@ export interface ParsedAdvisorReview {
   confidence: AdvisorConfidence | null;
 }
 
+// -----------------------------------------------------------------------------
+// CEO File Context (Batch 7)
+// -----------------------------------------------------------------------------
+
+/**
+ * A file uploaded by the user for CEO context injection.
+ * Content may be truncated if exceeding size limits.
+ */
+export interface FileEntry {
+  /** Unique identifier */
+  id: string;
+  /** Filename (e.g., "ceoControlBlockParser.ts") */
+  name: string;
+  /** Relative path (e.g., "src/utils/ceoControlBlockParser.ts") */
+  path: string;
+  /** File text content (possibly truncated) */
+  content: string;
+  /** Original file size in characters before truncation */
+  originalSize: number;
+  /** Whether content was truncated to fit size limits */
+  isTruncated: boolean;
+  /** Timestamp when file was added */
+  addedAt: number;
+}
+
 /**
  * Durable project state persisted to localStorage.
  * Survives refresh and mode transitions.
@@ -432,6 +457,8 @@ export interface ProjectState {
   };
   /** Schema version for migration support */
   schemaVersion: 1;
+  /** Files uploaded for CEO context injection (Batch 7) */
+  projectFiles?: FileEntry[];
 }
 
 // -----------------------------------------------------------------------------
@@ -669,7 +696,11 @@ export type BrainAction =
   | { type: 'EPOCH_COMPLETE'; reason: 'prompt_delivered' | 'blocked' | 'stopped' | 'cancelled' }
   | { type: 'EPOCH_RESET' }
   // Structured Advisor Review (Batch 6)
-  | { type: 'EPOCH_SET_ADVISOR_REVIEWS'; reviews: Partial<Record<Agent, ParsedAdvisorReview>> };
+  | { type: 'EPOCH_SET_ADVISOR_REVIEWS'; reviews: Partial<Record<Agent, ParsedAdvisorReview>> }
+  // CEO File Context (Batch 7)
+  | { type: 'ADD_PROJECT_FILES'; files: FileEntry[] }
+  | { type: 'REMOVE_PROJECT_FILE'; fileId: string }
+  | { type: 'CLEAR_PROJECT_FILES' };
 
 // -----------------------------------------------------------------------------
 // Brain Events (Logging / Debugging) — 6 variants, contract-locked

@@ -14,6 +14,7 @@ import type {
   ClarificationState,
   DecisionBlockingState,
   Exchange,
+  FileEntry,
   PendingExchange,
   ProjectState,
   SystemMessage,
@@ -60,6 +61,14 @@ interface DecisionModeLayoutProps {
   onNewProject: () => void;
   /** Callback when user deletes a project */
   onDeleteProject: (projectId: string) => void;
+  /** Active project state (for file list) */
+  activeProject: ProjectState | null;
+  /** Callback to add files to project */
+  onAddFiles: (files: FileEntry[]) => void;
+  /** Callback to remove a file from project */
+  onRemoveFile: (fileId: string) => void;
+  /** Callback to clear all project files */
+  onClearFiles: () => void;
 }
 
 // -----------------------------------------------------------------------------
@@ -90,6 +99,10 @@ export function DecisionModeLayout({
   onSelectProject,
   onNewProject,
   onDeleteProject,
+  activeProject,
+  onAddFiles,
+  onRemoveFile,
+  onClearFiles,
 }: DecisionModeLayoutProps): JSX.Element {
   const isBlocked = blockingState?.isBlocked ?? false;
 
@@ -132,6 +145,10 @@ export function DecisionModeLayout({
         onSelectProject={onSelectProject}
         onNewProject={onNewProject}
         onDeleteProject={onDeleteProject}
+        projectFiles={activeProject?.projectFiles ?? []}
+        onAddFiles={onAddFiles}
+        onRemoveFile={onRemoveFile}
+        onClearFiles={onClearFiles}
       />
 
       {/* Center Pane: Discussion Thread */}

@@ -30,6 +30,7 @@ export interface RunCoordination {
   mode?: 'discussion' | 'decision' | 'project';  // Current brain mode
   ceoAgent?: Agent;  // Current CEO agent
   round?: number;  // Current deliberation round (1-indexed, Decision mode only)
+  fileContext?: string;  // CEO file context block (Batch 7, Decision mode only)
 }
 
 /**
@@ -400,6 +401,11 @@ export async function callAgent(
   const truncatedPrompt = contextResult.userPrompt;
   const truncatedContext = contextResult.context;
 
+  // Batch 7: Prepend file context for CEO in Decision mode
+  const finalPrompt = (isCeoInDecisionMode && coordination.fileContext)
+    ? coordination.fileContext + truncatedPrompt
+    : truncatedPrompt;
+
   // -------------------------------------------------------------------------
   // Validate endpoint
   // -------------------------------------------------------------------------
@@ -424,13 +430,13 @@ export async function callAgent(
 
   switch (agent) {
     case 'gpt':
-      requestBody = buildGPTRequest(truncatedPrompt, truncatedContext, projectDiscussionMode, ceoSystemPrompt);
+      requestBody = buildGPTRequest(finalPrompt, truncatedContext, projectDiscussionMode, ceoSystemPrompt);
       break;
     case 'claude':
-      requestBody = buildClaudeRequest(truncatedPrompt, truncatedContext, projectDiscussionMode, ceoSystemPrompt);
+      requestBody = buildClaudeRequest(finalPrompt, truncatedContext, projectDiscussionMode, ceoSystemPrompt);
       break;
     case 'gemini':
-      requestBody = buildGeminiRequest(truncatedPrompt, truncatedContext, projectDiscussionMode, ceoSystemPrompt);
+      requestBody = buildGeminiRequest(finalPrompt, truncatedContext, projectDiscussionMode, ceoSystemPrompt);
       break;
   }
 

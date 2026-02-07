@@ -1254,6 +1254,69 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
     }
 
     // -------------------------------------------------------------------------
+    // ADD_PROJECT_FILES — Add files to active project (Batch 7)
+    // -------------------------------------------------------------------------
+    case 'ADD_PROJECT_FILES': {
+      if (!state.activeProject) {
+        console.warn('ADD_PROJECT_FILES ignored: no active project');
+        return state;
+      }
+
+      const existingFiles = state.activeProject.projectFiles ?? [];
+      const newFiles = [...existingFiles, ...action.files];
+
+      return {
+        ...state,
+        activeProject: {
+          ...state.activeProject,
+          projectFiles: newFiles,
+          updatedAt: Date.now(),
+        },
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // REMOVE_PROJECT_FILE — Remove a file by ID from active project (Batch 7)
+    // -------------------------------------------------------------------------
+    case 'REMOVE_PROJECT_FILE': {
+      if (!state.activeProject) {
+        console.warn('REMOVE_PROJECT_FILE ignored: no active project');
+        return state;
+      }
+
+      const currentFiles = state.activeProject.projectFiles ?? [];
+      const filtered = currentFiles.filter(f => f.id !== action.fileId);
+
+      return {
+        ...state,
+        activeProject: {
+          ...state.activeProject,
+          projectFiles: filtered,
+          updatedAt: Date.now(),
+        },
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // CLEAR_PROJECT_FILES — Remove all files from active project (Batch 7)
+    // -------------------------------------------------------------------------
+    case 'CLEAR_PROJECT_FILES': {
+      if (!state.activeProject) {
+        console.warn('CLEAR_PROJECT_FILES ignored: no active project');
+        return state;
+      }
+
+      return {
+        ...state,
+        activeProject: {
+          ...state.activeProject,
+          projectFiles: [],
+          updatedAt: Date.now(),
+        },
+      };
+    }
+
+    // -------------------------------------------------------------------------
     // EPOCH_START — Begin a new Decision Epoch
     // -------------------------------------------------------------------------
     case 'EPOCH_START': {

@@ -95,6 +95,10 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
     switchToProjectById,
     deleteProject,
     clearProjectBlock,
+    // File management (Batch 7)
+    addProjectFiles,
+    removeProjectFile,
+    clearProjectFiles,
   } = useBrain();
 
   // ---------------------------------------------------------------------------
@@ -565,6 +569,10 @@ export function BrainChat({ initialMode, onReturnHome }: BrainChatProps): JSX.El
           onSelectProject={handleSelectProject}
           onNewProject={handleNewProject}
           onDeleteProject={handleDeleteProject}
+          activeProject={activeProject}
+          onAddFiles={addProjectFiles}
+          onRemoveFile={removeProjectFile}
+          onClearFiles={clearProjectFiles}
         />
 
         {/* Decision Finalized Message + View Project Button */}

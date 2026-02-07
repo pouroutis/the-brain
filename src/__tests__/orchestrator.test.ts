@@ -7,6 +7,7 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import React from 'react';
 import { BrainProvider, useBrain } from '../context/BrainContext';
 import type { AgentResponse, Agent } from '../types/brain';
+import type { RunCoordination } from '../api/agentClient';
 
 // -----------------------------------------------------------------------------
 // Mock callAgent
@@ -1290,5 +1291,82 @@ describe('Orchestrator — Structured Advisor Review (Batch 6)', () => {
     // No advisor reviews stored (single round)
     const epoch = result.current.getDecisionEpoch();
     expect(epoch!.advisorReviews).toBeUndefined();
+  });
+});
+
+// =============================================================================
+// Batch 7: CEO File Injection Integration Tests
+// =============================================================================
+
+describe('Orchestrator — CEO File Injection (Batch 7)', () => {
+  it('Decision mode with files: CEO receives file context in prompt', async () => {
+    // Advisor order: gemini first, claude second, gpt (CEO) last
+    const geminiResponse = createMockResponse('gemini', 'Analysis');
+    const claudeResponse = createMockResponse('claude', 'Analysis');
+    const gptFinal = createMockResponse('gpt',
+      '=== CLAUDE_CODE_PROMPT_START ===\nBuild it\n=== CLAUDE_CODE_PROMPT_END ===');
+
+    mockCallAgent
+      .mockResolvedValueOnce(geminiResponse)
+      .mockResolvedValueOnce(claudeResponse)
+      .mockResolvedValueOnce(gptFinal);
+
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    // Switch to decision mode and create a project
+    act(() => { result.current.setMode('decision'); });
+    act(() => { result.current.createNewProject(); });
+
+    // Add files to project
+    act(() => {
+      result.current.addProjectFiles([{
+        id: 'test-file-1',
+        name: 'brain.ts',
+        path: 'src/types/brain.ts',
+        content: 'export type Agent = "gpt" | "claude" | "gemini";',
+        originalSize: 50,
+        isTruncated: false,
+        addedAt: Date.now(),
+      }]);
+    });
+
+    act(() => { result.current.submitPrompt('Build a feature'); });
+
+    await waitFor(() => {
+      expect(result.current.isProcessing()).toBe(false);
+    });
+
+    // Verify CEO call (3rd call, index 2) has file context in coordination
+    const lastCoord = mockCallAgent.mock.calls[2]?.[4] as RunCoordination | undefined;
+    if (lastCoord && 'fileContext' in lastCoord) {
+      expect(lastCoord.fileContext).toContain('CEO_FILE_CONTEXT_START');
+    }
+  });
+
+  it('Decision mode without files: no file context', async () => {
+    const geminiResponse = createMockResponse('gemini', 'Analysis');
+    const claudeResponse = createMockResponse('claude', 'Analysis');
+    const gptFinal = createMockResponse('gpt',
+      '=== CLAUDE_CODE_PROMPT_START ===\nBuild it\n=== CLAUDE_CODE_PROMPT_END ===');
+
+    mockCallAgent
+      .mockResolvedValueOnce(geminiResponse)
+      .mockResolvedValueOnce(claudeResponse)
+      .mockResolvedValueOnce(gptFinal);
+
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    act(() => { result.current.setMode('decision'); });
+    act(() => { result.current.submitPrompt('Simple task'); });
+
+    await waitFor(() => {
+      expect(result.current.isProcessing()).toBe(false);
+    });
+
+    // File context should be empty string (no files)
+    const lastCoord = mockCallAgent.mock.calls[2]?.[4] as RunCoordination | undefined;
+    if (lastCoord && 'fileContext' in lastCoord) {
+      expect(lastCoord.fileContext).toBe('');
+    }
   });
 });

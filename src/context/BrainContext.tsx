@@ -28,6 +28,7 @@ import type {
   DecisionMemo,
   DecisionRecord,
   Exchange,
+  FileEntry,
   KeyNotes,
   LoopState,
   ParsedAdvisorReview,
@@ -71,7 +72,7 @@ import {
   parseKeyNotes,
   mergeKeyNotes,
 } from '../utils/compaction';
-import { buildDiscussionMemoryBlock, buildCarryoverMemoryBlock, buildProjectSummaryBlock } from '../utils/contextBuilder';
+import { buildDiscussionMemoryBlock, buildCarryoverMemoryBlock, buildProjectSummaryBlock, buildCeoFileContext } from '../utils/contextBuilder';
 import { parseCeoControlBlock } from '../utils/ceoControlBlockParser';
 import { parseAdvisorReview, buildAdvisorReviewSummary } from '../utils/advisorReviewParser';
 
@@ -244,6 +245,12 @@ interface BrainActions {
   clearProjectBlock: () => void;
   /** Complete Decision Epoch with terminal reason (Batch 4+) */
   completeDecisionEpoch: (reason: 'prompt_delivered' | 'blocked' | 'stopped' | 'cancelled') => void;
+  /** Add files to active project for CEO context injection (Batch 7) */
+  addProjectFiles: (files: FileEntry[]) => void;
+  /** Remove a file by ID from active project (Batch 7) */
+  removeProjectFile: (fileId: string) => void;
+  /** Clear all files from active project (Batch 7) */
+  clearProjectFiles: () => void;
 }
 
 /**
@@ -844,6 +851,14 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       }
 
       // -----------------------------------------------------------------------
+      // Batch 7: Build CEO file context (Decision mode ONLY)
+      // Stored as local variable; injected into CEO coordination only.
+      // -----------------------------------------------------------------------
+      const ceoFileContext = currentMode === 'decision'
+        ? buildCeoFileContext(state.activeProject?.projectFiles ?? [])
+        : '';
+
+      // -----------------------------------------------------------------------
       // Task 5.2: Project Carryover Injection (Project mode ONLY)
       // Build carryover block containing discussion context
       // Prepend to userPrompt so all agents receive context
@@ -887,6 +902,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
             mode: currentMode,
             ceoAgent: currentCeo,
             round,
+            fileContext: ceoFileContext,
           }
         );
 
@@ -1766,6 +1782,18 @@ RULES:
     dispatch({ type: 'EPOCH_COMPLETE', reason });
   }, []);
 
+  const addProjectFiles = useCallback((files: FileEntry[]) => {
+    dispatch({ type: 'ADD_PROJECT_FILES', files });
+  }, []);
+
+  const removeProjectFile = useCallback((fileId: string) => {
+    dispatch({ type: 'REMOVE_PROJECT_FILE', fileId });
+  }, []);
+
+  const clearProjectFiles = useCallback(() => {
+    dispatch({ type: 'CLEAR_PROJECT_FILES' });
+  }, []);
+
   // ---------------------------------------------------------------------------
   // Selectors
   // ---------------------------------------------------------------------------
@@ -2019,6 +2047,9 @@ RULES:
       clearActiveProjectSelection,
       deleteProject,
       clearProjectBlock,
+      addProjectFiles,
+      removeProjectFile,
+      clearProjectFiles,
       // Selectors
       getState,
       getActiveRunId,
@@ -2104,6 +2135,9 @@ RULES:
       clearActiveProjectSelection,
       deleteProject,
       clearProjectBlock,
+      addProjectFiles,
+      removeProjectFile,
+      clearProjectFiles,
       getState,
       getActiveRunId,
       getPendingExchange,

@@ -2,7 +2,14 @@
 // The Brain — Context Builder (Phase 5)
 // =============================================================================
 
-import type { Agent, AgentResponse, Carryover, Exchange, KeyNotes } from '../types/brain';
+import type { Agent, AgentResponse, Carryover, Exchange, FileEntry, KeyNotes } from '../types/brain';
+import {
+  MAX_SINGLE_FILE_CHARS,
+  FILE_TRUNCATION_KEEP_START,
+  FILE_TRUNCATION_KEEP_END,
+  EXCLUDED_PATH_PATTERNS,
+  BINARY_EXTENSIONS,
+} from './fileConfig';
 
 // =============================================================================
 // PROJECT SUMMARY (Decision Mode Only)
@@ -471,4 +478,83 @@ export function buildCarryoverMemoryBlock(carryover: Carryover): string {
   sections.push('');
 
   return sections.join('\n');
+}
+
+// =============================================================================
+// CEO File Context (Batch 7)
+// =============================================================================
+
+/**
+ * Check if a file should be excluded based on path/name.
+ * Returns a rejection reason string, or null if allowed.
+ */
+export function isFileExcluded(name: string, path: string): string | null {
+  // Check binary extensions
+  const ext = name.lastIndexOf('.') >= 0 ? name.slice(name.lastIndexOf('.')).toLowerCase() : '';
+  if (BINARY_EXTENSIONS.includes(ext)) {
+    return `Binary file type (${ext}) is not supported`;
+  }
+
+  // Check excluded path patterns
+  const checkPath = path || name;
+  for (const pattern of EXCLUDED_PATH_PATTERNS) {
+    if (pattern.test(checkPath)) {
+      return `File path matches exclusion pattern: ${pattern.source}`;
+    }
+  }
+
+  return null; // Allowed
+}
+
+/**
+ * Truncate file content to fit within per-file size limit.
+ * Keeps start and end of file with a truncation marker in between.
+ */
+export function truncateFileContent(content: string): { content: string; isTruncated: boolean } {
+  if (content.length <= MAX_SINGLE_FILE_CHARS) {
+    return { content, isTruncated: false };
+  }
+
+  const start = content.slice(0, FILE_TRUNCATION_KEEP_START);
+  const end = content.slice(-FILE_TRUNCATION_KEEP_END);
+  const truncated = `${start}\n\n=== TRUNCATED (original: ${content.length} chars, showing first ${FILE_TRUNCATION_KEEP_START} + last ${FILE_TRUNCATION_KEEP_END}) ===\n\n${end}`;
+
+  return { content: truncated, isTruncated: true };
+}
+
+/**
+ * Build the CEO file context block for injection into CEO prompts.
+ * Returns empty string if no files.
+ *
+ * Format:
+ * === CEO_FILE_CONTEXT_START ===
+ * --- FILE: path (size) ---
+ * [content]
+ * --- END FILE ---
+ * === CEO_FILE_CONTEXT_END ===
+ */
+export function buildCeoFileContext(files: FileEntry[]): string {
+  if (!files || files.length === 0) return '';
+
+  const lines: string[] = [
+    '=== CEO_FILE_CONTEXT_START ===',
+    'Files provided for implementation reference (CEO eyes only):',
+    '',
+  ];
+
+  for (const file of files) {
+    const sizeLabel = file.isTruncated
+      ? `${file.content.length} chars, TRUNCATED from ${file.originalSize}`
+      : `${file.content.length} chars`;
+
+    lines.push(`--- FILE: ${file.path} (${sizeLabel}) ---`);
+    lines.push(file.content);
+    lines.push('--- END FILE ---');
+    lines.push('');
+  }
+
+  lines.push('=== CEO_FILE_CONTEXT_END ===');
+  lines.push('');
+
+  return lines.join('\n');
 }

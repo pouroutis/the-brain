@@ -1612,6 +1612,111 @@ body {
   background-color: rgba(239, 83, 80, 0.1);
 }
 
+/* Context Files Section (Batch 7) */
+.project-sidebar__files {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 12px;
+  margin-top: 8px;
+}
+
+.project-sidebar__files-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.project-sidebar__files-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin: 0;
+  color: inherit;
+}
+
+.project-sidebar__files-size {
+  font-size: 0.7rem;
+  opacity: 0.6;
+}
+
+.project-sidebar__files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.project-sidebar__file-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.project-sidebar__file-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-sidebar__file-truncated {
+  margin-left: 4px;
+  color: #f59e0b;
+}
+
+.project-sidebar__file-size {
+  opacity: 0.5;
+  font-size: 0.65rem;
+  white-space: nowrap;
+}
+
+.project-sidebar__file-remove {
+  background: none;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0 4px;
+  opacity: 0.6;
+}
+
+.project-sidebar__file-remove:hover {
+  opacity: 1;
+}
+
+.project-sidebar__files-add {
+  width: 100%;
+  padding: 6px;
+  font-size: 0.75rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: inherit;
+  cursor: pointer;
+}
+
+.project-sidebar__files-add:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.project-sidebar__files-clear {
+  background: none;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+  font-size: 0.7rem;
+  padding: 4px 0;
+  opacity: 0.6;
+  text-align: right;
+}
+
+.project-sidebar__files-clear:hover {
+  opacity: 1;
+}
+
 /* Update Decision Mode Layout for three panes */
 .decision-mode-layout__center {
   flex: 1;

@@ -176,6 +176,10 @@ export function ProjectModeLayout({
         onSelectProject={onSelectProject}
         onNewProject={onNewProject}
         onDeleteProject={onDeleteProject}
+        projectFiles={activeProject?.projectFiles ?? []}
+        onAddFiles={() => {}}
+        onRemoveFile={() => {}}
+        onClearFiles={() => {}}
       />
 
       {/* Main Content: Project Dashboard */}

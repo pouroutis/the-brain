@@ -3,8 +3,10 @@
 // Project Sidebar Component (Left Rail)
 // =============================================================================
 
-import { useMemo, useCallback } from 'react';
-import type { ProjectState } from '../types/brain';
+import { useMemo, useCallback, useRef } from 'react';
+import type { ProjectState, FileEntry } from '../types/brain';
+import { isFileExcluded, truncateFileContent } from '../utils/contextBuilder';
+import { MAX_TOTAL_FILE_CHARS } from '../utils/fileConfig';
 
 // -----------------------------------------------------------------------------
 // Types
@@ -21,6 +23,14 @@ interface ProjectSidebarProps {
   onNewProject: () => void;
   /** Callback when user deletes a project */
   onDeleteProject: (projectId: string) => void;
+  /** Files attached to the active project */
+  projectFiles: FileEntry[];
+  /** Callback to add files */
+  onAddFiles: (files: FileEntry[]) => void;
+  /** Callback to remove a file */
+  onRemoveFile: (fileId: string) => void;
+  /** Callback to clear all files */
+  onClearFiles: () => void;
 }
 
 // -----------------------------------------------------------------------------
@@ -73,7 +83,12 @@ export function ProjectSidebar({
   onSelectProject,
   onNewProject,
   onDeleteProject,
+  projectFiles,
+  onAddFiles,
+  onRemoveFile,
+  onClearFiles,
 }: ProjectSidebarProps): JSX.Element {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   // Memoize sorted projects (already sorted by listProjects, but defensive)
   const sortedProjects = useMemo(() => {
     return [...projects].sort((a, b) => b.updatedAt - a.updatedAt);
@@ -90,6 +105,53 @@ export function ProjectSidebar({
     },
     [onDeleteProject]
   );
+
+  // File upload handler
+  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
+
+    const newEntries: FileEntry[] = [];
+
+    for (const file of Array.from(fileList)) {
+      // Check exclusion
+      const excluded = isFileExcluded(file.name, file.name);
+      if (excluded) {
+        alert(`Skipped "${file.name}": ${excluded}`);
+        continue;
+      }
+
+      // Read file content
+      const text = await file.text();
+      const { content, isTruncated } = truncateFileContent(text);
+
+      newEntries.push({
+        id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        name: file.name,
+        path: file.name, // User can manually set path later if needed
+        content,
+        originalSize: text.length,
+        isTruncated,
+        addedAt: Date.now(),
+      });
+    }
+
+    if (newEntries.length > 0) {
+      // Check total size
+      const existingChars = projectFiles.reduce((sum, f) => sum + f.content.length, 0);
+      const newChars = newEntries.reduce((sum, f) => sum + f.content.length, 0);
+
+      if (existingChars + newChars > MAX_TOTAL_FILE_CHARS) {
+        alert(`Total file size would exceed ${Math.round(MAX_TOTAL_FILE_CHARS / 1000)}KB limit. Remove some files first.`);
+        return;
+      }
+
+      onAddFiles(newEntries);
+    }
+
+    // Reset input
+    e.target.value = '';
+  }, [projectFiles, onAddFiles]);
 
   return (
     <aside className="project-sidebar" data-testid="project-sidebar">
@@ -170,6 +232,70 @@ export function ProjectSidebar({
           })
         )}
       </div>
+
+      {/* Context Files Section (Batch 7) */}
+      {activeProjectId && (
+        <div className="project-sidebar__files" data-testid="context-files-section">
+          <div className="project-sidebar__files-header">
+            <h4 className="project-sidebar__files-title">Context Files</h4>
+            <span className="project-sidebar__files-size">
+              {Math.round(projectFiles.reduce((s, f) => s + f.content.length, 0) / 1000)}KB
+              / {Math.round(MAX_TOTAL_FILE_CHARS / 1000)}KB
+            </span>
+          </div>
+
+          {/* File List */}
+          {projectFiles.length > 0 && (
+            <div className="project-sidebar__files-list">
+              {projectFiles.map((file) => (
+                <div key={file.id} className="project-sidebar__file-item" data-testid={`file-${file.id}`}>
+                  <span className="project-sidebar__file-name" title={file.path}>
+                    {file.name}
+                    {file.isTruncated && (
+                      <span className="project-sidebar__file-truncated" title="File was truncated to fit size limits">
+                        ⚠
+                      </span>
+                    )}
+                  </span>
+                  <span className="project-sidebar__file-size">
+                    {Math.round(file.originalSize / 1000)}KB
+                  </span>
+                  <button
+                    className="project-sidebar__file-remove"
+                    onClick={() => onRemoveFile(file.id)}
+                    title="Remove file"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              <button
+                className="project-sidebar__files-clear"
+                onClick={onClearFiles}
+              >
+                Clear All
+              </button>
+            </div>
+          )}
+
+          {/* Upload Button */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            style={{ display: 'none' }}
+            onChange={handleFileUpload}
+            accept=".ts,.tsx,.js,.jsx,.json,.md,.txt,.yaml,.yml,.toml,.css,.html,.py,.sh,.sql,.csv"
+          />
+          <button
+            className="project-sidebar__files-add"
+            onClick={() => fileInputRef.current?.click()}
+            data-testid="add-files-btn"
+          >
+            + Add Files
+          </button>
+        </div>
+      )}
     </aside>
   );
 }
