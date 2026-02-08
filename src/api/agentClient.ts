@@ -27,10 +27,6 @@ export interface RunCoordination {
   callIndex: number;
   exchanges: Exchange[];  // Historical exchanges for context building
   projectDiscussionMode?: boolean;  // Inject project context into prompts
-  mode?: 'discussion' | 'decision' | 'project';  // Current brain mode
-  ceoAgent?: Agent;  // Current CEO agent
-  round?: number;  // Current deliberation round (1-indexed, Decision mode only)
-  fileContext?: string;  // CEO file context block (Batch 7, Decision mode only)
 }
 
 /**
@@ -70,119 +66,6 @@ GPT and Claude may have already responded. Provide your unique perspective.
 Focus on: factual accuracy, practical information, and clear explanations.
 
 User question: `;
-
-/**
- * System prompt for CEO in Decision mode — ROUND 1 (DRAFT option available)
- * CEO can produce FINAL (skip review), DRAFT (request review), BLOCKED, or STOP_NOW.
- */
-const CEO_ROUND1_SYSTEM_PROMPT = `You are the CEO in Decision mode. You are the FINAL DECISION-MAKER.
-
-AUTHORITY:
-- Advisor feedback (from Gemini/Claude) is ADVISORY, not directive.
-- You must evaluate each advisor point and decide to ACCEPT, MODIFY, or REJECT it based on your judgment.
-- Your decision is final. Advisors do not override you.
-
-OUTPUT FORMAT — You MUST include exactly ONE of these marker blocks in your response:
-
-OPTION 1 - FINAL Prompt (when confident, no review needed):
-=== CLAUDE_CODE_PROMPT_START ===
-[Your complete prompt for Claude Code here]
-=== CLAUDE_CODE_PROMPT_END ===
-
-OPTION 2 - DRAFT for Review (when you want advisor feedback on your plan):
-=== CEO_DRAFT_START ===
-[Your draft prompt — advisors will review this before you finalize]
-=== CEO_DRAFT_END ===
-
-OPTION 3 - Clarification Questions (when you need more info):
-=== CEO_BLOCKED_START ===
-Q1: [First question]
-Q2: [Second question]
-=== CEO_BLOCKED_END ===
-
-OPTION 4 - Stop (when the task cannot or should not proceed):
-=== STOP_NOW ===
-
-RULES:
-- You MUST include exactly ONE of these marker blocks
-- Use FINAL when you are confident the prompt is ready to execute
-- Use DRAFT when the task is complex and would benefit from advisor review before finalizing
-- Use BLOCKED when you need user clarification (max 3 questions)
-- Use STOP_NOW to abort the process entirely
-- Prefer minimal text outside the markers`;
-
-/**
- * System prompt for CEO in Decision mode — ROUND 2+ (FINAL only, no DRAFT)
- * CEO reads structured advisor reviews and produces final output.
- * Updated in Batch 6 for structured review consumption.
- */
-const CEO_ROUND2_SYSTEM_PROMPT = `You are the CEO in Decision mode, ROUND 2 (Final Review).
-
-The advisors have reviewed your draft. Their feedback is provided in a structured format.
-
-ADVISOR REVIEW FORMAT:
-- Each advisor provides: DECISION (APPROVE/REVISE/REJECT), RATIONALE, REQUIRED_CHANGES, RISKS, CONFIDENCE
-- Some advisors may have INVALID_SCHEMA status — their raw feedback is included but may be unreliable
-- You may discount or ignore invalid reviews at your discretion
-
-YOUR TASK:
-- Read each advisor's structured review
-- For APPROVE: Acknowledge and proceed
-- For REVISE: Address each required change (ACCEPT, MODIFY, or REJECT with reason)
-- For REJECT: Consider carefully but you have final authority
-- Produce your FINAL output
-
-AUTHORITY:
-- You are the FINAL DECISION-MAKER
-- Advisor feedback is ADVISORY, not directive
-- Your decision is final
-
-OUTPUT FORMAT — You MUST include exactly ONE of these marker blocks:
-
-OPTION 1 - FINAL Prompt (approved, ready to execute):
-=== CLAUDE_CODE_PROMPT_START ===
-[Your finalized prompt for Claude Code here]
-=== CLAUDE_CODE_PROMPT_END ===
-
-OPTION 2 - Clarification Questions:
-=== CEO_BLOCKED_START ===
-Q1: [First question]
-=== CEO_BLOCKED_END ===
-
-OPTION 3 - Stop:
-=== STOP_NOW ===
-
-RULES:
-- You MUST NOT produce a DRAFT in this round — only FINAL, BLOCKED, or STOP_NOW
-- Prefer FINAL: incorporate advisor feedback and finalize
-- Prefer minimal text outside the markers`;
-
-/**
- * Instruction for CEO retry/reformat (when markers were missing)
- */
-export const CEO_REFORMAT_INSTRUCTION = `Your previous response was missing the required markers. Reformat your answer using EXACTLY one of these formats with NO other text:
-
-=== CLAUDE_CODE_PROMPT_START ===
-[Your prompt here]
-=== CLAUDE_CODE_PROMPT_END ===
-
-OR
-
-=== CEO_DRAFT_START ===
-[Your draft prompt for advisor review]
-=== CEO_DRAFT_END ===
-
-OR
-
-=== CEO_BLOCKED_START ===
-Q1: [Question]
-=== CEO_BLOCKED_END ===
-
-OR
-
-=== STOP_NOW ===
-
-Output ONLY the markers and content. No explanations.`;
 
 // -----------------------------------------------------------------------------
 // Types
@@ -231,11 +114,10 @@ interface GeminiResponse {
 function buildGPTRequest(
   userPrompt: string,
   _context: string,
-  projectDiscussionMode: boolean,
-  ceoSystemPrompt: string | null = null
+  projectDiscussionMode: boolean
 ): OpenAIRequest {
   const projectPrefix = buildProjectContextPrefix('gpt', projectDiscussionMode);
-  const systemPrompt = ceoSystemPrompt ?? (projectPrefix + GPT_SYSTEM_PROMPT);
+  const systemPrompt = projectPrefix + GPT_SYSTEM_PROMPT;
   return {
     action: 'chat',
     messages: [],
@@ -248,14 +130,13 @@ function buildGPTRequest(
 function buildClaudeRequest(
   userPrompt: string,
   context: string,
-  projectDiscussionMode: boolean,
-  ceoSystemPrompt: string | null = null
+  projectDiscussionMode: boolean
 ): AnthropicRequest {
   const projectPrefix = buildProjectContextPrefix('claude', projectDiscussionMode);
   const fullPrompt = context
     ? `Previous responses:\n${context}\n\nUser's original question: ${userPrompt}`
     : userPrompt;
-  const systemPrompt = ceoSystemPrompt ?? (projectPrefix + CLAUDE_SYSTEM_PROMPT);
+  const systemPrompt = projectPrefix + CLAUDE_SYSTEM_PROMPT;
 
   return {
     action: 'chat',
@@ -268,18 +149,10 @@ function buildClaudeRequest(
 function buildGeminiRequest(
   userPrompt: string,
   context: string,
-  projectDiscussionMode: boolean,
-  ceoSystemPrompt: string | null = null
+  projectDiscussionMode: boolean
 ): GeminiRequest {
   const projectPrefix = buildProjectContextPrefix('gemini', projectDiscussionMode);
-  let fullPrompt: string;
-
-  if (ceoSystemPrompt) {
-    // Gemini doesn't have system prompt, so prepend the CEO instruction
-    fullPrompt = ceoSystemPrompt + '\n\n' + userPrompt;
-  } else {
-    fullPrompt = projectPrefix + GEMINI_PROMPT_PREFIX + userPrompt;
-  }
+  let fullPrompt = projectPrefix + GEMINI_PROMPT_PREFIX + userPrompt;
 
   if (context) {
     fullPrompt += `\n\nPrevious responses from other AIs:\n${context}`;
@@ -355,16 +228,7 @@ export async function callAgent(
   coordination: RunCoordination,
   timeoutMs: number = DEFAULT_TIMEOUT_MS
 ): Promise<AgentResponse> {
-  const { runId, callIndex, exchanges, projectDiscussionMode = false, mode, ceoAgent, round } = coordination;
-
-  // Detect if this is CEO in Decision mode (requires special system prompt)
-  const isCeoInDecisionMode = mode === 'decision' && ceoAgent === agent;
-  const currentRound = round ?? 1;
-
-  // Select round-aware CEO system prompt (Batch 5)
-  const ceoSystemPrompt: string | null = isCeoInDecisionMode
-    ? (currentRound >= 2 ? CEO_ROUND2_SYSTEM_PROMPT : CEO_ROUND1_SYSTEM_PROMPT)
-    : null;
+  const { runId, callIndex, exchanges, projectDiscussionMode = false } = coordination;
 
   const timestamp = Date.now();
 
@@ -401,11 +265,6 @@ export async function callAgent(
   const truncatedPrompt = contextResult.userPrompt;
   const truncatedContext = contextResult.context;
 
-  // Batch 7: Prepend file context for CEO in Decision mode
-  const finalPrompt = (isCeoInDecisionMode && coordination.fileContext)
-    ? coordination.fileContext + truncatedPrompt
-    : truncatedPrompt;
-
   // -------------------------------------------------------------------------
   // Validate endpoint
   // -------------------------------------------------------------------------
@@ -430,13 +289,13 @@ export async function callAgent(
 
   switch (agent) {
     case 'gpt':
-      requestBody = buildGPTRequest(finalPrompt, truncatedContext, projectDiscussionMode, ceoSystemPrompt);
+      requestBody = buildGPTRequest(truncatedPrompt, truncatedContext, projectDiscussionMode);
       break;
     case 'claude':
-      requestBody = buildClaudeRequest(finalPrompt, truncatedContext, projectDiscussionMode, ceoSystemPrompt);
+      requestBody = buildClaudeRequest(truncatedPrompt, truncatedContext, projectDiscussionMode);
       break;
     case 'gemini':
-      requestBody = buildGeminiRequest(finalPrompt, truncatedContext, projectDiscussionMode, ceoSystemPrompt);
+      requestBody = buildGeminiRequest(truncatedPrompt, truncatedContext, projectDiscussionMode);
       break;
   }
 

@@ -14,15 +14,15 @@ export const PROJECT_CONTEXT = `
 
 SUMMARY:
 The Brain is a multi-AI decision support system where three AI advisors (GPT, Claude, Gemini)
-collaborate to provide comprehensive analysis. Users submit questions, advisors deliberate,
-and a CEO agent synthesizes the final recommendation.
+collaborate to provide comprehensive analysis. Users submit questions, all agents deliberate,
+and an anchor agent synthesizes the final recommendation.
 
 PHASE STATUS:
 - Phase 11 (Foundation): Complete — production guards, circuit breaker, daily caps
-- Phase 12 (CEO Brain Pivot): In progress — advisors speak first, CEO speaks last
+- Phase 12 (V2 Pivot): In progress — peer agents speak first, anchor agent speaks last
 
 LOCKED RULES:
-1. CEO speaks exactly ONCE (final synthesis only)
+1. Anchor agent speaks exactly ONCE (final synthesis only)
 2. NO questionnaires or follow-up questions in responses
 3. Privacy-first: no PII logging, no conversation storage
 4. Advisors provide independent analysis, not meta-commentary

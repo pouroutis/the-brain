@@ -48,12 +48,12 @@ export const env = {
   supabaseUrl: getEnvVar('VITE_SUPABASE_URL'),
 
   /**
-   * Default CEO agent
-   * The CEO speaks last and is the only agent whose response becomes the execution prompt
+   * Default anchor agent (speaks last in the sequence)
    * Valid values: 'gpt' | 'claude' | 'gemini'
    * Default: 'gpt' (ChatGPT)
+   * Note: env var name VITE_DEFAULT_CEO is legacy (set in Vercel) — do not rename
    */
-  defaultCeo: getEnvVar('VITE_DEFAULT_CEO', 'gpt') as 'gpt' | 'claude' | 'gemini',
+  defaultAnchorAgent: getEnvVar('VITE_DEFAULT_CEO', 'gpt') as 'gpt' | 'claude' | 'gemini',
 
   /**
    * Supabase anon key (optional for Edge Functions that don't require auth)

@@ -14,16 +14,13 @@ import { AgentCard } from './AgentCard';
 const DEFAULT_AGENT_ORDER: Agent[] = ['gemini', 'claude', 'gpt'];
 
 /**
- * Compute agent render order based on CEO.
- * - All modes: Gemini, Claude, then CEO last
- * - CEO is always rendered last regardless of mode
+ * Compute agent render order based on anchor agent.
+ * Anchor is always rendered last regardless of mode.
  */
-function getAgentRenderOrder(ceo: Agent): Agent[] {
-  // Priority order: gemini, claude, gpt
-  // Remove CEO from this order, then append CEO at the end
+function getAgentRenderOrder(anchorAgent: Agent): Agent[] {
   const priorityOrder: Agent[] = ['gemini', 'claude', 'gpt'];
-  const nonCeoAgents = priorityOrder.filter((a) => a !== ceo);
-  return [...nonCeoAgents, ceo];
+  const others = priorityOrder.filter((a) => a !== anchorAgent);
+  return [...others, anchorAgent];
 }
 
 /** Agent display labels for telemetry */
@@ -78,8 +75,8 @@ interface ExchangeCardProps {
   currentAgent: Agent | null;
   /** Current operating mode (for content sanitization) */
   mode: BrainMode;
-  /** Current CEO agent (for render order in Decision/Project modes) */
-  ceo: Agent;
+  /** Anchor agent (rendered last, shown in collapsed view) */
+  anchorAgent: Agent;
   /** When false and exchange is completed, render only the anchor agent response */
   showDiscussion?: boolean;
 }
@@ -94,7 +91,7 @@ export function ExchangeCard({
   isPending,
   currentAgent,
   mode,
-  ceo,
+  anchorAgent,
   showDiscussion = true,
 }: ExchangeCardProps): JSX.Element {
   const collapsed = !showDiscussion && !isPending;
@@ -102,8 +99,8 @@ export function ExchangeCard({
   // Derive telemetry for completed exchanges (not shown during pending or when collapsed)
   const telemetry = !isPending && !collapsed ? deriveRoutingTelemetry(responsesByAgent) : null;
 
-  // Compute agent render order based on CEO (CEO always last)
-  const agentRenderOrder = getAgentRenderOrder(ceo);
+  // Compute agent render order (anchor agent always last)
+  const agentRenderOrder = getAgentRenderOrder(anchorAgent);
 
   return (
     <div className={`exchange-card ${isPending ? 'exchange-card--pending' : ''}`}>
@@ -122,11 +119,11 @@ export function ExchangeCard({
         </div>
       )}
 
-      {/* Agent Responses Section (order depends on mode: Discussion=fixed, Decision/Project=CEO last) */}
+      {/* Agent Responses Section (anchor agent always last) */}
       <div className="exchange-card__agents">
         {agentRenderOrder.map((agent) => {
-          // When collapsed, only render the anchor (CEO) agent
-          if (collapsed && agent !== ceo) return null;
+          // When collapsed, only render the anchor agent
+          if (collapsed && agent !== anchorAgent) return null;
 
           const response = responsesByAgent[agent] ?? null;
           const isActive = isPending && currentAgent === agent;
@@ -137,8 +134,8 @@ export function ExchangeCard({
             return null;
           }
 
-          // Mark CEO agent (currently discussion-only, so always false)
-          const isCeo = false;
+          // Mark anchor agent (currently always false — reserved for future use)
+          const isAnchor = false;
 
           return (
             <AgentCard
@@ -147,7 +144,7 @@ export function ExchangeCard({
               response={response}
               isActive={isActive}
               mode={mode}
-              isCeo={isCeo}
+              isAnchor={isAnchor}
             />
           );
         })}
@@ -163,7 +160,7 @@ export function ExchangeCard({
 export function renderCompletedExchange(
   exchange: Exchange,
   mode: BrainMode,
-  ceo: Agent
+  anchorAgent: Agent
 ): JSX.Element {
   return (
     <ExchangeCard
@@ -173,7 +170,7 @@ export function renderCompletedExchange(
       isPending={false}
       currentAgent={null}
       mode={mode}
-      ceo={ceo}
+      anchorAgent={anchorAgent}
     />
   );
 }
@@ -182,7 +179,7 @@ export function renderPendingExchange(
   pending: PendingExchange,
   currentAgent: Agent | null,
   mode: BrainMode,
-  ceo: Agent
+  anchorAgent: Agent
 ): JSX.Element {
   return (
     <ExchangeCard
@@ -192,7 +189,7 @@ export function renderPendingExchange(
       isPending={true}
       currentAgent={currentAgent}
       mode={mode}
-      ceo={ceo}
+      anchorAgent={anchorAgent}
     />
   );
 }

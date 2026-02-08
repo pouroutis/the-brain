@@ -35,7 +35,7 @@ export function BrainChat(): JSX.Element {
     getWarning,
     getPendingExchange,
     getExchanges,
-    getCeo,
+    getAnchorAgent,
   } = useBrain();
 
   // WorkItem binding (V2-C — title derivation on first prompt)
@@ -52,7 +52,7 @@ export function BrainChat(): JSX.Element {
   const currentAgent = state.currentAgent;
   const warning = getWarning();
   const processing = isProcessing();
-  const ceo = getCeo();
+  const anchorAgent = getAnchorAgent();
   const mode = 'discussion';
 
   // ---------------------------------------------------------------------------
@@ -147,7 +147,7 @@ export function BrainChat(): JSX.Element {
         pendingExchange={pendingExchange}
         currentAgent={currentAgent}
         mode={mode}
-        ceo={ceo}
+        anchorAgent={anchorAgent}
       />
 
       {/* Prompt Input */}

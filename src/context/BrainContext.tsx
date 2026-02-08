@@ -92,13 +92,13 @@ function parseGatekeepingFlags(content: string): GatekeepingFlags {
 }
 
 /**
- * Compute agent order based on CEO.
- * CEO ALWAYS speaks LAST. Non-CEO advisors speak first in priority order.
+ * Compute agent order based on anchor agent.
+ * Anchor ALWAYS speaks LAST. Other agents speak first in priority order.
  */
-function getAgentOrder(ceo: Agent): Agent[] {
+function getAgentOrder(anchorAgent: Agent): Agent[] {
   const priorityOrder: Agent[] = ['gemini', 'claude', 'gpt'];
-  const advisors = priorityOrder.filter((a) => a !== ceo);
-  return [...advisors, ceo];
+  const others = priorityOrder.filter((a) => a !== anchorAgent);
+  return [...others, anchorAgent];
 }
 
 // -----------------------------------------------------------------------------
@@ -163,8 +163,8 @@ interface BrainSelectors {
   getForceAllAdvisors: () => boolean;
   /** Check if project discussion mode is enabled */
   getProjectDiscussionMode: () => boolean;
-  /** Get the current CEO agent */
-  getCeo: () => Agent;
+  /** Get the current anchor agent (speaks last) */
+  getAnchorAgent: () => Agent;
 }
 
 /**
@@ -218,17 +218,17 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
   }, [projectDiscussionMode]);
 
   // ---------------------------------------------------------------------------
-  // CEO State
+  // Anchor Agent State
   // ---------------------------------------------------------------------------
 
-  const [ceo, setCeoState] = useState<Agent>(env.defaultCeo);
-  void setCeoState; // Retained — CEO mutation path removed but useState preserved
+  const [anchorAgent, setAnchorAgentState] = useState<Agent>(env.defaultAnchorAgent);
+  void setAnchorAgentState; // Retained — mutation path removed but useState preserved
 
-  const ceoRef = useRef<Agent>(env.defaultCeo);
+  const anchorAgentRef = useRef<Agent>(env.defaultAnchorAgent);
 
   useEffect(() => {
-    ceoRef.current = ceo;
-  }, [ceo]);
+    anchorAgentRef.current = anchorAgent;
+  }, [anchorAgent]);
 
   // ---------------------------------------------------------------------------
   // Orchestrator Refs (stable across renders, avoid stale closures)
@@ -277,13 +277,11 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     const isCancelled = (): boolean => userCancelledRef.current;
 
     const runSequence = async (): Promise<void> => {
-      const currentMode = 'discussion';
-
       let conversationContext = '';
       const useProjectContext = projectDiscussionModeRef.current;
-      const currentCeo = ceoRef.current;
+      const currentAnchor = anchorAgentRef.current;
 
-      const agentOrder = getAgentOrder(currentCeo);
+      const agentOrder = getAgentOrder(currentAnchor);
 
       const callAgentWithTimeout = async (agent: Agent): Promise<AgentResponse> => {
         const agentAbortController = new AbortController();
@@ -307,8 +305,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
             callIndex: callIndexRef.current,
             exchanges: state.exchanges,
             projectDiscussionMode: useProjectContext,
-            mode: currentMode,
-            ceoAgent: currentCeo,
           }
         );
 
@@ -558,9 +554,9 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     return projectDiscussionMode;
   }, [projectDiscussionMode]);
 
-  const getCeo = useCallback((): Agent => {
-    return ceo;
-  }, [ceo]);
+  const getAnchorAgent = useCallback((): Agent => {
+    return anchorAgent;
+  }, [anchorAgent]);
 
   // ---------------------------------------------------------------------------
   // Memoized Context Value
@@ -593,7 +589,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       canClear,
       getForceAllAdvisors,
       getProjectDiscussionMode,
-      getCeo,
+      getAnchorAgent,
     }),
     [
       submitPrompt,
@@ -619,7 +615,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       canClear,
       getForceAllAdvisors,
       getProjectDiscussionMode,
-      getCeo,
+      getAnchorAgent,
     ]
   );
 

@@ -115,7 +115,7 @@ beforeEach(() => {
 // -----------------------------------------------------------------------------
 
 describe('Orchestrator — Happy Path', () => {
-  it('calls Claude → Gemini → GPT in sequence (CEO=GPT speaks last)', async () => {
+  it('calls Claude → Gemini → GPT in sequence (anchor=GPT speaks last)', async () => {
     const claudeResponse = createMockResponse('claude', 'Claude response');
     const geminiResponse = createMockResponse('gemini', 'Gemini response');
     const gptResponse = createGPTResponseWithFlags(true, true, 'comprehensive');
@@ -137,7 +137,7 @@ describe('Orchestrator — Happy Path', () => {
       expect(result.current.isProcessing()).toBe(false);
     });
 
-    // Verify all agents were called (CEO=GPT speaks LAST, order: gemini, claude, gpt)
+    // Verify all agents were called (anchor=GPT speaks LAST, order: gemini, claude, gpt)
     expect(mockCallAgent).toHaveBeenCalledTimes(3);
     expect(mockCallAgent).toHaveBeenNthCalledWith(
       1,
@@ -173,7 +173,7 @@ describe('Orchestrator — Happy Path', () => {
   });
 
   it('finalizes exchange with all responses on success', async () => {
-    // CEO=GPT speaks last: claude, gemini, gpt
+    // anchor=GPT speaks last: claude, gemini, gpt
     mockCallAgent
       .mockResolvedValueOnce(createMockResponse('claude', 'Claude says'))
       .mockResolvedValueOnce(createMockResponse('gemini', 'Gemini says'))
@@ -204,7 +204,7 @@ describe('Orchestrator — Happy Path', () => {
 
 describe('Orchestrator — Cancellation', () => {
   it('cancellation mid-sequence prevents subsequent agent calls', async () => {
-    // CEO=GPT speaks last: claude, gemini, gpt
+    // anchor=GPT speaks last: claude, gemini, gpt
     // First agent called is now Claude
     let claudeResolve: (value: AgentResponse) => void;
     const claudePromise = new Promise<AgentResponse>((resolve) => {
@@ -272,7 +272,7 @@ describe('Orchestrator — Cancellation', () => {
   });
 
   it('CANCEL_REQUESTED sets userCancelled flag immediately', async () => {
-    // CEO=GPT speaks last: claude, gemini, gpt
+    // anchor=GPT speaks last: claude, gemini, gpt
     // First agent called is now Claude
     let claudeResolve: (value: AgentResponse) => void;
     const claudePromise = new Promise<AgentResponse>((resolve) => {
@@ -323,7 +323,7 @@ describe('Orchestrator — Timeout', () => {
   });
 
   it('timeout produces timeout status for agent', async () => {
-    // CEO=GPT speaks last: claude, gemini, gpt
+    // anchor=GPT speaks last: claude, gemini, gpt
     // First agent (Claude) times out - mock returns timeout status when aborted
     mockCallAgent.mockImplementation((agent, _prompt, _context, abortController) => {
       return new Promise((resolve) => {
@@ -373,7 +373,7 @@ describe('Orchestrator — Timeout', () => {
   });
 
   it('sequence continues after single agent timeout with fallback', async () => {
-    // CEO=GPT speaks last: claude, gemini, gpt
+    // anchor=GPT speaks last: claude, gemini, gpt
     mockCallAgent.mockImplementation((agent, _prompt, _context, abortController) => {
       if (agent === 'claude') {
         // Claude succeeds immediately (first in sequence)
@@ -398,7 +398,7 @@ describe('Orchestrator — Timeout', () => {
         });
       }
 
-      // GPT (CEO) succeeds last
+      // GPT (anchor) succeeds last
       return Promise.resolve(createGPTResponseWithFlags(true, true));
     });
 
@@ -440,7 +440,7 @@ describe('Orchestrator — Double Submit Protection', () => {
   it('blocks second submission while processing', async () => {
     let firstCallResolve: (value: AgentResponse) => void;
 
-    // CEO=GPT speaks last: claude, gemini, gpt
+    // anchor=GPT speaks last: claude, gemini, gpt
     // Phase 2F: Force-all means 3 calls per exchange
     // First call hangs, subsequent calls resolve immediately
     let callCount = 0;
@@ -522,7 +522,7 @@ describe('Orchestrator — Clear Board', () => {
   it('clearBoard is blocked while processing', async () => {
     let secondExchangeResolve: (value: AgentResponse) => void;
 
-    // CEO=GPT speaks last: claude, gemini, gpt
+    // anchor=GPT speaks last: claude, gemini, gpt
     // Phase 2F: Force-all means 3 calls per exchange
     // First exchange (calls 1-3) resolves immediately
     // Second exchange (call 4+) hangs until resolved

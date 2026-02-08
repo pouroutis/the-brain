@@ -26,8 +26,8 @@ interface AgentCardProps {
   isActive: boolean;
   /** Current operating mode (for content sanitization) */
   mode: BrainMode;
-  /** Whether this agent is the CEO (Decision/Project modes) */
-  isCeo?: boolean;
+  /** Whether this agent is the anchor (speaks last) */
+  isAnchor?: boolean;
 }
 
 // -----------------------------------------------------------------------------
@@ -143,7 +143,7 @@ type FeedbackState = 'idle' | 'success' | 'failed';
 // Component
 // -----------------------------------------------------------------------------
 
-export function AgentCard({ agent, response, isActive, mode: _mode, isCeo = false }: AgentCardProps): JSX.Element {
+export function AgentCard({ agent, response, isActive, mode: _mode, isAnchor = false }: AgentCardProps): JSX.Element {
   const { selectedWorkItemId, updateShelf } = useWorkItems();
 
   const status = getDisplayStatus(response, isActive);
@@ -160,7 +160,7 @@ export function AgentCard({ agent, response, isActive, mode: _mode, isCeo = fals
   // Get contextual sub-message for terminal states
   const subMessage = getStatusSubMessage(response);
 
-  // Show FINAL DECISION badge for CEO with completed response (decision mode only — currently unused)
+  // Show badge for anchor agent (currently unused)
   const showFinalBadge = false;
 
   // --- Copy button state ---
@@ -209,7 +209,7 @@ export function AgentCard({ agent, response, isActive, mode: _mode, isCeo = fals
 
   // Build class names
   const cardClasses = ['agent-card'];
-  if (isCeo) cardClasses.push('agent-card--ceo');
+  if (isAnchor) cardClasses.push('agent-card--anchor');
 
   // Copy button
   const copyLabel = copyState === 'success' ? 'Copied!' : copyState === 'failed' ? 'Failed' : 'Copy';

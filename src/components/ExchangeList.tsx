@@ -20,8 +20,8 @@ interface ExchangeListProps {
   currentAgent: Agent | null;
   /** Current operating mode (for content sanitization) */
   mode: BrainMode;
-  /** Current CEO agent (for render order in Decision/Project modes) */
-  ceo: Agent;
+  /** Anchor agent (rendered last, shown in collapsed view) */
+  anchorAgent: Agent;
 }
 
 // -----------------------------------------------------------------------------
@@ -33,7 +33,7 @@ export function ExchangeList({
   pendingExchange,
   currentAgent,
   mode,
-  ceo,
+  anchorAgent,
 }: ExchangeListProps): JSX.Element {
   const [showDiscussion, setShowDiscussion] = useState(false);
 
@@ -72,7 +72,7 @@ export function ExchangeList({
           isPending={false}
           currentAgent={null}
           mode={mode}
-          ceo={ceo}
+          anchorAgent={anchorAgent}
           showDiscussion={showDiscussion}
         />
       ))}
@@ -86,7 +86,7 @@ export function ExchangeList({
           isPending={true}
           currentAgent={currentAgent}
           mode={mode}
-          ceo={ceo}
+          anchorAgent={anchorAgent}
           showDiscussion={true}
         />
       )}
