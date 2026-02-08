@@ -121,6 +121,11 @@ export function ExchangeCard({
 
       {/* Agent Responses Section (anchor agent always last) */}
       <div className="exchange-card__agents">
+        {/* Outcome label — visible only when collapsed to outcome-first view */}
+        {collapsed && (
+          <div className="exchange-card__outcome-label">Outcome</div>
+        )}
+
         {agentRenderOrder.map((agent) => {
           // When collapsed, only render the anchor agent
           if (collapsed && agent !== anchorAgent) return null;
@@ -134,8 +139,8 @@ export function ExchangeCard({
             return null;
           }
 
-          // Mark anchor agent (currently always false — reserved for future use)
-          const isAnchor = false;
+          // Visually emphasize anchor agent when in collapsed (outcome-first) view
+          const isAnchor = collapsed && agent === anchorAgent;
 
           return (
             <AgentCard

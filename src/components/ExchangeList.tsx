@@ -57,6 +57,8 @@ export function ExchangeList({
           <button
             className="exchange-list__toggle-btn"
             onClick={() => setShowDiscussion(prev => !prev)}
+            aria-pressed={showDiscussion}
+            aria-label={showDiscussion ? 'Hide advisor discussion' : 'Show advisor discussion'}
           >
             {showDiscussion ? 'Hide discussion' : 'Show discussion'}
           </button>
