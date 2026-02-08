@@ -3,7 +3,7 @@
 // BrainChat Container Component (Discussion Mode Only)
 // =============================================================================
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useBrain } from '../context/BrainContext';
 import { useWorkItems } from '../context/WorkItemContext';
 import { ExchangeList } from './ExchangeList';
@@ -187,8 +187,8 @@ export function BrainChat(): JSX.Element {
     downloadFile(mdContent, `brain-transcript-${timestamp}.md`, 'text/markdown');
   }, [state.discussionSession, state.transcript]);
 
-  // Can export if there is transcript data
-  const canExportDiscussion = state.transcript.length > 0;
+  // V2-K: Memoize export check — only recompute when transcript changes
+  const canExportDiscussion = useMemo(() => state.transcript.length > 0, [state.transcript]);
 
   // ---------------------------------------------------------------------------
   // Render — Discussion mode only

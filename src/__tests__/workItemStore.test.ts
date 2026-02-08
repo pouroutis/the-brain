@@ -625,3 +625,67 @@ describe('Pending exchange write guard — caller-level status check (V2-J)', ()
     // This proves the guard must be in the caller (WorkItemContext.saveConversation)
   });
 });
+
+// -----------------------------------------------------------------------------
+// V2-K: Performance & Memory Safety
+// -----------------------------------------------------------------------------
+
+describe('Performance safety — large exchange arrays (V2-K)', () => {
+  it('swap does not duplicate exchange references', () => {
+    const exchangeA = { id: 'ex-a', userPrompt: 'A', responsesByAgent: {}, timestamp: 1000 };
+    const exchangeB = { id: 'ex-b', userPrompt: 'B', responsesByAgent: {}, timestamp: 2000 };
+
+    const item1 = createWorkItem({ title: 'Item 1' });
+    const item2 = createWorkItem({ title: 'Item 2' });
+
+    // Save exchanges to item1
+    let items = updateWorkItem([item1, item2], item1.id, () => ({
+      exchanges: [exchangeA],
+    }));
+
+    // Save exchanges to item2
+    items = updateWorkItem(items, item2.id, () => ({
+      exchanges: [exchangeB],
+    }));
+
+    // Verify no cross-contamination
+    const found1 = items.find((w) => w.id === item1.id)!;
+    const found2 = items.find((w) => w.id === item2.id)!;
+    expect(found1.exchanges).toHaveLength(1);
+    expect(found1.exchanges[0].id).toBe('ex-a');
+    expect(found2.exchanges).toHaveLength(1);
+    expect(found2.exchanges[0].id).toBe('ex-b');
+
+    // Verify no shared references between items
+    expect(found1.exchanges).not.toBe(found2.exchanges);
+    expect(found1.exchanges[0]).not.toBe(found2.exchanges[0]);
+  });
+
+  it('large exchanges array: updateWorkItem does not clone uninvolved items', () => {
+    // Create 50 work items
+    const items: ReturnType<typeof createWorkItem>[] = [];
+    for (let i = 0; i < 50; i++) {
+      items.push(createWorkItem({ title: `Item ${i}` }));
+    }
+
+    // Build 100-exchange array for item 0
+    const bigExchanges = Array.from({ length: 100 }, (_, i) => ({
+      id: `ex-${i}`,
+      userPrompt: `Prompt ${i}`,
+      responsesByAgent: {},
+      timestamp: i * 1000,
+    }));
+
+    const updated = updateWorkItem(items, items[0].id, () => ({
+      exchanges: bigExchanges,
+    }));
+
+    // Item 0 is updated
+    expect(updated[0].exchanges).toHaveLength(100);
+
+    // All other 49 items are reference-equal (not cloned)
+    for (let i = 1; i < 50; i++) {
+      expect(updated[i]).toBe(items[i]);
+    }
+  });
+});

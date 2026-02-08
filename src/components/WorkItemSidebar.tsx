@@ -2,7 +2,7 @@
 // The Brain — Work Item Sidebar (V2-C)
 // =============================================================================
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useWorkItems } from '../context/WorkItemContext';
 import { useBrain } from '../context/BrainContext';
 
@@ -16,7 +16,8 @@ export function WorkItemSidebar(): JSX.Element {
   const [view, setView] = useState<'active' | 'archived'>('active');
 
   const processing = isProcessing();
-  const filteredItems = workItems.filter((item) => item.status === view);
+  // V2-K: Memoize filtered list — only recompute when workItems or view changes
+  const filteredItems = useMemo(() => workItems.filter((item) => item.status === view), [workItems, view]);
 
   // Save current BrainState conversation to the currently-selected work item
   // V2-I: ID mismatch guard — only save if selectedWorkItemId matches

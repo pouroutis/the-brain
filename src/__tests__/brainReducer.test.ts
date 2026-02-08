@@ -990,6 +990,105 @@ describe('brainReducer — Pending exchange integrity (V2-J)', () => {
 // State Invariant Tests
 // -----------------------------------------------------------------------------
 
+// -----------------------------------------------------------------------------
+// V2-K: Performance & Memory Safety
+// -----------------------------------------------------------------------------
+
+describe('brainReducer — Memory safety (V2-K)', () => {
+  it('LOAD_CONVERSATION_SNAPSHOT preserves exact exchange references (no deep clone)', () => {
+    const exchanges = Array.from({ length: 50 }, (_, i) => ({
+      id: `ex-${i}`,
+      userPrompt: `Prompt ${i}`,
+      responsesByAgent: {},
+      timestamp: i * 1000,
+    }));
+
+    const result = brainReducer(initialBrainState, {
+      type: 'LOAD_CONVERSATION_SNAPSHOT',
+      exchanges,
+      pendingExchange: null,
+    });
+
+    // The exchanges array in state should be the SAME reference (not cloned)
+    expect(result.exchanges).toBe(exchanges);
+    // Individual exchange objects should also be reference-equal
+    expect(result.exchanges[0]).toBe(exchanges[0]);
+    expect(result.exchanges[49]).toBe(exchanges[49]);
+  });
+
+  it('swap replaces old exchanges completely — no retained references to previous item', () => {
+    // Load item A
+    const exchangesA = [
+      { id: 'ex-a1', userPrompt: 'A1', responsesByAgent: {}, timestamp: 1000 },
+      { id: 'ex-a2', userPrompt: 'A2', responsesByAgent: {}, timestamp: 2000 },
+    ];
+    let state = brainReducer(initialBrainState, {
+      type: 'LOAD_CONVERSATION_SNAPSHOT',
+      exchanges: exchangesA,
+      pendingExchange: null,
+    });
+    expect(state.exchanges).toBe(exchangesA);
+
+    // Load item B (swap)
+    const exchangesB = [
+      { id: 'ex-b1', userPrompt: 'B1', responsesByAgent: {}, timestamp: 3000 },
+    ];
+    state = brainReducer(state, {
+      type: 'LOAD_CONVERSATION_SNAPSHOT',
+      exchanges: exchangesB,
+      pendingExchange: null,
+    });
+
+    // State holds B's references — A is fully released
+    expect(state.exchanges).toBe(exchangesB);
+    expect(state.exchanges).not.toBe(exchangesA);
+    expect(state.exchanges).toHaveLength(1);
+    expect(state.exchanges[0].userPrompt).toBe('B1');
+  });
+
+  it('SEQUENCE_COMPLETED with large history creates new array without mutating existing', () => {
+    // Pre-load 100 exchanges
+    const existing = Array.from({ length: 100 }, (_, i) => ({
+      id: `ex-${i}`,
+      userPrompt: `P${i}`,
+      responsesByAgent: {},
+      timestamp: i,
+    }));
+    let state = brainReducer(initialBrainState, {
+      type: 'LOAD_CONVERSATION_SNAPSHOT',
+      exchanges: existing,
+      pendingExchange: null,
+    });
+
+    // Start a new sequence
+    state = brainReducer(state, {
+      type: 'SUBMIT_START',
+      runId: 'run-big',
+      userPrompt: 'New prompt',
+    });
+    state = brainReducer(state, {
+      type: 'AGENT_COMPLETED',
+      runId: 'run-big',
+      response: createSuccessResponse('gpt'),
+    });
+    state = brainReducer(state, {
+      type: 'SEQUENCE_COMPLETED',
+      runId: 'run-big',
+    });
+
+    // Should have 101 exchanges
+    expect(state.exchanges).toHaveLength(101);
+
+    // Original array is unmodified (immutability check)
+    expect(existing).toHaveLength(100);
+
+    // First 100 elements are reference-equal to originals
+    for (let i = 0; i < 100; i++) {
+      expect(state.exchanges[i]).toBe(existing[i]);
+    }
+  });
+});
+
 describe('brainReducer — State Invariants', () => {
   it('initialBrainState has expected key set', () => {
     const expectedKeys = [

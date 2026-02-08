@@ -2,7 +2,7 @@
 // The Brain — WorkItem Context Provider (V2-B)
 // =============================================================================
 
-import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import type { Exchange, PendingExchange } from '../types/brain';
 import type { WorkItem, ContextShelf } from '../types/workItem';
@@ -131,9 +131,9 @@ export function WorkItemProvider({ children }: { children: ReactNode }): JSX.Ele
     setStorageWarning(null);
   }, []);
 
-  // --- Context value ---
+  // --- Context value (V2-K: memoized to prevent unnecessary consumer re-renders) ---
 
-  const value: WorkItemContextValue = {
+  const value = useMemo<WorkItemContextValue>(() => ({
     workItems,
     selectedWorkItemId: selectedId,
     createNewWorkItem,
@@ -145,7 +145,7 @@ export function WorkItemProvider({ children }: { children: ReactNode }): JSX.Ele
     saveConversation,
     storageWarning,
     dismissStorageWarning,
-  };
+  }), [workItems, selectedId, createNewWorkItem, selectWorkItem, archive, unarchive, updateShelfAction, rename, saveConversation, storageWarning, dismissStorageWarning]);
 
   return <WorkItemCtx.Provider value={value}>{children}</WorkItemCtx.Provider>;
 }

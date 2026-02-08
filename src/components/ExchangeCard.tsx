@@ -3,6 +3,7 @@
 // ExchangeCard Component (Phase 2 — Step 5, Phase 6 — Routing Telemetry)
 // =============================================================================
 
+import { memo, useMemo } from 'react';
 import type { Agent, AgentResponse, BrainMode, Exchange, PendingExchange } from '../types/brain';
 import { AgentCard } from './AgentCard';
 
@@ -85,7 +86,8 @@ interface ExchangeCardProps {
 // Component
 // -----------------------------------------------------------------------------
 
-export function ExchangeCard({
+// V2-K: Memoized to prevent re-renders of completed exchange cards during processing
+export const ExchangeCard = memo(function ExchangeCard({
   userPrompt,
   responsesByAgent,
   isPending,
@@ -96,11 +98,14 @@ export function ExchangeCard({
 }: ExchangeCardProps): JSX.Element {
   const collapsed = !showDiscussion && !isPending;
 
-  // Derive telemetry for completed exchanges (not shown during pending or when collapsed)
-  const telemetry = !isPending && !collapsed ? deriveRoutingTelemetry(responsesByAgent) : null;
+  // V2-K: Memoize telemetry derivation — only recompute when responses change
+  const telemetry = useMemo(
+    () => (!isPending && !collapsed ? deriveRoutingTelemetry(responsesByAgent) : null),
+    [isPending, collapsed, responsesByAgent],
+  );
 
-  // Compute agent render order (anchor agent always last)
-  const agentRenderOrder = getAgentRenderOrder(anchorAgent);
+  // V2-K: Memoize agent render order — only recompute when anchor changes
+  const agentRenderOrder = useMemo(() => getAgentRenderOrder(anchorAgent), [anchorAgent]);
 
   return (
     <div className={`exchange-card ${isPending ? 'exchange-card--pending' : ''}`}>
@@ -156,7 +161,7 @@ export function ExchangeCard({
       </div>
     </div>
   );
-}
+});
 
 // -----------------------------------------------------------------------------
 // Factory helpers for rendering from Exchange or PendingExchange

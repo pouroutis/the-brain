@@ -3,7 +3,7 @@
 // ExchangeList Component (Phase 2 — Step 5)
 // =============================================================================
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import type { Agent, BrainMode, Exchange, PendingExchange } from '../types/brain';
 import { ExchangeCard } from './ExchangeCard';
 
@@ -37,6 +37,9 @@ export function ExchangeList({
 }: ExchangeListProps): JSX.Element {
   const [showDiscussion, setShowDiscussion] = useState(false);
 
+  // V2-K: Stable toggle handler — avoids new closure per render
+  const handleToggleDiscussion = useCallback(() => setShowDiscussion((prev) => !prev), []);
+
   const hasContent = exchanges.length > 0 || pendingExchange !== null;
 
   if (!hasContent) {
@@ -56,7 +59,7 @@ export function ExchangeList({
         <div className="exchange-list__view-toggle">
           <button
             className="exchange-list__toggle-btn"
-            onClick={() => setShowDiscussion(prev => !prev)}
+            onClick={handleToggleDiscussion}
             aria-pressed={showDiscussion}
             aria-label={showDiscussion ? 'Hide advisor discussion' : 'Show advisor discussion'}
           >
