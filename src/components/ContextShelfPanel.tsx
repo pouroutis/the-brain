@@ -2,7 +2,7 @@
 // The Brain — Context Shelf Panel (V2-C — Read-Only)
 // =============================================================================
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { WorkItem } from '../types/workItem';
 import { useWorkItems } from '../context/WorkItemContext';
 
@@ -21,10 +21,25 @@ interface ContextShelfPanelProps {
 export function ContextShelfPanel({ selectedItem }: ContextShelfPanelProps): JSX.Element {
   const { updateShelf } = useWorkItems();
 
+  // --- Task editing state ---
   const [isEditingTask, setIsEditingTask] = useState(false);
   const [taskDraft, setTaskDraft] = useState('');
 
-  const handleStartEdit = useCallback(() => {
+  // --- Execution notes editing state ---
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [notesDraft, setNotesDraft] = useState('');
+  const notesRef = useRef<HTMLTextAreaElement>(null);
+
+  // Focus textarea when entering notes edit mode
+  useEffect(() => {
+    if (isEditingNotes) {
+      notesRef.current?.focus();
+    }
+  }, [isEditingNotes]);
+
+  // --- Task handlers ---
+
+  const handleStartEditTask = useCallback(() => {
     if (!selectedItem) return;
     setTaskDraft(selectedItem.shelf.task ?? '');
     setIsEditingTask(true);
@@ -37,7 +52,7 @@ export function ContextShelfPanel({ selectedItem }: ContextShelfPanelProps): JSX
     setIsEditingTask(false);
   }, [selectedItem, taskDraft, updateShelf]);
 
-  const handleCancelEdit = useCallback(() => {
+  const handleCancelEditTask = useCallback(() => {
     setIsEditingTask(false);
   }, []);
 
@@ -46,11 +61,44 @@ export function ContextShelfPanel({ selectedItem }: ContextShelfPanelProps): JSX
       if (e.key === 'Enter') {
         handleSaveTask();
       } else if (e.key === 'Escape') {
-        handleCancelEdit();
+        handleCancelEditTask();
       }
     },
-    [handleSaveTask, handleCancelEdit],
+    [handleSaveTask, handleCancelEditTask],
   );
+
+  // --- Notes handlers ---
+
+  const handleStartEditNotes = useCallback(() => {
+    if (!selectedItem) return;
+    setNotesDraft(selectedItem.shelf.executionNotes ?? '');
+    setIsEditingNotes(true);
+  }, [selectedItem]);
+
+  const handleSaveNotes = useCallback(() => {
+    if (!selectedItem) return;
+    const trimmed = notesDraft.trim();
+    updateShelf(selectedItem.id, { executionNotes: trimmed || null });
+    setIsEditingNotes(false);
+  }, [selectedItem, notesDraft, updateShelf]);
+
+  const handleCancelEditNotes = useCallback(() => {
+    setIsEditingNotes(false);
+  }, []);
+
+  const handleNotesKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        handleSaveNotes();
+      } else if (e.key === 'Escape') {
+        handleCancelEditNotes();
+      }
+    },
+    [handleSaveNotes, handleCancelEditNotes],
+  );
+
+  // --- Clear handlers ---
 
   const handleClearPinnedPrompt = useCallback(() => {
     if (!selectedItem) return;
@@ -61,6 +109,8 @@ export function ContextShelfPanel({ selectedItem }: ContextShelfPanelProps): JSX
     if (!selectedItem) return;
     updateShelf(selectedItem.id, { executionNotes: null });
   }, [selectedItem, updateShelf]);
+
+  // --- Empty state ---
 
   if (!selectedItem) {
     return (
@@ -79,6 +129,7 @@ export function ContextShelfPanel({ selectedItem }: ContextShelfPanelProps): JSX
   const activeSignals = Object.entries(shelf.signals)
     .filter(([, v]) => v)
     .map(([k]) => {
+      if (k === 'hasTask') return 'Task';
       if (k === 'hasFiles') return 'Files';
       if (k === 'hasPrompt') return 'Prompt';
       if (k === 'hasResults') return 'Results';
@@ -103,7 +154,7 @@ export function ContextShelfPanel({ selectedItem }: ContextShelfPanelProps): JSX
         <div className="context-shelf__section-header">
           <h3 className="context-shelf__section-label">Task</h3>
           {!isEditingTask && (
-            <button className="context-shelf__edit-btn" onClick={handleStartEdit}>
+            <button className="context-shelf__edit-btn" onClick={handleStartEditTask}>
               Edit
             </button>
           )}
@@ -159,13 +210,30 @@ export function ContextShelfPanel({ selectedItem }: ContextShelfPanelProps): JSX
       <div className="context-shelf__section">
         <div className="context-shelf__section-header">
           <h3 className="context-shelf__section-label">Execution Notes</h3>
-          {shelf.executionNotes && (
-            <button className="context-shelf__clear-btn" onClick={handleClearExecutionNotes}>
-              Clear
-            </button>
+          {!isEditingNotes && (
+            <div style={{ display: 'flex', gap: '4px' }}>
+              <button className="context-shelf__paste-btn" onClick={handleStartEditNotes}>
+                Paste Results
+              </button>
+              {shelf.executionNotes && (
+                <button className="context-shelf__clear-btn" onClick={handleClearExecutionNotes}>
+                  Clear
+                </button>
+              )}
+            </div>
           )}
         </div>
-        {shelf.executionNotes ? (
+        {isEditingNotes ? (
+          <textarea
+            ref={notesRef}
+            className="context-shelf__notes-textarea"
+            rows={6}
+            value={notesDraft}
+            onChange={(e) => setNotesDraft(e.target.value)}
+            onKeyDown={handleNotesKeyDown}
+            onBlur={handleSaveNotes}
+          />
+        ) : shelf.executionNotes ? (
           <pre className="context-shelf__pre">{shelf.executionNotes}</pre>
         ) : (
           <p className="context-shelf__placeholder">No execution notes</p>

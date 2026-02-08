@@ -5,6 +5,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { Agent, AgentResponse, BrainMode } from '../types/brain';
+import { useWorkItems } from '../context/WorkItemContext';
 
 // -----------------------------------------------------------------------------
 // Types
@@ -133,16 +134,18 @@ function sanitizeGatekeepingFlags(content: string): string {
 }
 
 // -----------------------------------------------------------------------------
-// Copy Button State
+// Button feedback state
 // -----------------------------------------------------------------------------
 
-type CopyState = 'idle' | 'copied' | 'failed';
+type FeedbackState = 'idle' | 'success' | 'failed';
 
 // -----------------------------------------------------------------------------
 // Component
 // -----------------------------------------------------------------------------
 
 export function AgentCard({ agent, response, isActive, mode: _mode, isCeo = false }: AgentCardProps): JSX.Element {
+  const { selectedWorkItemId, updateShelf } = useWorkItems();
+
   const status = getDisplayStatus(response, isActive);
   const statusLabel = getStatusLabel(status);
 
@@ -160,16 +163,19 @@ export function AgentCard({ agent, response, isActive, mode: _mode, isCeo = fals
   // Show FINAL DECISION badge for CEO with completed response (decision mode only — currently unused)
   const showFinalBadge = false;
 
-  // Copy button state
-  const [copyState, setCopyState] = useState<CopyState>('idle');
+  // --- Copy button state ---
+  const [copyState, setCopyState] = useState<FeedbackState>('idle');
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Clear timer on unmount
+  // --- Pin button state ---
+  const [pinState, setPinState] = useState<FeedbackState>('idle');
+  const pinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear timers on unmount
   useEffect(() => {
     return () => {
-      if (copyTimerRef.current !== null) {
-        clearTimeout(copyTimerRef.current);
-      }
+      if (copyTimerRef.current !== null) clearTimeout(copyTimerRef.current);
+      if (pinTimerRef.current !== null) clearTimeout(pinTimerRef.current);
     };
   }, []);
 
@@ -178,13 +184,11 @@ export function AgentCard({ agent, response, isActive, mode: _mode, isCeo = fals
     (async () => {
       try {
         await navigator.clipboard.writeText(content);
-        setCopyState('copied');
+        setCopyState('success');
       } catch {
         setCopyState('failed');
       }
-      if (copyTimerRef.current !== null) {
-        clearTimeout(copyTimerRef.current);
-      }
+      if (copyTimerRef.current !== null) clearTimeout(copyTimerRef.current);
       copyTimerRef.current = setTimeout(() => {
         setCopyState('idle');
         copyTimerRef.current = null;
@@ -192,13 +196,28 @@ export function AgentCard({ agent, response, isActive, mode: _mode, isCeo = fals
     })();
   }, [content]);
 
+  const handlePin = useCallback(() => {
+    if (!content || !selectedWorkItemId) return;
+    updateShelf(selectedWorkItemId, { pinnedPrompt: content });
+    setPinState('success');
+    if (pinTimerRef.current !== null) clearTimeout(pinTimerRef.current);
+    pinTimerRef.current = setTimeout(() => {
+      setPinState('idle');
+      pinTimerRef.current = null;
+    }, 2000);
+  }, [content, selectedWorkItemId, updateShelf]);
+
   // Build class names
   const cardClasses = ['agent-card'];
   if (isCeo) cardClasses.push('agent-card--ceo');
 
-  // Copy button label
-  const copyLabel = copyState === 'copied' ? 'Copied!' : copyState === 'failed' ? 'Failed' : 'Copy';
-  const copyBtnClass = `agent-card__copy-btn${copyState === 'copied' ? ' agent-card__copy-btn--copied' : ''}`;
+  // Copy button
+  const copyLabel = copyState === 'success' ? 'Copied!' : copyState === 'failed' ? 'Failed' : 'Copy';
+  const copyBtnClass = `agent-card__copy-btn${copyState === 'success' ? ' agent-card__copy-btn--copied' : ''}`;
+
+  // Pin button
+  const pinLabel = pinState === 'success' ? 'Pinned!' : 'Pin';
+  const pinBtnClass = `agent-card__pin-btn${pinState === 'success' ? ' agent-card__pin-btn--pinned' : ''}`;
 
   return (
     <div className={cardClasses.join(' ')}>
@@ -215,6 +234,11 @@ export function AgentCard({ agent, response, isActive, mode: _mode, isCeo = fals
         {content && (
           <button className={copyBtnClass} onClick={handleCopy}>
             {copyLabel}
+          </button>
+        )}
+        {content && selectedWorkItemId && (
+          <button className={pinBtnClass} onClick={handlePin}>
+            {pinLabel}
           </button>
         )}
       </div>

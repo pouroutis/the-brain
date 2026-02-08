@@ -81,6 +81,7 @@ export function saveSelectedWorkItemId(id: string | null): void {
 
 export function deriveSignals(shelf: ContextShelf): ContextShelf['signals'] {
   return {
+    hasTask: !!shelf.task,
     hasFiles: shelf.files.length > 0,
     hasPrompt: !!shelf.pinnedPrompt,
     hasResults: !!shelf.executionNotes,
@@ -97,7 +98,7 @@ function createEmptyShelf(): ContextShelf {
     files: [],
     pinnedPrompt: null,
     executionNotes: null,
-    signals: { hasFiles: false, hasPrompt: false, hasResults: false },
+    signals: { hasTask: false, hasFiles: false, hasPrompt: false, hasResults: false },
   };
 }
 

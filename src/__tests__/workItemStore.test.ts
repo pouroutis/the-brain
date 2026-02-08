@@ -55,6 +55,7 @@ describe('createWorkItem', () => {
     expect(item.shelf.files).toEqual([]);
     expect(item.shelf.pinnedPrompt).toBeNull();
     expect(item.shelf.executionNotes).toBeNull();
+    expect(item.shelf.signals.hasTask).toBe(false);
     expect(item.shelf.signals.hasFiles).toBe(false);
     expect(item.shelf.signals.hasPrompt).toBe(false);
     expect(item.shelf.signals.hasResults).toBe(false);
@@ -100,11 +101,12 @@ describe('deriveSignals', () => {
     files: [],
     pinnedPrompt: null,
     executionNotes: null,
-    signals: { hasFiles: false, hasPrompt: false, hasResults: false },
+    signals: { hasTask: false, hasFiles: false, hasPrompt: false, hasResults: false },
   };
 
   it('all false for empty shelf', () => {
     const signals = deriveSignals(emptyShelf);
+    expect(signals.hasTask).toBe(false);
     expect(signals.hasFiles).toBe(false);
     expect(signals.hasPrompt).toBe(false);
     expect(signals.hasResults).toBe(false);
@@ -135,6 +137,24 @@ describe('deriveSignals', () => {
     const shelf: ContextShelf = { ...emptyShelf, executionNotes: 'Result data' };
     const signals = deriveSignals(shelf);
     expect(signals.hasResults).toBe(true);
+  });
+
+  it('hasTask true when task is non-empty string', () => {
+    const shelf: ContextShelf = { ...emptyShelf, task: 'Do something' };
+    const signals = deriveSignals(shelf);
+    expect(signals.hasTask).toBe(true);
+  });
+
+  it('hasTask false for null task', () => {
+    const shelf: ContextShelf = { ...emptyShelf, task: null };
+    const signals = deriveSignals(shelf);
+    expect(signals.hasTask).toBe(false);
+  });
+
+  it('hasTask false for empty string task', () => {
+    const shelf: ContextShelf = { ...emptyShelf, task: '' };
+    const signals = deriveSignals(shelf);
+    expect(signals.hasTask).toBe(false);
   });
 });
 

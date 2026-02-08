@@ -356,6 +356,31 @@ body {
   background: rgba(82, 183, 136, 0.1);
 }
 
+/* Agent Card — Pin Button (V2-D3) */
+
+.agent-card__pin-btn {
+  background: transparent;
+  border: 1px solid #555;
+  border-radius: 4px;
+  padding: 2px 10px;
+  font-size: 0.6875rem;
+  color: #888;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.agent-card__pin-btn:hover {
+  border-color: #888;
+  color: #ccc;
+  background: #2a2a3a;
+}
+
+.agent-card__pin-btn--pinned {
+  border-color: #2e7d32;
+  color: #52b788;
+  background: rgba(82, 183, 136, 0.1);
+}
+
 /* -----------------------------------------------------------------------------
    Prompt Input
    ----------------------------------------------------------------------------- */
@@ -1001,6 +1026,43 @@ body {
 }
 
 .context-shelf__task-input:focus {
+  outline: none;
+  border-color: #6c6c9c;
+}
+
+/* Context Shelf — Paste Results Button + Notes Textarea (V2-D3) */
+
+.context-shelf__paste-btn {
+  background: transparent;
+  border: 1px solid #555;
+  border-radius: 4px;
+  padding: 1px 8px;
+  font-size: 0.6875rem;
+  color: #888;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.context-shelf__paste-btn:hover {
+  border-color: #888;
+  color: #ccc;
+  background: #2a2a3a;
+}
+
+.context-shelf__notes-textarea {
+  width: 100%;
+  background-color: #242438;
+  border: 1px solid #555;
+  border-radius: 4px;
+  padding: 6px 8px;
+  color: #eaeaea;
+  font-size: 0.8125rem;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', monospace;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.context-shelf__notes-textarea:focus {
   outline: none;
   border-color: #6c6c9c;
 }

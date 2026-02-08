@@ -28,6 +28,7 @@ export interface ContextShelf {
   pinnedPrompt: string | null;
   executionNotes: string | null;
   signals: {
+    hasTask: boolean;
     hasFiles: boolean;
     hasPrompt: boolean;
     hasResults: boolean;
