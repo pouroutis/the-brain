@@ -10,6 +10,7 @@ import type {
   DiscussionSession,
   Exchange,
   PendingExchange,
+  Round,
   TranscriptEntry,
   TranscriptRole,
 } from '../types/brain';
@@ -73,6 +74,14 @@ function generateExchangeId(): string {
 }
 
 // -----------------------------------------------------------------------------
+// Helper: Get Latest Round (V3-A)
+// -----------------------------------------------------------------------------
+
+export function getLatestRound(exchange: Exchange): Round {
+  return exchange.rounds[exchange.rounds.length - 1];
+}
+
+// -----------------------------------------------------------------------------
 // Helper: Convert Exchange to Transcript Entries (Append-Only)
 // -----------------------------------------------------------------------------
 
@@ -87,10 +96,11 @@ function exchangeToTranscriptEntries(exchange: Exchange): TranscriptEntry[] {
     timestamp: exchange.timestamp,
   });
 
-  // Add agent responses in order: gpt, claude, gemini
+  // V3-A: Read from latest round
+  const latestRound = getLatestRound(exchange);
   const agentOrder: TranscriptRole[] = ['gpt', 'claude', 'gemini'];
   for (const agent of agentOrder) {
-    const response = exchange.responsesByAgent[agent as Agent];
+    const response = latestRound.responsesByAgent[agent as Agent];
     if (response && response.status === 'success' && response.content) {
       entries.push({
         exchangeId: exchange.id,
@@ -120,7 +130,7 @@ function finalizePendingExchange(pending: PendingExchange): Exchange {
   return {
     id: generateExchangeId(),
     userPrompt: pending.userPrompt,
-    responsesByAgent: pending.responsesByAgent,
+    rounds: [{ roundNumber: 1, responsesByAgent: pending.responsesByAgent }],
     timestamp: Date.now(),
   };
 }

@@ -3,6 +3,7 @@
 // =============================================================================
 
 import type { Agent, AgentResponse, Exchange } from '../types/brain';
+import { getLatestRound } from '../reducer/brainReducer';
 import {
   MAX_CONTEXT_CHARS,
   MAX_EXCHANGES,
@@ -63,10 +64,11 @@ function serializeExchange(exchange: Exchange): string {
   // User prompt
   parts.push(`User: ${exchange.userPrompt}`);
 
-  // Agent responses in fixed order
+  // V3-A: Read from latest round
+  const latestRound = getLatestRound(exchange);
   const agentOrder: Agent[] = ['gpt', 'claude', 'gemini'];
   for (const agent of agentOrder) {
-    const response = exchange.responsesByAgent[agent];
+    const response = latestRound.responsesByAgent[agent];
     if (response) {
       parts.push(serializeResponse(agent, response));
     }

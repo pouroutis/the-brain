@@ -5,6 +5,7 @@
 
 import { memo, useMemo } from 'react';
 import type { Agent, AgentResponse, BrainMode, Exchange, PendingExchange } from '../types/brain';
+import { getLatestRound } from '../reducer/brainReducer';
 import { AgentCard } from './AgentCard';
 
 // -----------------------------------------------------------------------------
@@ -176,7 +177,7 @@ export function renderCompletedExchange(
     <ExchangeCard
       key={exchange.id}
       userPrompt={exchange.userPrompt}
-      responsesByAgent={exchange.responsesByAgent}
+      responsesByAgent={getLatestRound(exchange).responsesByAgent}
       isPending={false}
       currentAgent={null}
       mode={mode}

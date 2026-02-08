@@ -38,9 +38,20 @@ export function loadWorkItems(): WorkItem[] {
     if (!Array.isArray(parsed)) return [];
     const valid = parsed.filter(isValidWorkItem);
     // Migration (V2-H): ensure conversation fields exist on older items
-    return valid.map((item) => ({
+    // Migration (V3-A): convert legacy exchanges (responsesByAgent) → rounds
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return valid.map((item: any) => ({
       ...item,
-      exchanges: item.exchanges ?? [],
+      exchanges: (item.exchanges ?? []).map((ex: any) => {
+        // V3-A: If exchange already has rounds, pass through
+        if (Array.isArray(ex.rounds)) return ex;
+        // Legacy: convert responsesByAgent → rounds[0]
+        const { responsesByAgent, ...rest } = ex;
+        return {
+          ...rest,
+          rounds: [{ roundNumber: 1, responsesByAgent: responsesByAgent ?? {} }],
+        };
+      }),
       pendingExchange: item.pendingExchange ?? null,
     }));
   } catch {

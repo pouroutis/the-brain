@@ -25,7 +25,7 @@ import type {
   WarningState,
   ErrorCode,
 } from '../types/brain';
-import { brainReducer, initialBrainState } from '../reducer/brainReducer';
+import { brainReducer, initialBrainState, getLatestRound } from '../reducer/brainReducer';
 import { callAgent } from '../api/agentClient';
 import { env } from '../config/env';
 
@@ -509,7 +509,8 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       const { exchanges } = state;
       if (exchanges.length > 0) {
         const lastExchange = exchanges[exchanges.length - 1];
-        const lastResponse = lastExchange.responsesByAgent[agent];
+        const latestRound = getLatestRound(lastExchange);
+        const lastResponse = latestRound.responsesByAgent[agent];
         if (lastResponse !== undefined) {
           return lastResponse;
         }

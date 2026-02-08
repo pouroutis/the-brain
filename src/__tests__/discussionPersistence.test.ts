@@ -25,14 +25,17 @@ function createMockExchange(): Exchange {
   return {
     id: 'ex-test-123',
     userPrompt: 'Test prompt',
-    responsesByAgent: {
-      gpt: {
-        agent: 'gpt',
-        timestamp: 1700000000500,
-        status: 'success',
-        content: 'GPT response',
+    rounds: [{
+      roundNumber: 1,
+      responsesByAgent: {
+        gpt: {
+          agent: 'gpt',
+          timestamp: 1700000000500,
+          status: 'success',
+          content: 'GPT response',
+        },
       },
-    },
+    }],
     timestamp: 1700000000000,
   };
 }

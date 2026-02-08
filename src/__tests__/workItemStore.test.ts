@@ -261,7 +261,7 @@ describe('WorkItem swap — conversation snapshots (V2-H)', () => {
   it('switching between items preserves conversations via updateWorkItem', () => {
     const item1 = createWorkItem({ title: 'Item 1' });
     const item2 = createWorkItem({ title: 'Item 2' });
-    const exchange1 = { id: 'ex-1', userPrompt: 'Q1', responsesByAgent: {}, timestamp: 1000 };
+    const exchange1 = { id: 'ex-1', userPrompt: 'Q1', rounds: [{ roundNumber: 1, responsesByAgent: {} }], timestamp: 1000 };
 
     const updated = updateWorkItem([item1, item2], item1.id, () => ({
       exchanges: [exchange1],
@@ -278,7 +278,7 @@ describe('WorkItem swap — conversation snapshots (V2-H)', () => {
 
   it('rename persists on item with conversations', () => {
     const item = createWorkItem();
-    const exchange = { id: 'ex-1', userPrompt: 'test', responsesByAgent: {}, timestamp: 1000 };
+    const exchange = { id: 'ex-1', userPrompt: 'test', rounds: [{ roundNumber: 1, responsesByAgent: {} }], timestamp: 1000 };
 
     let items = updateWorkItem([item], item.id, () => ({
       exchanges: [exchange],
@@ -291,7 +291,7 @@ describe('WorkItem swap — conversation snapshots (V2-H)', () => {
 
   it('archive/restore does not corrupt conversation snapshots', () => {
     const item = createWorkItem();
-    const exchange = { id: 'ex-1', userPrompt: 'Q1', responsesByAgent: {}, timestamp: 1000 };
+    const exchange = { id: 'ex-1', userPrompt: 'Q1', rounds: [{ roundNumber: 1, responsesByAgent: {} }], timestamp: 1000 };
 
     let items = updateWorkItem([item], item.id, () => ({
       exchanges: [exchange],
@@ -389,7 +389,7 @@ describe('Selected work item ID persistence', () => {
 describe('WorkItem persistence — conversation fields (V2-H)', () => {
   it('roundtrip preserves conversation fields', () => {
     const item = createWorkItem({ title: 'Test' });
-    const exchange = { id: 'ex-1', userPrompt: 'Q1', responsesByAgent: {}, timestamp: 1000 };
+    const exchange = { id: 'ex-1', userPrompt: 'Q1', rounds: [{ roundNumber: 1, responsesByAgent: {} }], timestamp: 1000 };
     const updated = updateWorkItem([item], item.id, () => ({
       exchanges: [exchange],
     }));
@@ -488,7 +488,7 @@ describe('Swap guard — snapshot write only to correct item (V2-I)', () => {
   it('updateWorkItem no-ops on id mismatch (prevents cross-item save)', () => {
     const item1 = createWorkItem({ title: 'Item A' });
     const item2 = createWorkItem({ title: 'Item B' });
-    const exchange = { id: 'ex-1', userPrompt: 'Hello', responsesByAgent: {}, timestamp: 1000 };
+    const exchange = { id: 'ex-1', userPrompt: 'Hello', rounds: [{ roundNumber: 1, responsesByAgent: {} }], timestamp: 1000 };
 
     // Attempt to save exchange to wrong item id
     const updated = updateWorkItem([item1, item2], 'nonexistent-id', () => ({
@@ -505,7 +505,7 @@ describe('Swap guard — snapshot write only to correct item (V2-I)', () => {
   it('updateWorkItem writes only to matching item', () => {
     const item1 = createWorkItem({ title: 'Target' });
     const item2 = createWorkItem({ title: 'Bystander' });
-    const exchange = { id: 'ex-1', userPrompt: 'Q', responsesByAgent: {}, timestamp: 1000 };
+    const exchange = { id: 'ex-1', userPrompt: 'Q', rounds: [{ roundNumber: 1, responsesByAgent: {} }], timestamp: 1000 };
 
     const updated = updateWorkItem([item1, item2], item1.id, () => ({
       exchanges: [exchange],
@@ -569,7 +569,7 @@ describe('Selection restore — archived ID fallback (V2-J)', () => {
 describe('Archive safety — conversation snapshot before archive (V2-J)', () => {
   it('archiveWorkItem preserves existing exchanges on the item', () => {
     const item = createWorkItem({ title: 'Has Chat' });
-    const exchange = { id: 'ex-1', userPrompt: 'Q1', responsesByAgent: {}, timestamp: 1000 };
+    const exchange = { id: 'ex-1', userPrompt: 'Q1', rounds: [{ roundNumber: 1, responsesByAgent: {} }], timestamp: 1000 };
     let items = updateWorkItem([item], item.id, () => ({ exchanges: [exchange] }));
     expect(items[0].exchanges).toHaveLength(1);
 
@@ -585,7 +585,7 @@ describe('Archive safety — conversation snapshot before archive (V2-J)', () =>
     let items = [item1, item2];
 
     // Save conversation to item1 before archiving
-    const exchange = { id: 'ex-1', userPrompt: 'Saved', responsesByAgent: {}, timestamp: 1000 };
+    const exchange = { id: 'ex-1', userPrompt: 'Saved', rounds: [{ roundNumber: 1, responsesByAgent: {} }], timestamp: 1000 };
     items = updateWorkItem(items, item1.id, () => ({ exchanges: [exchange] }));
 
     // Archive item1
@@ -619,7 +619,7 @@ describe('Pending exchange write guard — caller-level status check (V2-J)', ()
     expect(items[0].status).toBe('archived');
 
     // updateWorkItem is a pure mapper — it does not check status
-    const exchange = { id: 'ex-1', userPrompt: 'Leaked', responsesByAgent: {}, timestamp: 1000 };
+    const exchange = { id: 'ex-1', userPrompt: 'Leaked', rounds: [{ roundNumber: 1, responsesByAgent: {} }], timestamp: 1000 };
     items = updateWorkItem(items, item.id, () => ({ exchanges: [exchange] }));
     expect(items[0].exchanges).toHaveLength(1);
     // This proves the guard must be in the caller (WorkItemContext.saveConversation)
@@ -630,10 +630,112 @@ describe('Pending exchange write guard — caller-level status check (V2-J)', ()
 // V2-K: Performance & Memory Safety
 // -----------------------------------------------------------------------------
 
+// -----------------------------------------------------------------------------
+// V3-A: Exchange Rounds Migration
+// -----------------------------------------------------------------------------
+
+describe('loadWorkItems — V3-A rounds migration', () => {
+  it('legacy exchange with responsesByAgent is migrated to rounds[0]', () => {
+    const legacyItem = {
+      id: 'item-legacy',
+      title: 'Legacy',
+      status: 'active',
+      createdAt: 1000,
+      updatedAt: 1000,
+      shelf: {
+        task: null,
+        files: [],
+        pinnedPrompt: null,
+        executionNotes: null,
+        signals: { hasTask: false, hasFiles: false, hasPrompt: false, hasResults: false },
+      },
+      exchanges: [{
+        id: 'ex-old',
+        userPrompt: 'Old prompt',
+        responsesByAgent: {
+          gpt: { agent: 'gpt', timestamp: 500, status: 'success', content: 'GPT says' },
+        },
+        timestamp: 1000,
+      }],
+      pendingExchange: null,
+    };
+    localStorage.setItem('thebrain_workitems_v1', JSON.stringify([legacyItem]));
+
+    const loaded = loadWorkItems();
+    expect(loaded).toHaveLength(1);
+
+    const ex = loaded[0].exchanges[0];
+    expect(ex.rounds).toHaveLength(1);
+    expect(ex.rounds[0].roundNumber).toBe(1);
+    expect(ex.rounds[0].responsesByAgent.gpt?.status).toBe('success');
+    // Legacy field must be removed
+    expect('responsesByAgent' in ex).toBe(false);
+  });
+
+  it('already-migrated exchange with rounds passes through unchanged', () => {
+    const modernItem = {
+      id: 'item-modern',
+      title: 'Modern',
+      status: 'active',
+      createdAt: 1000,
+      updatedAt: 1000,
+      shelf: {
+        task: null,
+        files: [],
+        pinnedPrompt: null,
+        executionNotes: null,
+        signals: { hasTask: false, hasFiles: false, hasPrompt: false, hasResults: false },
+      },
+      exchanges: [{
+        id: 'ex-new',
+        userPrompt: 'New prompt',
+        rounds: [{ roundNumber: 1, responsesByAgent: {} }],
+        timestamp: 2000,
+      }],
+      pendingExchange: null,
+    };
+    localStorage.setItem('thebrain_workitems_v1', JSON.stringify([modernItem]));
+
+    const loaded = loadWorkItems();
+    const ex = loaded[0].exchanges[0];
+    expect(ex.rounds).toHaveLength(1);
+    expect(ex.rounds[0].roundNumber).toBe(1);
+  });
+
+  it('mixed legacy + modern exchanges in same item both handled', () => {
+    const mixedItem = {
+      id: 'item-mixed',
+      title: 'Mixed',
+      status: 'active',
+      createdAt: 1000,
+      updatedAt: 1000,
+      shelf: {
+        task: null,
+        files: [],
+        pinnedPrompt: null,
+        executionNotes: null,
+        signals: { hasTask: false, hasFiles: false, hasPrompt: false, hasResults: false },
+      },
+      exchanges: [
+        { id: 'ex-old', userPrompt: 'Old', responsesByAgent: {}, timestamp: 1000 },
+        { id: 'ex-new', userPrompt: 'New', rounds: [{ roundNumber: 1, responsesByAgent: {} }], timestamp: 2000 },
+      ],
+      pendingExchange: null,
+    };
+    localStorage.setItem('thebrain_workitems_v1', JSON.stringify([mixedItem]));
+
+    const loaded = loadWorkItems();
+    expect(loaded[0].exchanges).toHaveLength(2);
+    expect(loaded[0].exchanges[0].rounds).toHaveLength(1);
+    expect(loaded[0].exchanges[1].rounds).toHaveLength(1);
+    expect('responsesByAgent' in loaded[0].exchanges[0]).toBe(false);
+  });
+});
+
 describe('Performance safety — large exchange arrays (V2-K)', () => {
   it('swap does not duplicate exchange references', () => {
-    const exchangeA = { id: 'ex-a', userPrompt: 'A', responsesByAgent: {}, timestamp: 1000 };
-    const exchangeB = { id: 'ex-b', userPrompt: 'B', responsesByAgent: {}, timestamp: 2000 };
+    const exchangeA = { id: 'ex-a', userPrompt: 'A', rounds: [{ roundNumber: 1, responsesByAgent: {} }], timestamp: 1000 };
+    const exchangeB = { id: 'ex-b', userPrompt: 'B', rounds: [{ roundNumber: 1, responsesByAgent: {} }], timestamp: 2000 };
 
     const item1 = createWorkItem({ title: 'Item 1' });
     const item2 = createWorkItem({ title: 'Item 2' });
@@ -672,7 +774,7 @@ describe('Performance safety — large exchange arrays (V2-K)', () => {
     const bigExchanges = Array.from({ length: 100 }, (_, i) => ({
       id: `ex-${i}`,
       userPrompt: `Prompt ${i}`,
-      responsesByAgent: {},
+      rounds: [{ roundNumber: 1, responsesByAgent: {} }],
       timestamp: i * 1000,
     }));
 

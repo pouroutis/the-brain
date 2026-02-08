@@ -82,12 +82,18 @@ export type AgentResponse =
 // Exchange Types
 // -----------------------------------------------------------------------------
 
+/** V3-A: A single round of agent responses within an exchange */
+export interface Round {
+  roundNumber: number;
+  responsesByAgent: Partial<Record<Agent, AgentResponse>>;
+}
+
 export interface Exchange {
   id: string;
   /** The user's message for THIS specific exchange */
   userPrompt: string;
-  /** Keyed by agent — guarantees uniqueness, deterministic rendering */
-  responsesByAgent: Partial<Record<Agent, AgentResponse>>;
+  /** V3-A: Ordered rounds of agent responses (round 1 = initial) */
+  rounds: Round[];
   timestamp: number;
 }
 

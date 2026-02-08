@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import React from 'react';
 import { BrainProvider, useBrain } from '../context/BrainContext';
+import { getLatestRound } from '../reducer/brainReducer';
 import type { AgentResponse, Agent } from '../types/brain';
 
 // -----------------------------------------------------------------------------
@@ -167,9 +168,9 @@ describe('Orchestrator — Happy Path', () => {
     // Verify exchange was finalized
     expect(result.current.getExchanges()).toHaveLength(1);
     const exchange = result.current.getExchanges()[0];
-    expect(exchange.responsesByAgent.gpt).toBeDefined();
-    expect(exchange.responsesByAgent.claude).toBeDefined();
-    expect(exchange.responsesByAgent.gemini).toBeDefined();
+    expect(getLatestRound(exchange).responsesByAgent.gpt).toBeDefined();
+    expect(getLatestRound(exchange).responsesByAgent.claude).toBeDefined();
+    expect(getLatestRound(exchange).responsesByAgent.gemini).toBeDefined();
   });
 
   it('finalizes exchange with all responses on success', async () => {
@@ -191,9 +192,9 @@ describe('Orchestrator — Happy Path', () => {
 
     const exchange = result.current.getExchanges()[0];
     expect(exchange.userPrompt).toBe('Hello');
-    expect(exchange.responsesByAgent.gpt?.status).toBe('success');
-    expect(exchange.responsesByAgent.claude?.status).toBe('success');
-    expect(exchange.responsesByAgent.gemini?.status).toBe('success');
+    expect(getLatestRound(exchange).responsesByAgent.gpt?.status).toBe('success');
+    expect(getLatestRound(exchange).responsesByAgent.claude?.status).toBe('success');
+    expect(getLatestRound(exchange).responsesByAgent.gemini?.status).toBe('success');
   });
 });
 
@@ -369,7 +370,7 @@ describe('Orchestrator — Timeout', () => {
     // Exchange should exist with timeout status
     expect(result.current.getExchanges()).toHaveLength(1);
     const exchange = result.current.getExchanges()[0];
-    expect(exchange.responsesByAgent.claude?.status).toBe('timeout');
+    expect(getLatestRound(exchange).responsesByAgent.claude?.status).toBe('timeout');
   });
 
   it('sequence continues after single agent timeout with fallback', async () => {
@@ -426,9 +427,9 @@ describe('Orchestrator — Timeout', () => {
     expect(result.current.isProcessing()).toBe(false);
 
     const exchange = result.current.getExchanges()[0];
-    expect(exchange.responsesByAgent.claude?.status).toBe('success');
-    expect(exchange.responsesByAgent.gemini?.status).toBe('timeout');
-    expect(exchange.responsesByAgent.gpt?.status).toBe('success');
+    expect(getLatestRound(exchange).responsesByAgent.claude?.status).toBe('success');
+    expect(getLatestRound(exchange).responsesByAgent.gemini?.status).toBe('timeout');
+    expect(getLatestRound(exchange).responsesByAgent.gpt?.status).toBe('success');
   });
 });
 

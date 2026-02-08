@@ -5,6 +5,7 @@
 
 import { useState, useCallback } from 'react';
 import type { Agent, BrainMode, Exchange, PendingExchange } from '../types/brain';
+import { getLatestRound } from '../reducer/brainReducer';
 import { ExchangeCard } from './ExchangeCard';
 
 // -----------------------------------------------------------------------------
@@ -73,7 +74,7 @@ export function ExchangeList({
         <ExchangeCard
           key={exchange.id}
           userPrompt={exchange.userPrompt}
-          responsesByAgent={exchange.responsesByAgent}
+          responsesByAgent={getLatestRound(exchange).responsesByAgent}
           isPending={false}
           currentAgent={null}
           mode={mode}

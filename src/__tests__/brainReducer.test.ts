@@ -3,7 +3,7 @@
 // =============================================================================
 
 import { describe, it, expect } from 'vitest';
-import { brainReducer, initialBrainState } from '../reducer/brainReducer';
+import { brainReducer, initialBrainState, getLatestRound } from '../reducer/brainReducer';
 import type { BrainState, BrainAction, AgentResponse } from '../types/brain';
 
 // -----------------------------------------------------------------------------
@@ -296,7 +296,7 @@ describe('brainReducer — SEQUENCE_COMPLETED', () => {
 
     expect(result.exchanges).toHaveLength(1);
     expect(result.exchanges[0].userPrompt).toBe('Test prompt');
-    expect(result.exchanges[0].responsesByAgent.gpt).toBeDefined();
+    expect(getLatestRound(result.exchanges[0]).responsesByAgent.gpt).toBeDefined();
   });
 
   it('clears pendingExchange', () => {
@@ -458,7 +458,7 @@ describe('brainReducer — CANCEL_COMPLETE', () => {
 
     expect(result.exchanges).toHaveLength(1);
     expect(result.exchanges[0].userPrompt).toBe('Cancelled prompt');
-    expect(result.exchanges[0].responsesByAgent.gpt).toBeDefined();
+    expect(getLatestRound(result.exchanges[0]).responsesByAgent.gpt).toBeDefined();
   });
 
   it('clears pendingExchange', () => {
@@ -634,7 +634,7 @@ describe('brainReducer — CLEAR', () => {
         {
           id: 'ex-1',
           userPrompt: 'Old prompt',
-          responsesByAgent: {},
+          rounds: [{ roundNumber: 1, responsesByAgent: {} }],
           timestamp: Date.now(),
         },
       ],
@@ -676,7 +676,7 @@ describe('brainReducer — CLEAR', () => {
         {
           id: 'ex-1',
           userPrompt: 'Keep this',
-          responsesByAgent: {},
+          rounds: [{ roundNumber: 1, responsesByAgent: {} }],
           timestamp: Date.now(),
         },
       ],
@@ -694,7 +694,7 @@ describe('brainReducer — CLEAR', () => {
 
   it('resets all state fields except clearBoardVersion', () => {
     const dirtyState: BrainState = {
-      exchanges: [{ id: 'ex-1', userPrompt: 'Test', responsesByAgent: {}, timestamp: 1 }],
+      exchanges: [{ id: 'ex-1', userPrompt: 'Test', rounds: [{ roundNumber: 1, responsesByAgent: {} }], timestamp: 1 }],
       pendingExchange: null,
       currentAgent: null,
       isProcessing: false,
@@ -728,7 +728,7 @@ describe('brainReducer — CLEAR', () => {
 describe('brainReducer — LOAD_CONVERSATION_SNAPSHOT', () => {
   it('loads exchanges and pendingExchange into state', () => {
     const exchanges = [
-      { id: 'ex-1', userPrompt: 'Hello', responsesByAgent: {}, timestamp: 1000 },
+      { id: 'ex-1', userPrompt: 'Hello', rounds: [{ roundNumber: 1, responsesByAgent: {} }], timestamp: 1000 },
     ];
 
     const action: BrainAction = {
@@ -812,7 +812,7 @@ describe('brainReducer — Switch Safety (V2-I)', () => {
     const state = createProcessingState('run-active');
     // Simulate a user trying to switch work items while a sequence is running
     const targetExchanges = [
-      { id: 'ex-target', userPrompt: 'Other item', responsesByAgent: {}, timestamp: 2000 },
+      { id: 'ex-target', userPrompt: 'Other item', rounds: [{ roundNumber: 1, responsesByAgent: {} }], timestamp: 2000 },
     ];
 
     const result = brainReducer(state, {
@@ -837,7 +837,7 @@ describe('brainReducer — Switch Safety (V2-I)', () => {
     expect(state.isProcessing).toBe(false);
 
     const targetExchanges = [
-      { id: 'ex-target', userPrompt: 'Switched item', responsesByAgent: {}, timestamp: 3000 },
+      { id: 'ex-target', userPrompt: 'Switched item', rounds: [{ roundNumber: 1, responsesByAgent: {} }], timestamp: 3000 },
     ];
     const result = brainReducer(state, {
       type: 'LOAD_CONVERSATION_SNAPSHOT',
@@ -888,7 +888,7 @@ describe('brainReducer — Pending exchange integrity (V2-J)', () => {
 
     // Load a different work item's conversation (simulating switch)
     const otherExchanges = [
-      { id: 'ex-other', userPrompt: 'Other item', responsesByAgent: {}, timestamp: 5000 },
+      { id: 'ex-other', userPrompt: 'Other item', rounds: [{ roundNumber: 1, responsesByAgent: {} }], timestamp: 5000 },
     ];
     state = brainReducer(state, {
       type: 'LOAD_CONVERSATION_SNAPSHOT',
@@ -935,9 +935,9 @@ describe('brainReducer — Pending exchange integrity (V2-J)', () => {
 
     // Immediately load item B's snapshot (3 exchanges)
     const itemBExchanges = [
-      { id: 'ex-b1', userPrompt: 'B1', responsesByAgent: {}, timestamp: 1000 },
-      { id: 'ex-b2', userPrompt: 'B2', responsesByAgent: {}, timestamp: 2000 },
-      { id: 'ex-b3', userPrompt: 'B3', responsesByAgent: {}, timestamp: 3000 },
+      { id: 'ex-b1', userPrompt: 'B1', rounds: [{ roundNumber: 1, responsesByAgent: {} }], timestamp: 1000 },
+      { id: 'ex-b2', userPrompt: 'B2', rounds: [{ roundNumber: 1, responsesByAgent: {} }], timestamp: 2000 },
+      { id: 'ex-b3', userPrompt: 'B3', rounds: [{ roundNumber: 1, responsesByAgent: {} }], timestamp: 3000 },
     ];
     state = brainReducer(state, {
       type: 'LOAD_CONVERSATION_SNAPSHOT',
@@ -999,7 +999,7 @@ describe('brainReducer — Memory safety (V2-K)', () => {
     const exchanges = Array.from({ length: 50 }, (_, i) => ({
       id: `ex-${i}`,
       userPrompt: `Prompt ${i}`,
-      responsesByAgent: {},
+      rounds: [{ roundNumber: 1, responsesByAgent: {} }],
       timestamp: i * 1000,
     }));
 
@@ -1019,8 +1019,8 @@ describe('brainReducer — Memory safety (V2-K)', () => {
   it('swap replaces old exchanges completely — no retained references to previous item', () => {
     // Load item A
     const exchangesA = [
-      { id: 'ex-a1', userPrompt: 'A1', responsesByAgent: {}, timestamp: 1000 },
-      { id: 'ex-a2', userPrompt: 'A2', responsesByAgent: {}, timestamp: 2000 },
+      { id: 'ex-a1', userPrompt: 'A1', rounds: [{ roundNumber: 1, responsesByAgent: {} }], timestamp: 1000 },
+      { id: 'ex-a2', userPrompt: 'A2', rounds: [{ roundNumber: 1, responsesByAgent: {} }], timestamp: 2000 },
     ];
     let state = brainReducer(initialBrainState, {
       type: 'LOAD_CONVERSATION_SNAPSHOT',
@@ -1031,7 +1031,7 @@ describe('brainReducer — Memory safety (V2-K)', () => {
 
     // Load item B (swap)
     const exchangesB = [
-      { id: 'ex-b1', userPrompt: 'B1', responsesByAgent: {}, timestamp: 3000 },
+      { id: 'ex-b1', userPrompt: 'B1', rounds: [{ roundNumber: 1, responsesByAgent: {} }], timestamp: 3000 },
     ];
     state = brainReducer(state, {
       type: 'LOAD_CONVERSATION_SNAPSHOT',
@@ -1051,7 +1051,7 @@ describe('brainReducer — Memory safety (V2-K)', () => {
     const existing = Array.from({ length: 100 }, (_, i) => ({
       id: `ex-${i}`,
       userPrompt: `P${i}`,
-      responsesByAgent: {},
+      rounds: [{ roundNumber: 1, responsesByAgent: {} }],
       timestamp: i,
     }));
     let state = brainReducer(initialBrainState, {
@@ -1086,6 +1086,111 @@ describe('brainReducer — Memory safety (V2-K)', () => {
     for (let i = 0; i < 100; i++) {
       expect(state.exchanges[i]).toBe(existing[i]);
     }
+  });
+});
+
+// -----------------------------------------------------------------------------
+// V3-A: Exchange Rounds Data Model
+// -----------------------------------------------------------------------------
+
+describe('brainReducer — Exchange rounds (V3-A)', () => {
+  it('finalizePendingExchange creates rounds[0] from pending responsesByAgent', () => {
+    let state = createProcessingState('run-rounds', 'Rounds test');
+    state = brainReducer(state, {
+      type: 'AGENT_COMPLETED',
+      runId: 'run-rounds',
+      response: createSuccessResponse('gpt'),
+    });
+    state = brainReducer(state, {
+      type: 'AGENT_STARTED',
+      runId: 'run-rounds',
+      agent: 'claude',
+    });
+    state = brainReducer(state, {
+      type: 'AGENT_COMPLETED',
+      runId: 'run-rounds',
+      response: createSuccessResponse('claude'),
+    });
+    state = brainReducer(state, { type: 'SEQUENCE_COMPLETED', runId: 'run-rounds' });
+
+    const exchange = state.exchanges[0];
+    expect(exchange.rounds).toHaveLength(1);
+    expect(exchange.rounds[0].roundNumber).toBe(1);
+    expect(exchange.rounds[0].responsesByAgent.gpt).toBeDefined();
+    expect(exchange.rounds[0].responsesByAgent.claude).toBeDefined();
+  });
+
+  it('finalized exchange does NOT have top-level responsesByAgent', () => {
+    let state = createProcessingState('run-no-legacy', 'No legacy');
+    state = brainReducer(state, {
+      type: 'AGENT_COMPLETED',
+      runId: 'run-no-legacy',
+      response: createSuccessResponse('gpt'),
+    });
+    state = brainReducer(state, { type: 'SEQUENCE_COMPLETED', runId: 'run-no-legacy' });
+
+    const exchange = state.exchanges[0];
+    expect('responsesByAgent' in exchange).toBe(false);
+    expect(exchange.rounds).toBeDefined();
+  });
+
+  it('getLatestRound returns rounds[rounds.length - 1]', () => {
+    let state = createProcessingState('run-latest', 'Latest');
+    state = brainReducer(state, {
+      type: 'AGENT_COMPLETED',
+      runId: 'run-latest',
+      response: createSuccessResponse('gpt'),
+    });
+    state = brainReducer(state, { type: 'SEQUENCE_COMPLETED', runId: 'run-latest' });
+
+    const exchange = state.exchanges[0];
+    const latest = getLatestRound(exchange);
+    expect(latest).toBe(exchange.rounds[0]);
+    expect(latest.roundNumber).toBe(1);
+    expect(latest.responsesByAgent.gpt).toBeDefined();
+  });
+
+  it('transcript entries derive from rounds (not legacy responsesByAgent)', () => {
+    let state = createProcessingState('run-transcript', 'Transcript test');
+    state = brainReducer(state, {
+      type: 'AGENT_COMPLETED',
+      runId: 'run-transcript',
+      response: createSuccessResponse('gpt'),
+    });
+    state = brainReducer(state, {
+      type: 'AGENT_STARTED',
+      runId: 'run-transcript',
+      agent: 'claude',
+    });
+    state = brainReducer(state, {
+      type: 'AGENT_COMPLETED',
+      runId: 'run-transcript',
+      response: createSuccessResponse('claude'),
+    });
+    state = brainReducer(state, { type: 'SEQUENCE_COMPLETED', runId: 'run-transcript' });
+
+    // Transcript: user + gpt + claude = 3 entries
+    expect(state.transcript).toHaveLength(3);
+    expect(state.transcript[0].role).toBe('user');
+    expect(state.transcript[1].role).toBe('gpt');
+    expect(state.transcript[2].role).toBe('claude');
+  });
+
+  it('CANCEL_COMPLETE also creates rounds[0]', () => {
+    let state = createProcessingState('run-cancel-rounds', 'Cancel rounds');
+    state = brainReducer(state, {
+      type: 'AGENT_COMPLETED',
+      runId: 'run-cancel-rounds',
+      response: createSuccessResponse('gpt'),
+    });
+    state = { ...state, userCancelled: true };
+    state = brainReducer(state, { type: 'CANCEL_COMPLETE', runId: 'run-cancel-rounds' });
+
+    const exchange = state.exchanges[0];
+    expect(exchange.rounds).toHaveLength(1);
+    expect(exchange.rounds[0].roundNumber).toBe(1);
+    expect(exchange.rounds[0].responsesByAgent.gpt).toBeDefined();
+    expect('responsesByAgent' in exchange).toBe(false);
   });
 });
 
