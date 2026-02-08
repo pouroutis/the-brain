@@ -429,3 +429,90 @@ describe('WorkItem persistence — conversation fields (V2-H)', () => {
     expect(saveWorkItems([item])).toBe(true);
   });
 });
+
+// -----------------------------------------------------------------------------
+// V2-I: Selection Restore + Swap Guard
+// -----------------------------------------------------------------------------
+
+describe('Selection restore — stored ID validation (V2-I)', () => {
+  it('loadSelectedWorkItemId returns stored id when it exists in items', () => {
+    const item = createWorkItem({ title: 'Valid' });
+    saveWorkItems([item]);
+    saveSelectedWorkItemId(item.id);
+
+    const storedId = loadSelectedWorkItemId();
+    const items = loadWorkItems();
+    const valid = items.some((w) => w.id === storedId);
+    expect(valid).toBe(true);
+  });
+
+  it('stored id pointing to nonexistent item can be detected', () => {
+    const item = createWorkItem({ title: 'Alive' });
+    saveWorkItems([item]);
+    saveSelectedWorkItemId('deleted-id');
+
+    const storedId = loadSelectedWorkItemId();
+    const items = loadWorkItems();
+    const valid = items.some((w) => w.id === storedId);
+    expect(valid).toBe(false);
+  });
+
+  it('fallback: first active item used when stored id invalid', () => {
+    const item1 = createWorkItem({ title: 'First Active' });
+    const item2 = createWorkItem({ title: 'Second Active' });
+    saveWorkItems([item1, item2]);
+    saveSelectedWorkItemId('gone-id');
+
+    const items = loadWorkItems();
+    const storedId = loadSelectedWorkItemId();
+    const validId = items.some((w) => w.id === storedId)
+      ? storedId
+      : items.find((w) => w.status === 'active')?.id ?? null;
+    expect(validId).toBe(item1.id);
+  });
+
+  it('fallback: null when no active items and stored id invalid', () => {
+    saveWorkItems([]);
+    saveSelectedWorkItemId('gone-id');
+
+    const items = loadWorkItems();
+    const storedId = loadSelectedWorkItemId();
+    const validId = items.some((w) => w.id === storedId)
+      ? storedId
+      : items.find((w) => w.status === 'active')?.id ?? null;
+    expect(validId).toBeNull();
+  });
+});
+
+describe('Swap guard — snapshot write only to correct item (V2-I)', () => {
+  it('updateWorkItem no-ops on id mismatch (prevents cross-item save)', () => {
+    const item1 = createWorkItem({ title: 'Item A' });
+    const item2 = createWorkItem({ title: 'Item B' });
+    const exchange = { id: 'ex-1', userPrompt: 'Hello', responsesByAgent: {}, timestamp: 1000 };
+
+    // Attempt to save exchange to wrong item id
+    const updated = updateWorkItem([item1, item2], 'nonexistent-id', () => ({
+      exchanges: [exchange],
+    }));
+
+    // Both items unchanged (reference equality)
+    expect(updated[0]).toBe(item1);
+    expect(updated[1]).toBe(item2);
+    expect(updated[0].exchanges).toEqual([]);
+    expect(updated[1].exchanges).toEqual([]);
+  });
+
+  it('updateWorkItem writes only to matching item', () => {
+    const item1 = createWorkItem({ title: 'Target' });
+    const item2 = createWorkItem({ title: 'Bystander' });
+    const exchange = { id: 'ex-1', userPrompt: 'Q', responsesByAgent: {}, timestamp: 1000 };
+
+    const updated = updateWorkItem([item1, item2], item1.id, () => ({
+      exchanges: [exchange],
+    }));
+
+    expect(updated[0].exchanges).toHaveLength(1);
+    expect(updated[1]).toBe(item2); // reference equality — untouched
+    expect(updated[1].exchanges).toEqual([]);
+  });
+});

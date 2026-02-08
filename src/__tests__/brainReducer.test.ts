@@ -804,6 +804,72 @@ describe('brainReducer — LOAD_CONVERSATION_SNAPSHOT', () => {
 });
 
 // -----------------------------------------------------------------------------
+// V2-I: Switch Safety — LOAD_CONVERSATION_SNAPSHOT blocked while processing
+// -----------------------------------------------------------------------------
+
+describe('brainReducer — Switch Safety (V2-I)', () => {
+  it('LOAD_CONVERSATION_SNAPSHOT blocked during active processing (switch safety)', () => {
+    const state = createProcessingState('run-active');
+    // Simulate a user trying to switch work items while a sequence is running
+    const targetExchanges = [
+      { id: 'ex-target', userPrompt: 'Other item', responsesByAgent: {}, timestamp: 2000 },
+    ];
+
+    const result = brainReducer(state, {
+      type: 'LOAD_CONVERSATION_SNAPSHOT',
+      exchanges: targetExchanges,
+      pendingExchange: null,
+    });
+
+    // State unchanged — switch blocked
+    expect(result).toBe(state);
+    expect(result.isProcessing).toBe(true);
+    expect(result.pendingExchange?.runId).toBe('run-active');
+    expect(result.exchanges).toEqual([]); // original empty exchanges preserved
+  });
+
+  it('LOAD_CONVERSATION_SNAPSHOT allowed after sequence completes', () => {
+    let state = createProcessingState('run-done');
+    state = brainReducer(state, {
+      type: 'SEQUENCE_COMPLETED',
+      runId: 'run-done',
+    });
+    expect(state.isProcessing).toBe(false);
+
+    const targetExchanges = [
+      { id: 'ex-target', userPrompt: 'Switched item', responsesByAgent: {}, timestamp: 3000 },
+    ];
+    const result = brainReducer(state, {
+      type: 'LOAD_CONVERSATION_SNAPSHOT',
+      exchanges: targetExchanges,
+      pendingExchange: null,
+    });
+
+    expect(result.exchanges).toEqual(targetExchanges);
+    expect(result.isProcessing).toBe(false);
+  });
+
+  it('LOAD_CONVERSATION_SNAPSHOT allowed after cancel completes', () => {
+    let state = createProcessingState('run-cancel');
+    state = { ...state, userCancelled: true };
+    state = brainReducer(state, {
+      type: 'CANCEL_COMPLETE',
+      runId: 'run-cancel',
+    });
+    expect(state.isProcessing).toBe(false);
+
+    const result = brainReducer(state, {
+      type: 'LOAD_CONVERSATION_SNAPSHOT',
+      exchanges: [],
+      pendingExchange: null,
+    });
+
+    expect(result.exchanges).toEqual([]);
+    expect(result.isProcessing).toBe(false);
+  });
+});
+
+// -----------------------------------------------------------------------------
 // State Invariant Tests
 // -----------------------------------------------------------------------------
 

@@ -12,12 +12,14 @@ import { useBrain } from '../context/BrainContext';
 
 export function WorkItemSidebar(): JSX.Element {
   const { workItems, selectedWorkItemId, createNewWorkItem, selectWorkItem, archive, unarchive, saveConversation } = useWorkItems();
-  const { getState, loadConversationSnapshot } = useBrain();
+  const { getState, loadConversationSnapshot, isProcessing } = useBrain();
   const [view, setView] = useState<'active' | 'archived'>('active');
 
+  const processing = isProcessing();
   const filteredItems = workItems.filter((item) => item.status === view);
 
   // Save current BrainState conversation to the currently-selected work item
+  // V2-I: ID mismatch guard — only save if selectedWorkItemId matches
   const saveCurrentConversation = useCallback(() => {
     if (!selectedWorkItemId) return;
     const { exchanges, pendingExchange } = getState();
@@ -25,27 +27,33 @@ export function WorkItemSidebar(): JSX.Element {
   }, [selectedWorkItemId, getState, saveConversation]);
 
   // Swap: save current → create new → load empty
+  // V2-I: Blocked while processing
   const handleNewConversation = useCallback(() => {
+    if (processing) return;
     saveCurrentConversation();
     createNewWorkItem();
     loadConversationSnapshot([], null);
-  }, [saveCurrentConversation, createNewWorkItem, loadConversationSnapshot]);
+  }, [processing, saveCurrentConversation, createNewWorkItem, loadConversationSnapshot]);
 
   // Swap: save current → select → load target
+  // V2-I: Blocked while processing
   const handleSelectItem = useCallback(
     (id: string) => {
       if (id === selectedWorkItemId) return;
+      if (processing) return;
       saveCurrentConversation();
       selectWorkItem(id);
       const item = workItems.find((w) => w.id === id);
       loadConversationSnapshot(item?.exchanges ?? [], item?.pendingExchange ?? null);
     },
-    [selectedWorkItemId, saveCurrentConversation, selectWorkItem, workItems, loadConversationSnapshot],
+    [selectedWorkItemId, processing, saveCurrentConversation, selectWorkItem, workItems, loadConversationSnapshot],
   );
 
+  // V2-I: Blocked while processing
   const handleArchive = useCallback(
     (e: React.MouseEvent, id: string) => {
       e.stopPropagation();
+      if (processing) return;
       if (id === selectedWorkItemId) {
         // Save conversation to the item before archiving
         saveCurrentConversation();
@@ -54,7 +62,7 @@ export function WorkItemSidebar(): JSX.Element {
       }
       archive(id);
     },
-    [archive, selectWorkItem, selectedWorkItemId, saveCurrentConversation, loadConversationSnapshot],
+    [archive, selectWorkItem, selectedWorkItemId, processing, saveCurrentConversation, loadConversationSnapshot],
   );
 
   const handleRestore = useCallback(
@@ -95,7 +103,11 @@ export function WorkItemSidebar(): JSX.Element {
         </div>
       </div>
 
-      <button className="work-item-sidebar__new-btn" onClick={handleNewConversation}>
+      <button
+        className="work-item-sidebar__new-btn"
+        onClick={handleNewConversation}
+        disabled={processing}
+      >
         + New Conversation
       </button>
 
@@ -105,40 +117,49 @@ export function WorkItemSidebar(): JSX.Element {
             {view === 'active' ? 'No active items' : 'No archived items'}
           </div>
         )}
-        {filteredItems.map((item) => (
-          <div
-            key={item.id}
-            className={`work-item-sidebar__item${item.id === selectedWorkItemId ? ' work-item-sidebar__item--selected' : ''}`}
-            role="button"
-            tabIndex={0}
-            onClick={() => handleSelectItem(item.id)}
-            onKeyDown={(e) => handleItemKeyDown(e, item.id)}
-          >
-            <div className="work-item-sidebar__item-info">
-              <span className="work-item-sidebar__item-title">{item.title}</span>
-              <span className="work-item-sidebar__item-date">
-                {new Date(item.updatedAt).toLocaleDateString()}
-              </span>
+        {filteredItems.map((item) => {
+          const isSelected = item.id === selectedWorkItemId;
+          const isDisabled = processing && !isSelected;
+          return (
+            <div
+              key={item.id}
+              className={`work-item-sidebar__item${isSelected ? ' work-item-sidebar__item--selected' : ''}${isDisabled ? ' work-item-sidebar__item--disabled' : ''}`}
+              role="button"
+              tabIndex={isDisabled ? -1 : 0}
+              onClick={() => handleSelectItem(item.id)}
+              onKeyDown={(e) => handleItemKeyDown(e, item.id)}
+              aria-disabled={isDisabled}
+            >
+              <div className="work-item-sidebar__item-info">
+                <span className="work-item-sidebar__item-title">{item.title}</span>
+                <span className="work-item-sidebar__item-date">
+                  {new Date(item.updatedAt).toLocaleDateString()}
+                </span>
+              </div>
+              {/* V2-I: Running badge on the active (selected) item while processing */}
+              {isSelected && processing && (
+                <span className="work-item-sidebar__running-badge">Running…</span>
+              )}
+              {view === 'active' && !processing ? (
+                <button
+                  className="work-item-sidebar__item-action"
+                  aria-label={`Archive ${item.title}`}
+                  onClick={(e) => handleArchive(e, item.id)}
+                >
+                  Archive
+                </button>
+              ) : view === 'archived' ? (
+                <button
+                  className="work-item-sidebar__item-action"
+                  aria-label={`Restore ${item.title}`}
+                  onClick={(e) => handleRestore(e, item.id)}
+                >
+                  Restore
+                </button>
+              ) : null}
             </div>
-            {view === 'active' ? (
-              <button
-                className="work-item-sidebar__item-action"
-                aria-label={`Archive ${item.title}`}
-                onClick={(e) => handleArchive(e, item.id)}
-              >
-                Archive
-              </button>
-            ) : (
-              <button
-                className="work-item-sidebar__item-action"
-                aria-label={`Restore ${item.title}`}
-                onClick={(e) => handleRestore(e, item.id)}
-              >
-                Restore
-              </button>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

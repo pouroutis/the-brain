@@ -926,6 +926,35 @@ body {
   background: #2a2a3a;
 }
 
+/* V2-I — Disabled item (processing in progress) */
+.work-item-sidebar__item--disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.work-item-sidebar__new-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-color: #444;
+  color: #666;
+}
+
+/* V2-I — Running badge */
+.work-item-sidebar__running-badge {
+  flex-shrink: 0;
+  margin-left: 8px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background-color: #1b4332;
+  color: #52b788;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  animation: pulse 1.5s infinite;
+}
+
 /* -----------------------------------------------------------------------------
    Context Shelf Panel
    ----------------------------------------------------------------------------- */

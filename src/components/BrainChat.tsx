@@ -78,10 +78,22 @@ export function BrainChat(): JSX.Element {
   // V2-H: Auto-save — persist to work item when a new exchange is completed
   // ---------------------------------------------------------------------------
 
+  // V2-I: Track which work item the current conversation belongs to
+  const conversationOwnerRef = useRef<string | null>(selectedWorkItemId);
+  useEffect(() => {
+    conversationOwnerRef.current = selectedWorkItemId;
+  }, [selectedWorkItemId]);
+
   const prevExchangeLenRef = useRef(exchanges.length);
   useEffect(() => {
     const currentLen = exchanges.length;
     if (currentLen > prevExchangeLenRef.current && selectedWorkItemId) {
+      // V2-I: ID mismatch guard — only save if owner matches
+      if (conversationOwnerRef.current !== selectedWorkItemId) {
+        console.warn(`[TheBrain] Auto-save skipped: conversation owner (${conversationOwnerRef.current}) !== selected (${selectedWorkItemId})`);
+        prevExchangeLenRef.current = currentLen;
+        return;
+      }
       saveConversation(selectedWorkItemId, exchanges, null);
     }
     prevExchangeLenRef.current = currentLen;

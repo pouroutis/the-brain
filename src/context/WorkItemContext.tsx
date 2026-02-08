@@ -46,8 +46,15 @@ const WorkItemCtx = createContext<WorkItemContextValue | null>(null);
 // -----------------------------------------------------------------------------
 
 export function WorkItemProvider({ children }: { children: ReactNode }): JSX.Element {
+  // V2-I: Validate stored selection on init — fallback to first active or create
   const [workItems, setWorkItems] = useState<WorkItem[]>(() => loadWorkItems());
-  const [selectedId, setSelectedId] = useState<string | null>(() => loadSelectedWorkItemId());
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    const items = loadWorkItems();
+    const storedId = loadSelectedWorkItemId();
+    if (storedId && items.some((w) => w.id === storedId)) return storedId;
+    const firstActive = items.find((w) => w.status === 'active');
+    return firstActive?.id ?? null;
+  });
   const [storageWarning, setStorageWarning] = useState<string | null>(null);
 
   // Track mount to avoid double-persist on initial load
