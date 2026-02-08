@@ -21,28 +21,13 @@ import type {
   AgentStatus,
   BrainState,
   Exchange,
-  KeyNotes,
   PendingExchange,
-  SystemMessage,
   WarningState,
   ErrorCode,
 } from '../types/brain';
 import { brainReducer, initialBrainState } from '../reducer/brainReducer';
 import { callAgent } from '../api/agentClient';
 import { env } from '../config/env';
-import {
-  loadDiscussionState,
-  saveDiscussionState,
-} from '../utils/discussionPersistence';
-import {
-  shouldCompact,
-  getExchangesToCompact,
-  getExchangesToKeep,
-  buildCompactionPrompt,
-  parseKeyNotes,
-  mergeKeyNotes,
-} from '../utils/compaction';
-import { buildDiscussionMemoryBlock } from '../utils/contextBuilder';
 
 // -----------------------------------------------------------------------------
 // Constants
@@ -180,10 +165,6 @@ interface BrainSelectors {
   getProjectDiscussionMode: () => boolean;
   /** Get the current CEO agent */
   getCeo: () => Agent;
-  /** Get keyNotes from compacted exchanges */
-  getKeyNotes: () => KeyNotes | null;
-  /** Get system messages for inline notifications */
-  getSystemMessages: () => SystemMessage[];
 }
 
 /**
@@ -263,127 +244,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
   }, [state.userCancelled]);
 
   // ---------------------------------------------------------------------------
-  // Discussion Persistence: Rehydration on mount
-  // ---------------------------------------------------------------------------
-
-  const hasRehydratedRef = useRef(false);
-  const didLoadDataRef = useRef(false);
-
-  useEffect(() => {
-    if (hasRehydratedRef.current) return;
-    hasRehydratedRef.current = true;
-
-    const persisted = loadDiscussionState();
-    if (persisted) {
-      didLoadDataRef.current = true;
-      dispatch({
-        type: 'REHYDRATE_DISCUSSION',
-        session: persisted.session,
-        exchanges: persisted.exchanges,
-        transcript: persisted.transcript,
-        keyNotes: persisted.keyNotes,
-      });
-    }
-  }, []);
-
-  // ---------------------------------------------------------------------------
-  // Discussion Persistence: Save on SEQUENCE_COMPLETED or CLEAR
-  // ---------------------------------------------------------------------------
-
-  const prevExchangesLengthRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (!state.discussionSession) return;
-    if (state.isProcessing) return;
-
-    if (prevExchangesLengthRef.current === null) {
-      prevExchangesLengthRef.current = state.exchanges.length;
-      if (didLoadDataRef.current) {
-        return;
-      }
-      if (state.exchanges.length > 0) {
-        saveDiscussionState(state.discussionSession, state.exchanges, state.transcript, state.keyNotes);
-      }
-      return;
-    }
-
-    if (prevExchangesLengthRef.current !== state.exchanges.length) {
-      prevExchangesLengthRef.current = state.exchanges.length;
-      saveDiscussionState(state.discussionSession, state.exchanges, state.transcript, state.keyNotes);
-    }
-  }, [state.discussionSession, state.exchanges, state.transcript, state.keyNotes, state.isProcessing]);
-
-  // ---------------------------------------------------------------------------
-  // Discussion Compaction
-  // ---------------------------------------------------------------------------
-
-  const compactionInProgressRef = useRef(false);
-  const lastCompactedCountRef = useRef<number>(0);
-
-  useEffect(() => {
-    if (state.isProcessing) return;
-    if (state.exchanges.length === 0) return;
-    if (compactionInProgressRef.current) return;
-
-    const exchangeCount = state.discussionSession?.exchangeCount ?? state.exchanges.length;
-    if (!shouldCompact(exchangeCount)) return;
-    if (lastCompactedCountRef.current === exchangeCount) return;
-
-    const toCompact = getExchangesToCompact(state.exchanges);
-    if (toCompact.length === 0) return;
-
-    compactionInProgressRef.current = true;
-
-    const runCompaction = async () => {
-      try {
-        const currentCeo = ceoRef.current;
-        const prompt = buildCompactionPrompt(toCompact, state.keyNotes);
-        const compactionAbortController = new AbortController();
-
-        const response = await callAgent(
-          currentCeo,
-          prompt,
-          '',
-          compactionAbortController,
-          {
-            runId: `compaction-${Date.now()}`,
-            callIndex: 1,
-            exchanges: [],
-            projectDiscussionMode: false,
-          }
-        );
-
-        if (response.status !== 'success' || !response.content) {
-          compactionInProgressRef.current = false;
-          return;
-        }
-
-        const parsedKeyNotes = parseKeyNotes(response.content);
-        if (!parsedKeyNotes) {
-          compactionInProgressRef.current = false;
-          return;
-        }
-
-        const mergedKeyNotes = mergeKeyNotes(state.keyNotes, parsedKeyNotes);
-        const toKeep = getExchangesToKeep(state.exchanges);
-        lastCompactedCountRef.current = exchangeCount;
-
-        dispatch({
-          type: 'COMPACTION_COMPLETED',
-          keyNotes: mergedKeyNotes,
-          trimmedExchanges: toKeep,
-        });
-      } catch {
-        // Error during compaction — retry on next sequence
-      } finally {
-        compactionInProgressRef.current = false;
-      }
-    };
-
-    runCompaction();
-  }, [state.isProcessing, state.exchanges, state.discussionSession, state.keyNotes]);
-
-  // ---------------------------------------------------------------------------
   // Orchestrator: Main Sequence Effect
   // ---------------------------------------------------------------------------
 
@@ -423,15 +283,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       const useProjectContext = projectDiscussionModeRef.current;
       const currentCeo = ceoRef.current;
 
-      let promptWithMemory = userPrompt;
-      const memoryBlock = buildDiscussionMemoryBlock({
-        keyNotes: state.keyNotes,
-        exchanges: state.exchanges,
-      });
-      if (memoryBlock) {
-        promptWithMemory = memoryBlock + userPrompt;
-      }
-
       const agentOrder = getAgentOrder(currentCeo);
 
       const callAgentWithTimeout = async (agent: Agent): Promise<AgentResponse> => {
@@ -448,7 +299,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
 
         const response = await callAgent(
           agent,
-          promptWithMemory,
+          userPrompt,
           conversationContext,
           agentAbortController,
           {
@@ -711,14 +562,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     return ceo;
   }, [ceo]);
 
-  const getKeyNotes = useCallback((): KeyNotes | null => {
-    return state.keyNotes;
-  }, [state.keyNotes]);
-
-  const getSystemMessages = useCallback((): SystemMessage[] => {
-    return state.systemMessages;
-  }, [state.systemMessages]);
-
   // ---------------------------------------------------------------------------
   // Memoized Context Value
   // ---------------------------------------------------------------------------
@@ -751,8 +594,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       getForceAllAdvisors,
       getProjectDiscussionMode,
       getCeo,
-      getKeyNotes,
-      getSystemMessages,
     }),
     [
       submitPrompt,
@@ -779,8 +620,6 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       getForceAllAdvisors,
       getProjectDiscussionMode,
       getCeo,
-      getKeyNotes,
-      getSystemMessages,
     ]
   );
 

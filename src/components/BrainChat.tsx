@@ -36,7 +36,6 @@ export function BrainChat(): JSX.Element {
     getPendingExchange,
     getExchanges,
     getCeo,
-    getSystemMessages,
   } = useBrain();
 
   // WorkItem binding (V2-C — title derivation on first prompt)
@@ -55,7 +54,6 @@ export function BrainChat(): JSX.Element {
   const processing = isProcessing();
   const ceo = getCeo();
   const mode = 'discussion';
-  const systemMessages = getSystemMessages();
 
   // ---------------------------------------------------------------------------
   // Warning display rule (GPT mandate):
@@ -150,7 +148,6 @@ export function BrainChat(): JSX.Element {
         currentAgent={currentAgent}
         mode={mode}
         ceo={ceo}
-        systemMessages={systemMessages}
       />
 
       {/* Prompt Input */}

@@ -134,37 +134,6 @@ export interface TranscriptEntry {
 }
 
 // -----------------------------------------------------------------------------
-// Key-Notes (Compaction Memory)
-// -----------------------------------------------------------------------------
-
-/**
- * Structured memory from compacted exchanges.
- * Preserves reasoning, decisions, and context across compaction cycles.
- */
-export interface KeyNotes {
-  /** Key decisions made during discussion */
-  decisions: string[];
-  /** Reasoning chains and thought processes */
-  reasoningChains: string[];
-  /** Points of agreement between participants */
-  agreements: string[];
-  /** Constraints and limitations identified */
-  constraints: string[];
-  /** Unresolved questions for future discussion */
-  openQuestions: string[];
-}
-
-/**
- * System message for inline notifications (compaction, etc.)
- */
-export interface SystemMessage {
-  id: string;
-  type: 'compaction';
-  message: string;
-  timestamp: number;
-}
-
-// -----------------------------------------------------------------------------
 // Brain State
 // -----------------------------------------------------------------------------
 
@@ -181,10 +150,6 @@ export interface BrainState {
   discussionSession: DiscussionSession | null;
   /** Full transcript (append-only) */
   transcript: TranscriptEntry[];
-  /** Key-notes memory from compacted exchanges */
-  keyNotes: KeyNotes | null;
-  /** System messages for inline notifications */
-  systemMessages: SystemMessage[];
 }
 
 // -----------------------------------------------------------------------------
@@ -199,9 +164,7 @@ export type BrainAction =
   | { type: 'CANCEL_REQUESTED'; runId: string }
   | { type: 'CANCEL_COMPLETE'; runId: string }
   | { type: 'SET_WARNING'; runId: string; warning: WarningState | null }
-  | { type: 'CLEAR' }
-  | { type: 'REHYDRATE_DISCUSSION'; session: DiscussionSession; exchanges: Exchange[]; transcript: TranscriptEntry[]; keyNotes: KeyNotes | null }
-  | { type: 'COMPACTION_COMPLETED'; keyNotes: KeyNotes; trimmedExchanges: Exchange[] };
+  | { type: 'CLEAR' };
 
 // -----------------------------------------------------------------------------
 // Brain Events (Logging / Debugging) — 6 variants, contract-locked

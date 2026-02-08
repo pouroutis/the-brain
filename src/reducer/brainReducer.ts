@@ -10,7 +10,6 @@ import type {
   DiscussionSession,
   Exchange,
   PendingExchange,
-  SystemMessage,
   TranscriptEntry,
   TranscriptRole,
 } from '../types/brain';
@@ -30,8 +29,6 @@ export const initialBrainState: BrainState = {
   clearBoardVersion: 0,
   discussionSession: null,
   transcript: [],
-  keyNotes: null,
-  systemMessages: [],
 };
 
 // -----------------------------------------------------------------------------
@@ -73,27 +70,6 @@ function createOrUpdateSession(
 
 function generateExchangeId(): string {
   return `ex-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-// -----------------------------------------------------------------------------
-// Helper: Generate System Message ID
-// -----------------------------------------------------------------------------
-
-function generateSystemMessageId(): string {
-  return `sys-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-// -----------------------------------------------------------------------------
-// Helper: Create Compaction System Message
-// -----------------------------------------------------------------------------
-
-function createCompactionMessage(): SystemMessage {
-  return {
-    id: generateSystemMessageId(),
-    type: 'compaction',
-    message: 'Older messages compacted. Full history preserved.',
-    timestamp: Date.now(),
-  };
 }
 
 // -----------------------------------------------------------------------------
@@ -360,43 +336,6 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         clearBoardVersion: state.clearBoardVersion + 1,
         discussionSession: clearedSession,
         transcript: [],
-        keyNotes: null,
-        systemMessages: [],
-      };
-    }
-
-    // -------------------------------------------------------------------------
-    // REHYDRATE_DISCUSSION (Persistence — restore from localStorage)
-    // -------------------------------------------------------------------------
-    case 'REHYDRATE_DISCUSSION': {
-      // Guard: Block if currently processing
-      if (state.isProcessing) {
-        return state;
-      }
-
-      return {
-        ...state,
-        exchanges: action.exchanges,
-        discussionSession: action.session,
-        transcript: action.transcript,
-        keyNotes: action.keyNotes,
-      };
-    }
-
-    // -------------------------------------------------------------------------
-    // COMPACTION_COMPLETED (trim exchanges, update keyNotes)
-    // -------------------------------------------------------------------------
-    case 'COMPACTION_COMPLETED': {
-      // Guard: Block if currently processing
-      if (state.isProcessing) {
-        return state;
-      }
-
-      return {
-        ...state,
-        exchanges: action.trimmedExchanges,
-        keyNotes: action.keyNotes,
-        systemMessages: [...state.systemMessages, createCompactionMessage()],
       };
     }
 

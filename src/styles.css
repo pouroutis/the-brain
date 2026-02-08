@@ -103,24 +103,6 @@ body {
   font-size: 0.875rem;
 }
 
-.exchange-list__system-message {
-  background-color: #2a2a4a;
-  border: 1px solid #4a4a6a;
-  border-radius: 6px;
-  padding: 10px 16px;
-  margin-bottom: 12px;
-  font-size: 0.875rem;
-  color: #a0a0c0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.exchange-list__system-icon {
-  font-size: 1rem;
-  color: #6a6aaa;
-}
-
 /* V2-E — Discussion Toggle */
 
 .exchange-list__view-toggle {

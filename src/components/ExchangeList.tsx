@@ -4,7 +4,7 @@
 // =============================================================================
 
 import { useState } from 'react';
-import type { Agent, BrainMode, Exchange, PendingExchange, SystemMessage } from '../types/brain';
+import type { Agent, BrainMode, Exchange, PendingExchange } from '../types/brain';
 import { ExchangeCard } from './ExchangeCard';
 
 // -----------------------------------------------------------------------------
@@ -22,8 +22,6 @@ interface ExchangeListProps {
   mode: BrainMode;
   /** Current CEO agent (for render order in Decision/Project modes) */
   ceo: Agent;
-  /** System messages for inline notifications */
-  systemMessages?: SystemMessage[];
 }
 
 // -----------------------------------------------------------------------------
@@ -36,11 +34,10 @@ export function ExchangeList({
   currentAgent,
   mode,
   ceo,
-  systemMessages = [],
 }: ExchangeListProps): JSX.Element {
   const [showDiscussion, setShowDiscussion] = useState(false);
 
-  const hasContent = exchanges.length > 0 || pendingExchange !== null || systemMessages.length > 0;
+  const hasContent = exchanges.length > 0 || pendingExchange !== null;
 
   if (!hasContent) {
     return (
@@ -54,14 +51,6 @@ export function ExchangeList({
 
   return (
     <div className="exchange-list">
-      {/* Render system messages (compaction notifications) */}
-      {systemMessages.map((msg) => (
-        <div key={msg.id} className="exchange-list__system-message">
-          <span className="exchange-list__system-icon">&#9432;</span>
-          {msg.message}
-        </div>
-      ))}
-
       {/* Toggle between outcome-first and full discussion view */}
       {exchanges.length > 0 && (
         <div className="exchange-list__view-toggle">
