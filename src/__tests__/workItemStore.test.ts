@@ -240,6 +240,75 @@ describe('updateWorkItem', () => {
 });
 
 // -----------------------------------------------------------------------------
+// V2-H: Conversation Fields
+// -----------------------------------------------------------------------------
+
+describe('createWorkItem — conversation fields (V2-H)', () => {
+  it('initializes with empty exchanges and null pendingExchange', () => {
+    const item = createWorkItem();
+    expect(item.exchanges).toEqual([]);
+    expect(item.pendingExchange).toBeNull();
+  });
+});
+
+describe('WorkItem swap — conversation snapshots (V2-H)', () => {
+  it('create → select → conversation snapshot is empty', () => {
+    const item = createWorkItem();
+    expect(item.exchanges).toEqual([]);
+    expect(item.pendingExchange).toBeNull();
+  });
+
+  it('switching between items preserves conversations via updateWorkItem', () => {
+    const item1 = createWorkItem({ title: 'Item 1' });
+    const item2 = createWorkItem({ title: 'Item 2' });
+    const exchange1 = { id: 'ex-1', userPrompt: 'Q1', responsesByAgent: {}, timestamp: 1000 };
+
+    const updated = updateWorkItem([item1, item2], item1.id, () => ({
+      exchanges: [exchange1],
+      pendingExchange: null,
+    }));
+
+    const foundItem1 = updated.find((i) => i.id === item1.id)!;
+    expect(foundItem1.exchanges).toHaveLength(1);
+    expect(foundItem1.exchanges[0].userPrompt).toBe('Q1');
+
+    const foundItem2 = updated.find((i) => i.id === item2.id)!;
+    expect(foundItem2.exchanges).toEqual([]);
+  });
+
+  it('rename persists on item with conversations', () => {
+    const item = createWorkItem();
+    const exchange = { id: 'ex-1', userPrompt: 'test', responsesByAgent: {}, timestamp: 1000 };
+
+    let items = updateWorkItem([item], item.id, () => ({
+      exchanges: [exchange],
+    }));
+    items = updateWorkItem(items, item.id, () => ({ title: 'New Name' }));
+
+    expect(items[0].title).toBe('New Name');
+    expect(items[0].exchanges).toHaveLength(1);
+  });
+
+  it('archive/restore does not corrupt conversation snapshots', () => {
+    const item = createWorkItem();
+    const exchange = { id: 'ex-1', userPrompt: 'Q1', responsesByAgent: {}, timestamp: 1000 };
+
+    let items = updateWorkItem([item], item.id, () => ({
+      exchanges: [exchange],
+    }));
+
+    items = archiveWorkItem(items, item.id);
+    expect(items[0].status).toBe('archived');
+    expect(items[0].exchanges).toHaveLength(1);
+
+    items = unarchiveWorkItem(items, items[0].id);
+    expect(items[0].status).toBe('active');
+    expect(items[0].exchanges).toHaveLength(1);
+    expect(items[0].exchanges[0].userPrompt).toBe('Q1');
+  });
+});
+
+// -----------------------------------------------------------------------------
 // Persistence — WorkItems
 // -----------------------------------------------------------------------------
 
@@ -310,5 +379,53 @@ describe('Selected work item ID persistence', () => {
 
     saveSelectedWorkItemId(null);
     expect(loadSelectedWorkItemId()).toBeNull();
+  });
+});
+
+// -----------------------------------------------------------------------------
+// V2-H: Persistence — Conversation Fields + Migration
+// -----------------------------------------------------------------------------
+
+describe('WorkItem persistence — conversation fields (V2-H)', () => {
+  it('roundtrip preserves conversation fields', () => {
+    const item = createWorkItem({ title: 'Test' });
+    const exchange = { id: 'ex-1', userPrompt: 'Q1', responsesByAgent: {}, timestamp: 1000 };
+    const updated = updateWorkItem([item], item.id, () => ({
+      exchanges: [exchange],
+    }));
+
+    saveWorkItems(updated);
+    const loaded = loadWorkItems();
+
+    expect(loaded[0].exchanges).toHaveLength(1);
+    expect(loaded[0].exchanges[0].userPrompt).toBe('Q1');
+    expect(loaded[0].pendingExchange).toBeNull();
+  });
+
+  it('migration: items without exchanges get defaults', () => {
+    const oldItem = {
+      id: 'old-1',
+      title: 'Old',
+      status: 'active',
+      createdAt: 1000,
+      updatedAt: 1000,
+      shelf: {
+        task: null,
+        files: [],
+        pinnedPrompt: null,
+        executionNotes: null,
+        signals: { hasTask: false, hasFiles: false, hasPrompt: false, hasResults: false },
+      },
+    };
+    localStorage.setItem('thebrain_workitems_v1', JSON.stringify([oldItem]));
+
+    const loaded = loadWorkItems();
+    expect(loaded[0].exchanges).toEqual([]);
+    expect(loaded[0].pendingExchange).toBeNull();
+  });
+
+  it('saveWorkItems returns true on success', () => {
+    const item = createWorkItem();
+    expect(saveWorkItems([item])).toBe(true);
   });
 });

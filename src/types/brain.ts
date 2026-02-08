@@ -164,7 +164,8 @@ export type BrainAction =
   | { type: 'CANCEL_REQUESTED'; runId: string }
   | { type: 'CANCEL_COMPLETE'; runId: string }
   | { type: 'SET_WARNING'; runId: string; warning: WarningState | null }
-  | { type: 'CLEAR' };
+  | { type: 'CLEAR' }
+  | { type: 'LOAD_CONVERSATION_SNAPSHOT'; exchanges: Exchange[]; pendingExchange: PendingExchange | null };
 
 // -----------------------------------------------------------------------------
 // Brain Events (Logging / Debugging) — 6 variants, contract-locked

@@ -37,17 +37,24 @@ export function loadWorkItems(): WorkItem[] {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     const valid = parsed.filter(isValidWorkItem);
-    return valid;
+    // Migration (V2-H): ensure conversation fields exist on older items
+    return valid.map((item) => ({
+      ...item,
+      exchanges: item.exchanges ?? [],
+      pendingExchange: item.pendingExchange ?? null,
+    }));
   } catch {
     return [];
   }
 }
 
-export function saveWorkItems(items: WorkItem[]): void {
+export function saveWorkItems(items: WorkItem[]): boolean {
   try {
     localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(items));
+    return true;
   } catch {
-    // Storage full or unavailable — silently ignore
+    // Storage full or unavailable
+    return false;
   }
 }
 
@@ -141,6 +148,8 @@ export function createWorkItem(params?: {
     createdAt: now,
     updatedAt: now,
     shelf,
+    exchanges: [],
+    pendingExchange: null,
   };
 }
 

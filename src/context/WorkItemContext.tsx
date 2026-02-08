@@ -4,6 +4,7 @@
 
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
+import type { Exchange, PendingExchange } from '../types/brain';
 import type { WorkItem, ContextShelf } from '../types/workItem';
 import {
   loadWorkItems,
@@ -30,6 +31,12 @@ interface WorkItemContextValue {
   unarchive: (id: string) => void;
   updateShelf: (id: string, patch: Partial<ContextShelf>) => void;
   rename: (id: string, title: string) => void;
+  /** Persist conversation snapshot to a work item (V2-H) */
+  saveConversation: (id: string, exchanges: Exchange[], pendingExchange: PendingExchange | null) => void;
+  /** Non-blocking storage warning (null = no warning) */
+  storageWarning: string | null;
+  /** Dismiss the storage warning */
+  dismissStorageWarning: () => void;
 }
 
 const WorkItemCtx = createContext<WorkItemContextValue | null>(null);
@@ -41,6 +48,7 @@ const WorkItemCtx = createContext<WorkItemContextValue | null>(null);
 export function WorkItemProvider({ children }: { children: ReactNode }): JSX.Element {
   const [workItems, setWorkItems] = useState<WorkItem[]>(() => loadWorkItems());
   const [selectedId, setSelectedId] = useState<string | null>(() => loadSelectedWorkItemId());
+  const [storageWarning, setStorageWarning] = useState<string | null>(null);
 
   // Track mount to avoid double-persist on initial load
   const isMounted = useRef(false);
@@ -51,7 +59,10 @@ export function WorkItemProvider({ children }: { children: ReactNode }): JSX.Ele
       isMounted.current = true;
       return;
     }
-    saveWorkItems(workItems);
+    const success = saveWorkItems(workItems);
+    if (!success) {
+      setStorageWarning('Storage full — cannot save history.');
+    }
   }, [workItems]);
 
   // Persist selected id on change
@@ -91,6 +102,19 @@ export function WorkItemProvider({ children }: { children: ReactNode }): JSX.Ele
     setWorkItems((prev) => updateWorkItem(prev, id, () => ({ title })));
   }, []);
 
+  const saveConversation = useCallback(
+    (id: string, exchanges: Exchange[], pendingExchange: PendingExchange | null) => {
+      setWorkItems((prev) =>
+        updateWorkItem(prev, id, () => ({ exchanges, pendingExchange }))
+      );
+    },
+    [],
+  );
+
+  const dismissStorageWarning = useCallback(() => {
+    setStorageWarning(null);
+  }, []);
+
   // --- Context value ---
 
   const value: WorkItemContextValue = {
@@ -102,6 +126,9 @@ export function WorkItemProvider({ children }: { children: ReactNode }): JSX.Ele
     unarchive,
     updateShelf: updateShelfAction,
     rename,
+    saveConversation,
+    storageWarning,
+    dismissStorageWarning,
   };
 
   return <WorkItemCtx.Provider value={value}>{children}</WorkItemCtx.Provider>;

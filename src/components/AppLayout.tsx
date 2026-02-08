@@ -12,7 +12,7 @@ import { ContextShelfPanel } from './ContextShelfPanel';
 // -----------------------------------------------------------------------------
 
 export function AppLayout(): JSX.Element {
-  const { workItems, selectedWorkItemId } = useWorkItems();
+  const { workItems, selectedWorkItemId, storageWarning, dismissStorageWarning } = useWorkItems();
 
   const selectedItem = selectedWorkItemId
     ? workItems.find((item) => item.id === selectedWorkItemId) ?? null
@@ -20,6 +20,14 @@ export function AppLayout(): JSX.Element {
 
   return (
     <div className="app-layout">
+      {storageWarning && (
+        <div className="storage-warning">
+          <span className="storage-warning__message">{storageWarning}</span>
+          <button className="storage-warning__dismiss" onClick={dismissStorageWarning}>
+            &times;
+          </button>
+        </div>
+      )}
       <div className="app-layout__sidebar">
         <WorkItemSidebar />
       </div>

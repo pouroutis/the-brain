@@ -1,6 +1,8 @@
 // =============================================================================
-// The Brain — WorkItem & Context Shelf Types (V2-B)
+// The Brain — WorkItem & Context Shelf Types (V2-B, V2-H)
 // =============================================================================
+
+import type { Exchange, PendingExchange } from './brain';
 
 // -----------------------------------------------------------------------------
 // Status
@@ -46,4 +48,8 @@ export interface WorkItem {
   createdAt: number;
   updatedAt: number;
   shelf: ContextShelf;
+  /** Conversation history — persisted per work item (V2-H) */
+  exchanges: Exchange[];
+  /** In-flight exchange snapshot — persisted per work item (V2-H) */
+  pendingExchange: PendingExchange | null;
 }

@@ -122,6 +122,8 @@ interface BrainActions {
   setForceAllAdvisors: (enabled: boolean) => void;
   /** Toggle project discussion mode (injects project context) */
   setProjectDiscussionMode: (enabled: boolean) => void;
+  /** Load a conversation snapshot into BrainState (V2-H swap-on-select) */
+  loadConversationSnapshot: (exchanges: Exchange[], pendingExchange: PendingExchange | null) => void;
 }
 
 /**
@@ -448,6 +450,13 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     setProjectDiscussionModeState(enabled);
   }, []);
 
+  const loadConversationSnapshot = useCallback(
+    (exchanges: Exchange[], pendingExchange: PendingExchange | null): void => {
+      dispatch({ type: 'LOAD_CONVERSATION_SNAPSHOT', exchanges, pendingExchange });
+    },
+    [],
+  );
+
   // ---------------------------------------------------------------------------
   // Selectors
   // ---------------------------------------------------------------------------
@@ -571,6 +580,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       dismissWarning,
       setForceAllAdvisors,
       setProjectDiscussionMode,
+      loadConversationSnapshot,
       // Selectors
       getState,
       getActiveRunId,
@@ -598,6 +608,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
       dismissWarning,
       setForceAllAdvisors,
       setProjectDiscussionMode,
+      loadConversationSnapshot,
       getState,
       getActiveRunId,
       getPendingExchange,

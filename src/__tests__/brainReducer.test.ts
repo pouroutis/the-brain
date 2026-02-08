@@ -722,6 +722,88 @@ describe('brainReducer — CLEAR', () => {
 });
 
 // -----------------------------------------------------------------------------
+// LOAD_CONVERSATION_SNAPSHOT Tests (V2-H)
+// -----------------------------------------------------------------------------
+
+describe('brainReducer — LOAD_CONVERSATION_SNAPSHOT', () => {
+  it('loads exchanges and pendingExchange into state', () => {
+    const exchanges = [
+      { id: 'ex-1', userPrompt: 'Hello', responsesByAgent: {}, timestamp: 1000 },
+    ];
+
+    const action: BrainAction = {
+      type: 'LOAD_CONVERSATION_SNAPSHOT',
+      exchanges,
+      pendingExchange: null,
+    };
+
+    const result = brainReducer(initialBrainState, action);
+
+    expect(result.exchanges).toEqual(exchanges);
+    expect(result.pendingExchange).toBeNull();
+  });
+
+  it('loads with a pendingExchange', () => {
+    const pending = {
+      runId: 'run-old',
+      userPrompt: 'In progress',
+      responsesByAgent: {},
+    };
+
+    const result = brainReducer(initialBrainState, {
+      type: 'LOAD_CONVERSATION_SNAPSHOT',
+      exchanges: [],
+      pendingExchange: pending,
+    });
+
+    expect(result.pendingExchange).toEqual(pending);
+  });
+
+  it('resets transient state on load', () => {
+    const dirtyState: BrainState = {
+      ...initialBrainState,
+      warningState: { type: 'context_limit', message: 'test', dismissable: true },
+      error: 'some error',
+    };
+
+    const result = brainReducer(dirtyState, {
+      type: 'LOAD_CONVERSATION_SNAPSHOT',
+      exchanges: [],
+      pendingExchange: null,
+    });
+
+    expect(result.warningState).toBeNull();
+    expect(result.error).toBeNull();
+    expect(result.currentAgent).toBeNull();
+    expect(result.isProcessing).toBe(false);
+  });
+
+  it('preserves clearBoardVersion', () => {
+    const state = { ...initialBrainState, clearBoardVersion: 5 };
+
+    const result = brainReducer(state, {
+      type: 'LOAD_CONVERSATION_SNAPSHOT',
+      exchanges: [],
+      pendingExchange: null,
+    });
+
+    expect(result.clearBoardVersion).toBe(5);
+  });
+
+  it('BLOCKED if isProcessing', () => {
+    const state = createProcessingState('run-123');
+
+    const result = brainReducer(state, {
+      type: 'LOAD_CONVERSATION_SNAPSHOT',
+      exchanges: [],
+      pendingExchange: null,
+    });
+
+    expect(result).toBe(state);
+  });
+});
+
+// -----------------------------------------------------------------------------
 // State Invariant Tests
 // -----------------------------------------------------------------------------
 

@@ -340,6 +340,23 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
     }
 
     // -------------------------------------------------------------------------
+    // LOAD_CONVERSATION_SNAPSHOT (V2-H — swap-on-select)
+    // -------------------------------------------------------------------------
+    case 'LOAD_CONVERSATION_SNAPSHOT': {
+      // Guard: Block if currently processing
+      if (state.isProcessing) {
+        return state;
+      }
+
+      return {
+        ...initialBrainState,
+        exchanges: action.exchanges,
+        pendingExchange: action.pendingExchange,
+        clearBoardVersion: state.clearBoardVersion,
+      };
+    }
+
+    // -------------------------------------------------------------------------
     // Default: Unknown action type (TypeScript exhaustiveness)
     // -------------------------------------------------------------------------
     default: {

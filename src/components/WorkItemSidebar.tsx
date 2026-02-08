@@ -4,30 +4,57 @@
 
 import { useState, useCallback } from 'react';
 import { useWorkItems } from '../context/WorkItemContext';
+import { useBrain } from '../context/BrainContext';
 
 // -----------------------------------------------------------------------------
 // Component
 // -----------------------------------------------------------------------------
 
 export function WorkItemSidebar(): JSX.Element {
-  const { workItems, selectedWorkItemId, createNewWorkItem, selectWorkItem, archive, unarchive } = useWorkItems();
+  const { workItems, selectedWorkItemId, createNewWorkItem, selectWorkItem, archive, unarchive, saveConversation } = useWorkItems();
+  const { getState, loadConversationSnapshot } = useBrain();
   const [view, setView] = useState<'active' | 'archived'>('active');
 
   const filteredItems = workItems.filter((item) => item.status === view);
 
+  // Save current BrainState conversation to the currently-selected work item
+  const saveCurrentConversation = useCallback(() => {
+    if (!selectedWorkItemId) return;
+    const { exchanges, pendingExchange } = getState();
+    saveConversation(selectedWorkItemId, exchanges, pendingExchange);
+  }, [selectedWorkItemId, getState, saveConversation]);
+
+  // Swap: save current → create new → load empty
   const handleNewConversation = useCallback(() => {
+    saveCurrentConversation();
     createNewWorkItem();
-  }, [createNewWorkItem]);
+    loadConversationSnapshot([], null);
+  }, [saveCurrentConversation, createNewWorkItem, loadConversationSnapshot]);
+
+  // Swap: save current → select → load target
+  const handleSelectItem = useCallback(
+    (id: string) => {
+      if (id === selectedWorkItemId) return;
+      saveCurrentConversation();
+      selectWorkItem(id);
+      const item = workItems.find((w) => w.id === id);
+      loadConversationSnapshot(item?.exchanges ?? [], item?.pendingExchange ?? null);
+    },
+    [selectedWorkItemId, saveCurrentConversation, selectWorkItem, workItems, loadConversationSnapshot],
+  );
 
   const handleArchive = useCallback(
     (e: React.MouseEvent, id: string) => {
       e.stopPropagation();
       if (id === selectedWorkItemId) {
+        // Save conversation to the item before archiving
+        saveCurrentConversation();
         selectWorkItem(null);
+        loadConversationSnapshot([], null);
       }
       archive(id);
     },
-    [archive, selectWorkItem, selectedWorkItemId],
+    [archive, selectWorkItem, selectedWorkItemId, saveCurrentConversation, loadConversationSnapshot],
   );
 
   const handleRestore = useCallback(
@@ -42,10 +69,10 @@ export function WorkItemSidebar(): JSX.Element {
     (e: React.KeyboardEvent, id: string) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        selectWorkItem(id);
+        handleSelectItem(id);
       }
     },
-    [selectWorkItem],
+    [handleSelectItem],
   );
 
   return (
@@ -84,7 +111,7 @@ export function WorkItemSidebar(): JSX.Element {
             className={`work-item-sidebar__item${item.id === selectedWorkItemId ? ' work-item-sidebar__item--selected' : ''}`}
             role="button"
             tabIndex={0}
-            onClick={() => selectWorkItem(item.id)}
+            onClick={() => handleSelectItem(item.id)}
             onKeyDown={(e) => handleItemKeyDown(e, item.id)}
           >
             <div className="work-item-sidebar__item-info">

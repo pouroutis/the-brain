@@ -3,7 +3,7 @@
 // BrainChat Container Component (Discussion Mode Only)
 // =============================================================================
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useBrain } from '../context/BrainContext';
 import { useWorkItems } from '../context/WorkItemContext';
 import { ExchangeList } from './ExchangeList';
@@ -36,11 +36,30 @@ export function BrainChat(): JSX.Element {
     getPendingExchange,
     getExchanges,
     getAnchorAgent,
+    // V2-H
+    loadConversationSnapshot,
   } = useBrain();
 
   // WorkItem binding (V2-C — title derivation on first prompt)
-  const { workItems, selectedWorkItemId, rename, updateShelf } = useWorkItems();
+  const { workItems, selectedWorkItemId, rename, updateShelf, saveConversation } = useWorkItems();
   const hasSetTitleRef = useRef<string | null>(null);
+
+  // ---------------------------------------------------------------------------
+  // V2-H: Initial load — populate BrainState from selected work item on mount
+  // ---------------------------------------------------------------------------
+
+  const initialLoadDoneRef = useRef(false);
+  useEffect(() => {
+    if (initialLoadDoneRef.current) return;
+    initialLoadDoneRef.current = true;
+    if (selectedWorkItemId) {
+      const item = workItems.find((w) => w.id === selectedWorkItemId);
+      if (item && item.exchanges.length > 0) {
+        loadConversationSnapshot(item.exchanges, item.pendingExchange);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ---------------------------------------------------------------------------
   // Derived state from selectors
@@ -54,6 +73,19 @@ export function BrainChat(): JSX.Element {
   const processing = isProcessing();
   const anchorAgent = getAnchorAgent();
   const mode = 'discussion';
+
+  // ---------------------------------------------------------------------------
+  // V2-H: Auto-save — persist to work item when a new exchange is completed
+  // ---------------------------------------------------------------------------
+
+  const prevExchangeLenRef = useRef(exchanges.length);
+  useEffect(() => {
+    const currentLen = exchanges.length;
+    if (currentLen > prevExchangeLenRef.current && selectedWorkItemId) {
+      saveConversation(selectedWorkItemId, exchanges, null);
+    }
+    prevExchangeLenRef.current = currentLen;
+  }, [exchanges, selectedWorkItemId, saveConversation]);
 
   // ---------------------------------------------------------------------------
   // Warning display rule (GPT mandate):
@@ -98,8 +130,13 @@ export function BrainChat(): JSX.Element {
   }, [cancelSequence]);
 
   const handleClear = useCallback(() => {
+    if (processing) return;
     clearBoard();
-  }, [clearBoard]);
+    // V2-H: Persist cleared state to the work item
+    if (selectedWorkItemId) {
+      saveConversation(selectedWorkItemId, [], null);
+    }
+  }, [clearBoard, processing, selectedWorkItemId, saveConversation]);
 
   const handleDismissWarning = useCallback(() => {
     dismissWarning();
