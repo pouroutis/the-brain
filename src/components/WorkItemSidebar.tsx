@@ -50,6 +50,7 @@ export function WorkItemSidebar(): JSX.Element {
   );
 
   // V2-I: Blocked while processing
+  // V2-J: Fall back to next active item (not null) after archiving selected
   const handleArchive = useCallback(
     (e: React.MouseEvent, id: string) => {
       e.stopPropagation();
@@ -57,12 +58,19 @@ export function WorkItemSidebar(): JSX.Element {
       if (id === selectedWorkItemId) {
         // Save conversation to the item before archiving
         saveCurrentConversation();
-        selectWorkItem(null);
-        loadConversationSnapshot([], null);
+        // Fall back to next active item (excluding the one being archived)
+        const nextActive = workItems.find((w) => w.status === 'active' && w.id !== id);
+        if (nextActive) {
+          selectWorkItem(nextActive.id);
+          loadConversationSnapshot(nextActive.exchanges, nextActive.pendingExchange);
+        } else {
+          selectWorkItem(null);
+          loadConversationSnapshot([], null);
+        }
       }
       archive(id);
     },
-    [archive, selectWorkItem, selectedWorkItemId, processing, saveCurrentConversation, loadConversationSnapshot],
+    [archive, selectWorkItem, selectedWorkItemId, processing, saveCurrentConversation, loadConversationSnapshot, workItems],
   );
 
   const handleRestore = useCallback(

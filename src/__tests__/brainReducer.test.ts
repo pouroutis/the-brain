@@ -870,6 +870,123 @@ describe('brainReducer — Switch Safety (V2-I)', () => {
 });
 
 // -----------------------------------------------------------------------------
+// V2-J: Conversation Integrity — Pending Exchange Across Transitions
+// -----------------------------------------------------------------------------
+
+describe('brainReducer — Pending exchange integrity (V2-J)', () => {
+  it('completion then snapshot load: loaded data replaces completed exchanges', () => {
+    // Run completes normally
+    let state = createProcessingState('run-1', 'First prompt');
+    state = brainReducer(state, {
+      type: 'AGENT_COMPLETED',
+      runId: 'run-1',
+      response: createSuccessResponse('gpt'),
+    });
+    state = brainReducer(state, { type: 'SEQUENCE_COMPLETED', runId: 'run-1' });
+    expect(state.exchanges).toHaveLength(1);
+    expect(state.isProcessing).toBe(false);
+
+    // Load a different work item's conversation (simulating switch)
+    const otherExchanges = [
+      { id: 'ex-other', userPrompt: 'Other item', responsesByAgent: {}, timestamp: 5000 },
+    ];
+    state = brainReducer(state, {
+      type: 'LOAD_CONVERSATION_SNAPSHOT',
+      exchanges: otherExchanges,
+      pendingExchange: null,
+    });
+
+    expect(state.exchanges).toHaveLength(1);
+    expect(state.exchanges[0].userPrompt).toBe('Other item');
+    expect(state.pendingExchange).toBeNull();
+  });
+
+  it('empty snapshot load clears all state (simulating archive of active item)', () => {
+    let state = createProcessingState('run-1');
+    state = brainReducer(state, {
+      type: 'AGENT_COMPLETED',
+      runId: 'run-1',
+      response: createSuccessResponse('gpt'),
+    });
+    state = brainReducer(state, { type: 'SEQUENCE_COMPLETED', runId: 'run-1' });
+    expect(state.exchanges).toHaveLength(1);
+
+    state = brainReducer(state, {
+      type: 'LOAD_CONVERSATION_SNAPSHOT',
+      exchanges: [],
+      pendingExchange: null,
+    });
+
+    expect(state.exchanges).toEqual([]);
+    expect(state.pendingExchange).toBeNull();
+    expect(state.isProcessing).toBe(false);
+    expect(state.currentAgent).toBeNull();
+  });
+
+  it('rapid completion + snapshot load: no state bleed between items', () => {
+    // Start and complete a run
+    let state = createProcessingState('run-A', 'Prompt A');
+    state = brainReducer(state, {
+      type: 'AGENT_COMPLETED',
+      runId: 'run-A',
+      response: createSuccessResponse('gpt'),
+    });
+    state = brainReducer(state, { type: 'SEQUENCE_COMPLETED', runId: 'run-A' });
+
+    // Immediately load item B's snapshot (3 exchanges)
+    const itemBExchanges = [
+      { id: 'ex-b1', userPrompt: 'B1', responsesByAgent: {}, timestamp: 1000 },
+      { id: 'ex-b2', userPrompt: 'B2', responsesByAgent: {}, timestamp: 2000 },
+      { id: 'ex-b3', userPrompt: 'B3', responsesByAgent: {}, timestamp: 3000 },
+    ];
+    state = brainReducer(state, {
+      type: 'LOAD_CONVERSATION_SNAPSHOT',
+      exchanges: itemBExchanges,
+      pendingExchange: null,
+    });
+
+    // State must be exactly B's data — no remnant from A
+    expect(state.exchanges).toHaveLength(3);
+    expect(state.exchanges[0].userPrompt).toBe('B1');
+    expect(state.exchanges[2].userPrompt).toBe('B3');
+    expect(state.pendingExchange).toBeNull();
+    expect(state.warningState).toBeNull();
+    expect(state.error).toBeNull();
+  });
+
+  it('stale AGENT_COMPLETED after snapshot load is rejected', () => {
+    // Start a run for item A
+    let state = createProcessingState('run-A', 'Prompt A');
+
+    // Complete GPT
+    state = brainReducer(state, {
+      type: 'AGENT_COMPLETED',
+      runId: 'run-A',
+      response: createSuccessResponse('gpt'),
+    });
+
+    // Sequence completes, then load item B
+    state = brainReducer(state, { type: 'SEQUENCE_COMPLETED', runId: 'run-A' });
+    state = brainReducer(state, {
+      type: 'LOAD_CONVERSATION_SNAPSHOT',
+      exchanges: [],
+      pendingExchange: null,
+    });
+
+    // A stale AGENT_COMPLETED arrives for run-A (should be rejected)
+    const staleResult = brainReducer(state, {
+      type: 'AGENT_COMPLETED',
+      runId: 'run-A',
+      response: createSuccessResponse('claude'),
+    });
+
+    // State unchanged — stale action rejected (pendingExchange is null, runId can't match)
+    expect(staleResult).toBe(state);
+    expect(staleResult.exchanges).toEqual([]);
+  });
+});
+
+// -----------------------------------------------------------------------------
 // State Invariant Tests
 // -----------------------------------------------------------------------------
 

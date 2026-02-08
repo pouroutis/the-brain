@@ -54,7 +54,9 @@ export function BrainChat(): JSX.Element {
     initialLoadDoneRef.current = true;
     if (selectedWorkItemId) {
       const item = workItems.find((w) => w.id === selectedWorkItemId);
-      if (item && item.exchanges.length > 0) {
+      // V2-J: Only load snapshot for active items (archived items should have been
+      // filtered out by selection restore, but guard defensively)
+      if (item && item.status === 'active' && item.exchanges.length > 0) {
         loadConversationSnapshot(item.exchanges, item.pendingExchange);
       }
     }
@@ -85,6 +87,15 @@ export function BrainChat(): JSX.Element {
   }, [selectedWorkItemId]);
 
   const prevExchangeLenRef = useRef(exchanges.length);
+
+  // V2-J: Reset auto-save baseline on work item switch to prevent swap-triggered saves.
+  // When the selected item changes, the new snapshot's exchange count becomes the baseline.
+  // Declared before auto-save so it fires first in the same render cycle.
+  useEffect(() => {
+    prevExchangeLenRef.current = exchanges.length;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedWorkItemId]);
+
   useEffect(() => {
     const currentLen = exchanges.length;
     if (currentLen > prevExchangeLenRef.current && selectedWorkItemId) {

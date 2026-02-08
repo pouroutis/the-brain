@@ -516,3 +516,112 @@ describe('Swap guard — snapshot write only to correct item (V2-I)', () => {
     expect(updated[1].exchanges).toEqual([]);
   });
 });
+
+// -----------------------------------------------------------------------------
+// V2-J: Conversation Integrity Hardening
+// -----------------------------------------------------------------------------
+
+describe('Selection restore — archived ID fallback (V2-J)', () => {
+  it('stored id pointing to archived item falls back to first active', () => {
+    const active = createWorkItem({ title: 'Active One' });
+    const toArchive = createWorkItem({ title: 'To Archive' });
+    let items = [active, toArchive];
+    items = archiveWorkItem(items, toArchive.id);
+    saveWorkItems(items);
+    saveSelectedWorkItemId(toArchive.id);
+
+    // Simulate the restore logic from WorkItemContext init
+    const loaded = loadWorkItems();
+    const storedId = loadSelectedWorkItemId();
+    const isValid = storedId && loaded.some((w) => w.id === storedId && w.status === 'active');
+    const resolvedId = isValid ? storedId : (loaded.find((w) => w.status === 'active')?.id ?? null);
+    expect(resolvedId).toBe(active.id);
+  });
+
+  it('all items archived → falls back to null', () => {
+    const item = createWorkItem({ title: 'Only' });
+    let items = [item];
+    items = archiveWorkItem(items, item.id);
+    saveWorkItems(items);
+    saveSelectedWorkItemId(item.id);
+
+    const loaded = loadWorkItems();
+    const storedId = loadSelectedWorkItemId();
+    const isValid = storedId && loaded.some((w) => w.id === storedId && w.status === 'active');
+    const resolvedId = isValid ? storedId : (loaded.find((w) => w.status === 'active')?.id ?? null);
+    expect(resolvedId).toBeNull();
+  });
+
+  it('missing id + multiple active items → first active selected', () => {
+    const a = createWorkItem({ title: 'A' });
+    const b = createWorkItem({ title: 'B' });
+    saveWorkItems([a, b]);
+    saveSelectedWorkItemId('gone-id');
+
+    const loaded = loadWorkItems();
+    const storedId = loadSelectedWorkItemId();
+    const isValid = storedId && loaded.some((w) => w.id === storedId && w.status === 'active');
+    const resolvedId = isValid ? storedId : (loaded.find((w) => w.status === 'active')?.id ?? null);
+    expect(resolvedId).toBe(a.id);
+  });
+});
+
+describe('Archive safety — conversation snapshot before archive (V2-J)', () => {
+  it('archiveWorkItem preserves existing exchanges on the item', () => {
+    const item = createWorkItem({ title: 'Has Chat' });
+    const exchange = { id: 'ex-1', userPrompt: 'Q1', responsesByAgent: {}, timestamp: 1000 };
+    let items = updateWorkItem([item], item.id, () => ({ exchanges: [exchange] }));
+    expect(items[0].exchanges).toHaveLength(1);
+
+    items = archiveWorkItem(items, item.id);
+    expect(items[0].status).toBe('archived');
+    expect(items[0].exchanges).toHaveLength(1);
+    expect(items[0].exchanges[0].userPrompt).toBe('Q1');
+  });
+
+  it('archiving selected item allows fallback to next active (pure data)', () => {
+    const item1 = createWorkItem({ title: 'Selected' });
+    const item2 = createWorkItem({ title: 'Fallback' });
+    let items = [item1, item2];
+
+    // Save conversation to item1 before archiving
+    const exchange = { id: 'ex-1', userPrompt: 'Saved', responsesByAgent: {}, timestamp: 1000 };
+    items = updateWorkItem(items, item1.id, () => ({ exchanges: [exchange] }));
+
+    // Archive item1
+    items = archiveWorkItem(items, item1.id);
+
+    // Verify item1 is archived with conversation intact
+    const archived = items.find((w) => w.id === item1.id)!;
+    expect(archived.status).toBe('archived');
+    expect(archived.exchanges).toHaveLength(1);
+
+    // Find next active (simulating sidebar fallback)
+    const nextActive = items.find((w) => w.status === 'active' && w.id !== item1.id);
+    expect(nextActive).toBeDefined();
+    expect(nextActive!.id).toBe(item2.id);
+  });
+
+  it('no active items after archive → fallback is null', () => {
+    const item = createWorkItem({ title: 'Only' });
+    let items = [item];
+    items = archiveWorkItem(items, item.id);
+
+    const nextActive = items.find((w) => w.status === 'active');
+    expect(nextActive).toBeUndefined();
+  });
+});
+
+describe('Pending exchange write guard — caller-level status check (V2-J)', () => {
+  it('updateWorkItem still writes to archived item (no built-in guard)', () => {
+    const item = createWorkItem();
+    let items = archiveWorkItem([item], item.id);
+    expect(items[0].status).toBe('archived');
+
+    // updateWorkItem is a pure mapper — it does not check status
+    const exchange = { id: 'ex-1', userPrompt: 'Leaked', responsesByAgent: {}, timestamp: 1000 };
+    items = updateWorkItem(items, item.id, () => ({ exchanges: [exchange] }));
+    expect(items[0].exchanges).toHaveLength(1);
+    // This proves the guard must be in the caller (WorkItemContext.saveConversation)
+  });
+});

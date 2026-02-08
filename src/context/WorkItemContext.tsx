@@ -48,10 +48,11 @@ const WorkItemCtx = createContext<WorkItemContextValue | null>(null);
 export function WorkItemProvider({ children }: { children: ReactNode }): JSX.Element {
   // V2-I: Validate stored selection on init — fallback to first active or create
   const [workItems, setWorkItems] = useState<WorkItem[]>(() => loadWorkItems());
+  // V2-J: Validate stored selection — must point to an active (not archived/missing) item
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     const items = loadWorkItems();
     const storedId = loadSelectedWorkItemId();
-    if (storedId && items.some((w) => w.id === storedId)) return storedId;
+    if (storedId && items.some((w) => w.id === storedId && w.status === 'active')) return storedId;
     const firstActive = items.find((w) => w.status === 'active');
     return firstActive?.id ?? null;
   });
@@ -109,11 +110,19 @@ export function WorkItemProvider({ children }: { children: ReactNode }): JSX.Ele
     setWorkItems((prev) => updateWorkItem(prev, id, () => ({ title })));
   }, []);
 
+  // V2-J: Guard — don't write to archived or missing items
   const saveConversation = useCallback(
     (id: string, exchanges: Exchange[], pendingExchange: PendingExchange | null) => {
-      setWorkItems((prev) =>
-        updateWorkItem(prev, id, () => ({ exchanges, pendingExchange }))
-      );
+      setWorkItems((prev) => {
+        const target = prev.find((w) => w.id === id);
+        if (!target || target.status !== 'active') {
+          if (target?.status === 'archived') {
+            console.warn(`[TheBrain] saveConversation skipped: item ${id} is archived`);
+          }
+          return prev;
+        }
+        return updateWorkItem(prev, id, () => ({ exchanges, pendingExchange }));
+      });
     },
     [],
   );
