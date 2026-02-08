@@ -80,6 +80,8 @@ interface ExchangeCardProps {
   mode: BrainMode;
   /** Current CEO agent (for render order in Decision/Project modes) */
   ceo: Agent;
+  /** When false and exchange is completed, render only the anchor agent response */
+  showDiscussion?: boolean;
 }
 
 // -----------------------------------------------------------------------------
@@ -93,9 +95,12 @@ export function ExchangeCard({
   currentAgent,
   mode,
   ceo,
+  showDiscussion = true,
 }: ExchangeCardProps): JSX.Element {
-  // Derive telemetry for completed exchanges (not shown during pending)
-  const telemetry = !isPending ? deriveRoutingTelemetry(responsesByAgent) : null;
+  const collapsed = !showDiscussion && !isPending;
+
+  // Derive telemetry for completed exchanges (not shown during pending or when collapsed)
+  const telemetry = !isPending && !collapsed ? deriveRoutingTelemetry(responsesByAgent) : null;
 
   // Compute agent render order based on CEO (CEO always last)
   const agentRenderOrder = getAgentRenderOrder(ceo);
@@ -120,6 +125,9 @@ export function ExchangeCard({
       {/* Agent Responses Section (order depends on mode: Discussion=fixed, Decision/Project=CEO last) */}
       <div className="exchange-card__agents">
         {agentRenderOrder.map((agent) => {
+          // When collapsed, only render the anchor (CEO) agent
+          if (collapsed && agent !== ceo) return null;
+
           const response = responsesByAgent[agent] ?? null;
           const isActive = isPending && currentAgent === agent;
 

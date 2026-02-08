@@ -121,6 +121,31 @@ body {
   color: #6a6aaa;
 }
 
+/* V2-E — Discussion Toggle */
+
+.exchange-list__view-toggle {
+  display: flex;
+  justify-content: flex-start;
+  padding: 8px 0;
+  margin-bottom: 8px;
+}
+
+.exchange-list__toggle-btn {
+  background: transparent;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #888;
+  font-size: 0.75rem;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.exchange-list__toggle-btn:hover {
+  color: #ccc;
+  border-color: #666;
+}
+
 /* -----------------------------------------------------------------------------
    Exchange Card
    ----------------------------------------------------------------------------- */
