@@ -88,7 +88,7 @@ export function getLatestRound(exchange: Exchange): Round {
 function exchangeToTranscriptEntries(exchange: Exchange): TranscriptEntry[] {
   const entries: TranscriptEntry[] = [];
 
-  // Add user prompt first
+  // Add user prompt first (no roundNumber — user entry is per-exchange)
   entries.push({
     exchangeId: exchange.id,
     role: 'user',
@@ -96,18 +96,22 @@ function exchangeToTranscriptEntries(exchange: Exchange): TranscriptEntry[] {
     timestamp: exchange.timestamp,
   });
 
-  // V3-A: Read from latest round
-  const latestRound = getLatestRound(exchange);
+  // Iterate ALL stored rounds
   const agentOrder: TranscriptRole[] = ['gpt', 'claude', 'gemini'];
-  for (const agent of agentOrder) {
-    const response = latestRound.responsesByAgent[agent as Agent];
-    if (response && response.status === 'success' && response.content) {
-      entries.push({
-        exchangeId: exchange.id,
-        role: agent,
-        content: response.content,
-        timestamp: response.timestamp,
-      });
+  for (const round of exchange.rounds) {
+    for (const agent of agentOrder) {
+      const response = round.responsesByAgent[agent as Agent];
+      if (response) {
+        const entry: TranscriptEntry = {
+          exchangeId: exchange.id,
+          role: agent,
+          content: response.status === 'success' ? (response.content ?? '') : `[${response.status}]`,
+          timestamp: response.timestamp,
+          roundNumber: round.roundNumber,
+          status: response.status,
+        };
+        entries.push(entry);
+      }
     }
   }
 

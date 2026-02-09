@@ -137,6 +137,10 @@ export interface TranscriptEntry {
   content: string;
   /** Timestamp when this entry was created */
   timestamp: number;
+  /** Round number within the exchange (1-based). Omitted for legacy/user entries. */
+  roundNumber?: number;
+  /** Agent status if available (success/error/timeout/cancelled/skipped) */
+  status?: string;
 }
 
 // -----------------------------------------------------------------------------

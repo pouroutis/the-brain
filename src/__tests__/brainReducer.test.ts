@@ -1214,6 +1214,47 @@ describe('brainReducer — Exchange rounds (V3-A)', () => {
     expect(state.transcript[0].role).toBe('user');
     expect(state.transcript[1].role).toBe('gpt');
     expect(state.transcript[2].role).toBe('claude');
+    expect(state.transcript[1].roundNumber).toBe(1);
+    expect(state.transcript[2].roundNumber).toBe(1);
+    // User entry has no roundNumber
+    expect(state.transcript[0].roundNumber).toBeUndefined();
+  });
+
+  it('transcript serializes all stored rounds (not just latest)', () => {
+    let state = createProcessingState('run-multiround', 'Multi-round test');
+
+    const gptR1 = { agent: 'gpt' as const, timestamp: 1000, status: 'success' as const, content: 'GPT round 1' };
+    const claudeR1 = { agent: 'claude' as const, timestamp: 1001, status: 'success' as const, content: 'Claude round 1' };
+    const geminiR1 = { agent: 'gemini' as const, timestamp: 1002, status: 'success' as const, content: 'Gemini round 1' };
+    const gptR2 = { agent: 'gpt' as const, timestamp: 2000, status: 'success' as const, content: 'GPT round 2' };
+    const claudeR2 = { agent: 'claude' as const, timestamp: 2001, status: 'success' as const, content: 'Claude round 2' };
+    const geminiR2 = { agent: 'gemini' as const, timestamp: 2002, status: 'success' as const, content: 'Gemini round 2' };
+
+    state = brainReducer(state, {
+      type: 'SEQUENCE_COMPLETED',
+      runId: 'run-multiround',
+      rounds: [
+        { roundNumber: 1, responsesByAgent: { gpt: gptR1, claude: claudeR1, gemini: geminiR1 } },
+        { roundNumber: 2, responsesByAgent: { gpt: gptR2, claude: claudeR2, gemini: geminiR2 } },
+      ],
+    });
+
+    // 1 user + 3 agents × 2 rounds = 7 entries
+    expect(state.transcript).toHaveLength(7);
+
+    // User entry (no roundNumber)
+    expect(state.transcript[0].role).toBe('user');
+    expect(state.transcript[0].roundNumber).toBeUndefined();
+
+    // Round 1 agents (order: gpt, claude, gemini)
+    expect(state.transcript[1]).toMatchObject({ role: 'gpt', roundNumber: 1, content: 'GPT round 1' });
+    expect(state.transcript[2]).toMatchObject({ role: 'claude', roundNumber: 1, content: 'Claude round 1' });
+    expect(state.transcript[3]).toMatchObject({ role: 'gemini', roundNumber: 1, content: 'Gemini round 1' });
+
+    // Round 2 agents
+    expect(state.transcript[4]).toMatchObject({ role: 'gpt', roundNumber: 2, content: 'GPT round 2' });
+    expect(state.transcript[5]).toMatchObject({ role: 'claude', roundNumber: 2, content: 'Claude round 2' });
+    expect(state.transcript[6]).toMatchObject({ role: 'gemini', roundNumber: 2, content: 'Gemini round 2' });
   });
 
   it('CANCEL_COMPLETE also creates rounds[0]', () => {

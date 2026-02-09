@@ -179,11 +179,11 @@ export function BrainChat(): JSX.Element {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 
     // Export as JSON
-    const jsonContent = exportTranscriptAsJson(session, transcript);
+    const jsonContent = exportTranscriptAsJson(session, transcript, state.exchanges);
     downloadFile(jsonContent, `brain-transcript-${timestamp}.json`, 'application/json');
 
     // Export as Markdown
-    const mdContent = exportTranscriptAsMarkdown(session, transcript);
+    const mdContent = exportTranscriptAsMarkdown(session, transcript, state.exchanges);
     downloadFile(mdContent, `brain-transcript-${timestamp}.md`, 'text/markdown');
   }, [state.discussionSession, state.transcript]);
 

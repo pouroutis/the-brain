@@ -5,6 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { brainReducer, initialBrainState } from '../reducer/brainReducer';
+import { exportTranscriptAsJson } from '../utils/discussionPersistence';
 import type { BrainState, DiscussionSession, Exchange, TranscriptEntry } from '../types/brain';
 
 // -----------------------------------------------------------------------------
@@ -126,5 +127,30 @@ describe('brainReducer persistence actions', () => {
       expect(result.discussionSession?.id).not.toBe(stateWithSession.discussionSession?.id);
       expect(result.discussionSession?.exchangeCount).toBe(0);
     });
+  });
+});
+
+// -----------------------------------------------------------------------------
+// Tests: Export Utilities
+// -----------------------------------------------------------------------------
+
+describe('exportTranscriptAsJson', () => {
+  it('JSON export includes roundNumber for agent entries', () => {
+    const session = createMockSession();
+    const transcript: TranscriptEntry[] = [
+      { exchangeId: 'ex-1', role: 'user', content: 'Test', timestamp: 1000 },
+      { exchangeId: 'ex-1', role: 'gpt', content: 'GPT R1', timestamp: 1001, roundNumber: 1, status: 'success' },
+      { exchangeId: 'ex-1', role: 'claude', content: 'Claude R1', timestamp: 1002, roundNumber: 1, status: 'success' },
+      { exchangeId: 'ex-1', role: 'gpt', content: 'GPT R2', timestamp: 2001, roundNumber: 2, status: 'success' },
+      { exchangeId: 'ex-1', role: 'claude', content: 'Claude R2', timestamp: 2002, roundNumber: 2, status: 'success' },
+    ];
+
+    const json = exportTranscriptAsJson(session, transcript);
+    const parsed = JSON.parse(json);
+
+    expect(parsed.entryCount).toBe(5);
+    expect(parsed.transcript[0].roundNumber).toBeUndefined();
+    expect(parsed.transcript[1].roundNumber).toBe(1);
+    expect(parsed.transcript[3].roundNumber).toBe(2);
   });
 });
