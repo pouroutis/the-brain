@@ -190,6 +190,21 @@ body {
   padding: 8px 20px 0;
 }
 
+/* V3-C — Round labels for multi-round exchanges */
+.exchange-card__round-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 10px 20px 2px;
+  border-top: 1px solid #3a3a4a;
+}
+
+.exchange-card__round-label:first-child {
+  border-top: none;
+}
+
 /* -----------------------------------------------------------------------------
    Routing Telemetry (Phase 6)
    ----------------------------------------------------------------------------- */

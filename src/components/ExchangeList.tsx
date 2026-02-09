@@ -1,11 +1,10 @@
 // =============================================================================
 // The Brain — Multi-AI Sequential Chat System
-// ExchangeList Component (Phase 2 — Step 5)
+// ExchangeList Component (V3-C — Pass Full Rounds)
 // =============================================================================
 
 import { useState, useCallback } from 'react';
 import type { Agent, BrainMode, Exchange, PendingExchange } from '../types/brain';
-import { getLatestRound } from '../reducer/brainReducer';
 import { ExchangeCard } from './ExchangeCard';
 
 // -----------------------------------------------------------------------------
@@ -69,12 +68,12 @@ export function ExchangeList({
         </div>
       )}
 
-      {/* Render completed exchanges (historical) */}
+      {/* Render completed exchanges (historical) — V3-C: pass full rounds */}
       {exchanges.map((exchange) => (
         <ExchangeCard
           key={exchange.id}
           userPrompt={exchange.userPrompt}
-          responsesByAgent={getLatestRound(exchange).responsesByAgent}
+          rounds={exchange.rounds}
           isPending={false}
           currentAgent={null}
           mode={mode}

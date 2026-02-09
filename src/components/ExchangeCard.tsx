@@ -1,11 +1,10 @@
 // =============================================================================
 // The Brain — Multi-AI Sequential Chat System
-// ExchangeCard Component (Phase 2 — Step 5, Phase 6 — Routing Telemetry)
+// ExchangeCard Component (V3-C — Round-Aware Rendering)
 // =============================================================================
 
 import { memo, useMemo } from 'react';
-import type { Agent, AgentResponse, BrainMode, Exchange, PendingExchange } from '../types/brain';
-import { getLatestRound } from '../reducer/brainReducer';
+import type { Agent, AgentResponse, BrainMode, Exchange, PendingExchange, Round } from '../types/brain';
 import { AgentCard } from './AgentCard';
 
 // -----------------------------------------------------------------------------
@@ -19,7 +18,7 @@ const DEFAULT_AGENT_ORDER: Agent[] = ['gemini', 'claude', 'gpt'];
  * Compute agent render order based on anchor agent.
  * Anchor is always rendered last regardless of mode.
  */
-function getAgentRenderOrder(anchorAgent: Agent): Agent[] {
+export function getAgentRenderOrder(anchorAgent: Agent): Agent[] {
   const priorityOrder: Agent[] = ['gemini', 'claude', 'gpt'];
   const others = priorityOrder.filter((a) => a !== anchorAgent);
   return [...others, anchorAgent];
@@ -63,18 +62,12 @@ function deriveRoutingTelemetry(
 }
 
 // -----------------------------------------------------------------------------
-// Types
+// Types — Discriminated Union Props (V3-C)
 // -----------------------------------------------------------------------------
 
-interface ExchangeCardProps {
+interface ExchangeCardBaseProps {
   /** User prompt for this exchange */
   userPrompt: string;
-  /** Agent responses keyed by agent */
-  responsesByAgent: Partial<Record<Agent, AgentResponse>>;
-  /** Whether this is the pending (in-flight) exchange */
-  isPending: boolean;
-  /** Currently active agent (only relevant for pending exchange) */
-  currentAgent: Agent | null;
   /** Current operating mode (for content sanitization) */
   mode: BrainMode;
   /** Anchor agent (rendered last, shown in collapsed view) */
@@ -83,30 +76,49 @@ interface ExchangeCardProps {
   showDiscussion?: boolean;
 }
 
+interface CompletedExchangeCardProps extends ExchangeCardBaseProps {
+  isPending: false;
+  /** V3-C: Full rounds array for completed exchanges */
+  rounds: Round[];
+  currentAgent?: null;
+}
+
+interface PendingExchangeCardProps extends ExchangeCardBaseProps {
+  isPending: true;
+  /** Flat responsesByAgent for pending (in-flight) exchanges */
+  responsesByAgent: Partial<Record<Agent, AgentResponse>>;
+  /** Currently active agent */
+  currentAgent: Agent | null;
+}
+
+export type ExchangeCardProps = CompletedExchangeCardProps | PendingExchangeCardProps;
+
 // -----------------------------------------------------------------------------
 // Component
 // -----------------------------------------------------------------------------
 
 // V2-K: Memoized to prevent re-renders of completed exchange cards during processing
-export const ExchangeCard = memo(function ExchangeCard({
-  userPrompt,
-  responsesByAgent,
-  isPending,
-  currentAgent,
-  mode,
-  anchorAgent,
-  showDiscussion = true,
-}: ExchangeCardProps): JSX.Element {
-  const collapsed = !showDiscussion && !isPending;
+export const ExchangeCard = memo(function ExchangeCard(props: ExchangeCardProps): JSX.Element {
+  const {
+    userPrompt,
+    isPending,
+    mode,
+    anchorAgent,
+    showDiscussion = true,
+  } = props;
 
-  // V2-K: Memoize telemetry derivation — only recompute when responses change
-  const telemetry = useMemo(
-    () => (!isPending && !collapsed ? deriveRoutingTelemetry(responsesByAgent) : null),
-    [isPending, collapsed, responsesByAgent],
-  );
+  const collapsed = !showDiscussion && !isPending;
 
   // V2-K: Memoize agent render order — only recompute when anchor changes
   const agentRenderOrder = useMemo(() => getAgentRenderOrder(anchorAgent), [anchorAgent]);
+
+  // For completed exchanges, derive telemetry from the final round only
+  const telemetry = useMemo(() => {
+    if (isPending || collapsed) return null;
+    const rounds = (props as CompletedExchangeCardProps).rounds;
+    const finalRound = rounds[rounds.length - 1];
+    return finalRound ? deriveRoutingTelemetry(finalRound.responsesByAgent) : null;
+  }, [isPending, collapsed, props]);
 
   return (
     <div className={`exchange-card ${isPending ? 'exchange-card--pending' : ''}`}>
@@ -125,44 +137,122 @@ export const ExchangeCard = memo(function ExchangeCard({
         </div>
       )}
 
-      {/* Agent Responses Section (anchor agent always last) */}
+      {/* Agent Responses Section */}
       <div className="exchange-card__agents">
         {/* Outcome label — visible only when collapsed to outcome-first view */}
         {collapsed && (
           <div className="exchange-card__outcome-label">Outcome</div>
         )}
 
-        {agentRenderOrder.map((agent) => {
-          // When collapsed, only render the anchor agent
-          if (collapsed && agent !== anchorAgent) return null;
-
-          const response = responsesByAgent[agent] ?? null;
-          const isActive = isPending && currentAgent === agent;
-
-          // For completed exchanges, only show agents that have responses
-          // For pending exchanges, show all agents (some may be idle/waiting)
-          if (!isPending && response === null) {
-            return null;
-          }
-
-          // Visually emphasize anchor agent when in collapsed (outcome-first) view
-          const isAnchor = collapsed && agent === anchorAgent;
-
-          return (
-            <AgentCard
-              key={agent}
-              agent={agent}
-              response={response}
-              isActive={isActive}
-              mode={mode}
-              isAnchor={isAnchor}
-            />
-          );
-        })}
+        {isPending
+          ? renderPendingAgents(props as PendingExchangeCardProps, agentRenderOrder, mode)
+          : collapsed
+            ? renderCollapsedAgents(props as CompletedExchangeCardProps, agentRenderOrder, mode)
+            : renderExpandedRounds(props as CompletedExchangeCardProps, agentRenderOrder, mode)
+        }
       </div>
     </div>
   );
 });
+
+// -----------------------------------------------------------------------------
+// Render Helpers
+// -----------------------------------------------------------------------------
+
+/** Pending view: flat responsesByAgent, no round labels */
+function renderPendingAgents(
+  props: PendingExchangeCardProps,
+  agentRenderOrder: Agent[],
+  mode: BrainMode,
+): JSX.Element[] {
+  const elements: JSX.Element[] = [];
+  for (const agent of agentRenderOrder) {
+    const response = props.responsesByAgent[agent] ?? null;
+    const isActive = props.currentAgent === agent;
+    elements.push(
+      <AgentCard
+        key={agent}
+        agent={agent}
+        response={response}
+        isActive={isActive}
+        mode={mode}
+      />
+    );
+  }
+  return elements;
+}
+
+/** Collapsed view: only anchor agent from final round */
+function renderCollapsedAgents(
+  props: CompletedExchangeCardProps,
+  agentRenderOrder: Agent[],
+  mode: BrainMode,
+): JSX.Element[] {
+  const finalRound = props.rounds[props.rounds.length - 1];
+  if (!finalRound) return [];
+
+  const elements: JSX.Element[] = [];
+  for (const agent of agentRenderOrder) {
+    if (agent !== props.anchorAgent) continue;
+    const response = finalRound.responsesByAgent[agent] ?? null;
+    if (response === null) continue;
+    elements.push(
+      <AgentCard
+        key={agent}
+        agent={agent}
+        response={response}
+        isActive={false}
+        mode={mode}
+        isAnchor={true}
+      />
+    );
+  }
+  return elements;
+}
+
+/** Expanded view: all rounds, with "Round N" labels for multi-round exchanges */
+function renderExpandedRounds(
+  props: CompletedExchangeCardProps,
+  agentRenderOrder: Agent[],
+  mode: BrainMode,
+): JSX.Element[] {
+  const { rounds } = props;
+  const isMultiRound = rounds.length > 1;
+  const elements: JSX.Element[] = [];
+
+  for (const round of rounds) {
+    // Round label: only shown for multi-round exchanges
+    if (isMultiRound) {
+      elements.push(
+        <div
+          key={`round-label-${round.roundNumber}`}
+          className="exchange-card__round-label"
+          data-testid="round-label"
+        >
+          Round {round.roundNumber}
+        </div>
+      );
+    }
+
+    // Render all agents in this round using standard order
+    for (const agent of agentRenderOrder) {
+      const response = round.responsesByAgent[agent] ?? null;
+      // For completed exchanges, skip agents with no response
+      if (response === null) continue;
+      elements.push(
+        <AgentCard
+          key={`${round.roundNumber}-${agent}`}
+          agent={agent}
+          response={response}
+          isActive={false}
+          mode={mode}
+        />
+      );
+    }
+  }
+
+  return elements;
+}
 
 // -----------------------------------------------------------------------------
 // Factory helpers for rendering from Exchange or PendingExchange
@@ -177,7 +267,7 @@ export function renderCompletedExchange(
     <ExchangeCard
       key={exchange.id}
       userPrompt={exchange.userPrompt}
-      responsesByAgent={getLatestRound(exchange).responsesByAgent}
+      rounds={exchange.rounds}
       isPending={false}
       currentAgent={null}
       mode={mode}
