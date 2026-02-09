@@ -38,6 +38,7 @@ REASON_TAG=<short_code>
 | Total timeout | 90s |
 | Persistence | None (refresh loses state) |
 | Idempotency | runId on all events, double-submit blocked |
+| MAX_AGENT_CALLS | 15 (3 agents × 5 rounds max) |
 
 ## State Fields (8 — Locked)
 ```typescript
@@ -49,6 +50,21 @@ userCancelled: boolean
 warningState: WarningState | null
 error: string | null
 clearBoardVersion: number
+```
+
+**Exchange type** (V3-A):
+```typescript
+interface Exchange {
+  id: string;
+  userPrompt: string;
+  rounds: Round[];       // V3-A: ordered rounds (not flat responsesByAgent)
+  timestamp: number;
+}
+
+interface Round {
+  roundNumber: number;
+  responsesByAgent: Partial<Record<Agent, AgentResponse>>;
+}
 ```
 
 **NOT in state:**
@@ -66,16 +82,18 @@ SEQUENCE_TIMEOUT
 SEQUENCE_COMPLETED
 ```
 
-## Reducer Actions (8)
+## Reducer Actions (10)
 ```
 SUBMIT_START
 AGENT_STARTED
 AGENT_COMPLETED
-SEQUENCE_COMPLETED
+SEQUENCE_COMPLETED          — carries rounds: Round[]
 CANCEL_REQUESTED
-CANCEL_COMPLETE
+CANCEL_COMPLETE             — carries rounds: Round[]
+RESET_PENDING_ROUND         — clears pendingExchange.responsesByAgent between rounds
 SET_WARNING
 CLEAR
+LOAD_CONVERSATION_SNAPSHOT
 ```
 
 ## Status Values (5)
@@ -84,6 +102,14 @@ success | timeout | cancelled | error | skipped
 ```
 
 **Note**: `loading` is UI-derived, NOT a status.
+
+## Multi-Round Protocol
+
+- **Max rounds**: 5 per exchange
+- **Termination**: All agents respond with exactly `[NO_FURTHER_INPUT]` → unanimous termination
+- **Context injection**: `formatPriorRounds` serializes completed rounds for subsequent round context
+- **Round reset**: `RESET_PENDING_ROUND` clears `pendingExchange.responsesByAgent` between rounds
+- **Agent call budget**: MAX_AGENT_CALLS = 15 (3 agents × 5 rounds)
 
 ## Error Model
 - `status`: success | timeout | cancelled | error | skipped
@@ -111,7 +137,7 @@ success | timeout | cancelled | error | skipped
 - `success` → content required, no errorCode
 - `error` → errorCode required, content optional
 - `timeout|cancelled|skipped` → content optional, no errorCode
-- `responsesByAgent` keyed by Agent (guarantees uniqueness)
+- `Exchange.rounds: Round[]` — ordered rounds, not flat responsesByAgent
 
 ## Reducer Invariants
 - All sequence actions require runId match

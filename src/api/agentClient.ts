@@ -118,16 +118,19 @@ interface GeminiResponse {
 
 function buildGPTRequest(
   userPrompt: string,
-  _context: string,
+  context: string,
   projectDiscussionMode: boolean
 ): OpenAIRequest {
   const projectPrefix = buildProjectContextPrefix('gpt', projectDiscussionMode);
   const systemPrompt = projectPrefix + GPT_SYSTEM_PROMPT;
+  const userMessage = context
+    ? `Previous responses:\n${context}\n\nUser's original question: ${userPrompt}`
+    : userPrompt;
   return {
     action: 'chat',
     messages: [],
     systemPrompt,
-    userMessage: userPrompt,
+    userMessage,
     stream: false,
   };
 }
@@ -396,4 +399,4 @@ export async function callAgent(
 // Exports
 // -----------------------------------------------------------------------------
 
-export { AGENT_ENDPOINTS };
+export { AGENT_ENDPOINTS, buildGPTRequest };

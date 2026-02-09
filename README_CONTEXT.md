@@ -4,7 +4,7 @@
 > Update this file after each phase completion.
 
 ## Project
-Multi-AI Sequential Chat System  
+Multi-AI Sequential Chat System
 User asks question → GPT answers → GPT decides if Claude/Gemini respond → Sequential display
 
 ## Deployment
@@ -36,16 +36,12 @@ User asks question → GPT answers → GPT decides if Claude/Gemini respond → 
 | 7 | Mode Architecture | ✅ LOCKED |
 | 8 | Ghost Mode Design | ✅ LOCKED |
 | 9A | Trust Boundary + Persistence Design | ✅ LOCKED |
-| 9B | Ghost Mode Implementation | ✅ IMPLEMENTED |
-
-## Ghost Mode (Phase 9 — Implemented)
-
-Current behavior: Ghost Mode (CEO mode default)
-- Server-side multi-AI deliberation (GPT → Claude → Gemini, max 2 rounds)
-- Convergence gates: G1 (Compliance), G2 (Factual), G3 (Risk Stability)
-- Hard caps: 2 rounds, 6 calls, 4000 tokens, 90s timeout
-- CEO sees only final output (RECOMMENDATION, RATIONALE, RISKS ≤3, NEXT ACTIONS ≤3)
-- Audit persistence to ghost_runs table (required for CEO mode)
+| 9B | Ghost Mode Implementation | ✅ LOCKED |
+| V2-A | Hard Delete Ghost Mode (clean slate) | ✅ LOCKED |
+| V3-A | Exchange Rounds Data Model + Migration | ✅ LOCKED |
+| V3-B | Multi-Round Orchestrator Loop | ✅ LOCKED |
+| V3-C | UI Renders Rounds | ✅ LOCKED |
+| V3-D | GPT Context Fix + Doc Sync | ✅ LOCKED |
 
 ## Agent Roles (Workflow)
 
@@ -63,16 +59,22 @@ Current behavior: Ghost Mode (CEO mode default)
 - `errorCode` only exists when `status === 'error'`
 - `CLEAR` action blocked when `isProcessing === true`
 - `CLEAR` must increment `clearBoardVersion`
-- `responsesByAgent` is keyed by Agent (not an array)
 - Warnings are `runId`-scoped (no global warnings in reducer)
+- `Exchange.rounds: Round[]` — ordered rounds, not flat responsesByAgent
+- Multi-round max 5 rounds per exchange
+- `[NO_FURTHER_INPUT]` — unanimous termination token
 
 ## Cost Controls (Phase 5)
 
-- MAX_AGENT_CALLS = 3
+- MAX_AGENT_CALLS = 15 (3 agents × 5 rounds)
 - MAX_EXCHANGES = 10
 - MAX_CONTEXT_CHARS = 12000
 - Truncation: oldest-first dropping
 - Logging: dev-only
+
+## Test Count
+
+**180 tests** across 9 test files (all passing).
 
 ## File Structure
 
@@ -80,51 +82,59 @@ Current behavior: Ghost Mode (CEO mode default)
 TheBrain/
 ├── src/
 │   ├── api/
-│   │   ├── agentClient.ts
-│   │   └── ghostClient.ts          (Phase 9B)
+│   │   └── agentClient.ts
 │   ├── components/
 │   │   ├── AgentCard.tsx
+│   │   ├── AppLayout.tsx
 │   │   ├── BrainChat.tsx
-│   │   ├── ExchangeCard.tsx (Phase 6: routing telemetry)
+│   │   ├── ContextShelfPanel.tsx
+│   │   ├── ExchangeCard.tsx (V3-C: round rendering)
 │   │   ├── ExchangeList.tsx
 │   │   ├── PromptInput.tsx
 │   │   ├── ActionBar.tsx
 │   │   ├── WarningBanner.tsx
+│   │   ├── WorkItemSidebar.tsx
 │   │   └── index.ts
-│   ├── config/env.ts
-│   ├── context/BrainContext.tsx    (Phase 9B: Ghost branch)
+│   ├── config/
+│   │   ├── env.ts
+│   │   └── projectContext.ts
+│   ├── context/
+│   │   ├── BrainContext.tsx
+│   │   └── WorkItemContext.tsx
 │   ├── reducer/brainReducer.ts
 │   ├── types/
 │   │   ├── brain.ts
-│   │   └── ghost.ts                (Phase 9B)
+│   │   └── workItem.ts
 │   ├── utils/
 │   │   ├── contextBuilder.ts
 │   │   ├── costConfig.ts
-│   │   └── devLogger.ts
+│   │   ├── devLogger.ts
+│   │   ├── discussionPersistence.ts
+│   │   └── workItemStore.ts
 │   ├── __tests__/
+│   │   ├── agentCardSanitization.test.ts
+│   │   ├── agentClient.test.ts
 │   │   ├── brainReducer.test.ts
+│   │   ├── contextBuilder.test.ts
+│   │   ├── discussionPersistence.test.ts
+│   │   ├── exchangeCard.test.tsx
 │   │   ├── orchestrator.test.ts
-│   │   ├── parseGatekeepingFlags.indirect.test.ts
-│   │   ├── ghostParser.test.ts     (Phase 9B)
-│   │   ├── ghostConstraints.test.ts (Phase 9B)
-│   │   └── ghostMode.test.ts       (Phase 9B)
+│   │   ├── productionGuards.test.ts
+│   │   └── workItemStore.test.ts
 │   ├── App.tsx
 │   ├── index.tsx
 │   └── styles.css
-├── supabase/                        (Phase 9B)
+├── supabase/
 │   ├── migrations/
 │   │   └── 20260105000000_ghost_runs.sql
 │   └── functions/
 │       ├── _shared/
 │       │   ├── types.ts
 │       │   ├── cors.ts
-│       │   ├── ghostPrompts.ts
-│       │   ├── ghostParser.ts
-│       │   └── ghostCanonical.ts
+│       │   └── productionGuards.ts
 │       ├── openai-proxy/index.ts
 │       ├── anthropic-proxy/index.ts
-│       ├── gemini-proxy/index.ts
-│       └── ghost-orchestrator/index.ts
+│       └── gemini-proxy/index.ts
 ├── README_CONTEXT.md (this file)
 ├── CONTRACT.md
 ├── CLAUDE_REHYDRATION_PROMPT.md
