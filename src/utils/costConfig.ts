@@ -16,10 +16,9 @@ export const MAX_EXCHANGES = 10;
 
 /**
  * Maximum agent calls per run.
- * Single-round: 3 (GPT + Claude + Gemini)
- * Multi-round Decision mode: up to 9 (3 agents × 3 rounds max)
+ * Multi-round: 3 agents × 5 rounds max = 15
  */
-export const MAX_AGENT_CALLS = 9;
+export const MAX_AGENT_CALLS = 15;
 
 /**
  * Reserved characters for truncation marker.

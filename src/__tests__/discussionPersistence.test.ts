@@ -84,6 +84,17 @@ describe('brainReducer persistence actions', () => {
       const result = brainReducer(stateWithPending, {
         type: 'SEQUENCE_COMPLETED',
         runId: 'run-123',
+        rounds: [{
+          roundNumber: 1,
+          responsesByAgent: {
+            gpt: {
+              agent: 'gpt',
+              timestamp: Date.now(),
+              status: 'success',
+              content: 'Response',
+            },
+          },
+        }],
       });
 
       expect(result.discussionSession).not.toBeNull();

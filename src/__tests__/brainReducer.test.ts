@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { brainReducer, initialBrainState, getLatestRound } from '../reducer/brainReducer';
-import type { BrainState, BrainAction, AgentResponse } from '../types/brain';
+import type { BrainState, BrainAction, AgentResponse, Round } from '../types/brain';
 
 // -----------------------------------------------------------------------------
 // Test Helpers
@@ -281,15 +281,17 @@ describe('brainReducer — AGENT_COMPLETED', () => {
 describe('brainReducer — SEQUENCE_COMPLETED', () => {
   it('finalizes exchange and adds to exchanges array', () => {
     let state = createProcessingState('run-123', 'Test prompt');
+    const gptResponse = createSuccessResponse('gpt');
     state = brainReducer(state, {
       type: 'AGENT_COMPLETED',
       runId: 'run-123',
-      response: createSuccessResponse('gpt'),
+      response: gptResponse,
     });
 
     const action: BrainAction = {
       type: 'SEQUENCE_COMPLETED',
       runId: 'run-123',
+      rounds: [{ roundNumber: 1, responsesByAgent: { gpt: gptResponse } }],
     };
 
     const result = brainReducer(state, action);
@@ -305,6 +307,7 @@ describe('brainReducer — SEQUENCE_COMPLETED', () => {
     const action: BrainAction = {
       type: 'SEQUENCE_COMPLETED',
       runId: 'run-123',
+      rounds: [{ roundNumber: 1, responsesByAgent: {} }],
     };
 
     const result = brainReducer(state, action);
@@ -318,6 +321,7 @@ describe('brainReducer — SEQUENCE_COMPLETED', () => {
     const action: BrainAction = {
       type: 'SEQUENCE_COMPLETED',
       runId: 'run-123',
+      rounds: [{ roundNumber: 1, responsesByAgent: {} }],
     };
 
     const result = brainReducer(state, action);
@@ -339,6 +343,7 @@ describe('brainReducer — SEQUENCE_COMPLETED', () => {
     const action: BrainAction = {
       type: 'SEQUENCE_COMPLETED',
       runId: 'run-123',
+      rounds: [{ roundNumber: 1, responsesByAgent: {} }],
     };
 
     const result = brainReducer(state, action);
@@ -353,6 +358,7 @@ describe('brainReducer — SEQUENCE_COMPLETED', () => {
     const action: BrainAction = {
       type: 'SEQUENCE_COMPLETED',
       runId: 'run-123',
+      rounds: [{ roundNumber: 1, responsesByAgent: {} }],
     };
 
     const result = brainReducer(state, action);
@@ -366,6 +372,7 @@ describe('brainReducer — SEQUENCE_COMPLETED', () => {
     const action: BrainAction = {
       type: 'SEQUENCE_COMPLETED',
       runId: 'run-STALE',
+      rounds: [{ roundNumber: 1, responsesByAgent: {} }],
     };
 
     const result = brainReducer(state, action);
@@ -379,6 +386,7 @@ describe('brainReducer — SEQUENCE_COMPLETED', () => {
     const action: BrainAction = {
       type: 'SEQUENCE_COMPLETED',
       runId: 'run-123',
+      rounds: [{ roundNumber: 1, responsesByAgent: {} }],
     };
 
     const result = brainReducer(initialBrainState, action);
@@ -442,16 +450,18 @@ describe('brainReducer — CANCEL_REQUESTED', () => {
 describe('brainReducer — CANCEL_COMPLETE', () => {
   it('finalizes exchange with partial responses', () => {
     let state = createProcessingState('run-123', 'Cancelled prompt');
+    const gptResponse = createSuccessResponse('gpt');
     state = brainReducer(state, {
       type: 'AGENT_COMPLETED',
       runId: 'run-123',
-      response: createSuccessResponse('gpt'),
+      response: gptResponse,
     });
     state = { ...state, userCancelled: true };
 
     const action: BrainAction = {
       type: 'CANCEL_COMPLETE',
       runId: 'run-123',
+      rounds: [{ roundNumber: 1, responsesByAgent: { gpt: gptResponse } }],
     };
 
     const result = brainReducer(state, action);
@@ -468,6 +478,7 @@ describe('brainReducer — CANCEL_COMPLETE', () => {
     const action: BrainAction = {
       type: 'CANCEL_COMPLETE',
       runId: 'run-123',
+      rounds: [],
     };
 
     const result = brainReducer(state, action);
@@ -482,6 +493,7 @@ describe('brainReducer — CANCEL_COMPLETE', () => {
     const action: BrainAction = {
       type: 'CANCEL_COMPLETE',
       runId: 'run-123',
+      rounds: [],
     };
 
     const result = brainReducer(state, action);
@@ -496,6 +508,7 @@ describe('brainReducer — CANCEL_COMPLETE', () => {
     const action: BrainAction = {
       type: 'CANCEL_COMPLETE',
       runId: 'run-123',
+      rounds: [],
     };
 
     const result = brainReducer(state, action);
@@ -518,6 +531,7 @@ describe('brainReducer — CANCEL_COMPLETE', () => {
     const action: BrainAction = {
       type: 'CANCEL_COMPLETE',
       runId: 'run-123',
+      rounds: [],
     };
 
     const result = brainReducer(state, action);
@@ -532,6 +546,7 @@ describe('brainReducer — CANCEL_COMPLETE', () => {
     const action: BrainAction = {
       type: 'CANCEL_COMPLETE',
       runId: 'run-STALE',
+      rounds: [],
     };
 
     const result = brainReducer(state, action);
@@ -545,6 +560,7 @@ describe('brainReducer — CANCEL_COMPLETE', () => {
     const action: BrainAction = {
       type: 'CANCEL_COMPLETE',
       runId: 'run-123',
+      rounds: [],
     };
 
     const result = brainReducer(initialBrainState, action);
@@ -833,6 +849,7 @@ describe('brainReducer — Switch Safety (V2-I)', () => {
     state = brainReducer(state, {
       type: 'SEQUENCE_COMPLETED',
       runId: 'run-done',
+      rounds: [{ roundNumber: 1, responsesByAgent: {} }],
     });
     expect(state.isProcessing).toBe(false);
 
@@ -855,6 +872,7 @@ describe('brainReducer — Switch Safety (V2-I)', () => {
     state = brainReducer(state, {
       type: 'CANCEL_COMPLETE',
       runId: 'run-cancel',
+      rounds: [],
     });
     expect(state.isProcessing).toBe(false);
 
@@ -882,7 +900,7 @@ describe('brainReducer — Pending exchange integrity (V2-J)', () => {
       runId: 'run-1',
       response: createSuccessResponse('gpt'),
     });
-    state = brainReducer(state, { type: 'SEQUENCE_COMPLETED', runId: 'run-1' });
+    state = brainReducer(state, { type: 'SEQUENCE_COMPLETED', runId: 'run-1', rounds: [{ roundNumber: 1, responsesByAgent: {} }] });
     expect(state.exchanges).toHaveLength(1);
     expect(state.isProcessing).toBe(false);
 
@@ -908,7 +926,7 @@ describe('brainReducer — Pending exchange integrity (V2-J)', () => {
       runId: 'run-1',
       response: createSuccessResponse('gpt'),
     });
-    state = brainReducer(state, { type: 'SEQUENCE_COMPLETED', runId: 'run-1' });
+    state = brainReducer(state, { type: 'SEQUENCE_COMPLETED', runId: 'run-1', rounds: [{ roundNumber: 1, responsesByAgent: {} }] });
     expect(state.exchanges).toHaveLength(1);
 
     state = brainReducer(state, {
@@ -931,7 +949,7 @@ describe('brainReducer — Pending exchange integrity (V2-J)', () => {
       runId: 'run-A',
       response: createSuccessResponse('gpt'),
     });
-    state = brainReducer(state, { type: 'SEQUENCE_COMPLETED', runId: 'run-A' });
+    state = brainReducer(state, { type: 'SEQUENCE_COMPLETED', runId: 'run-A', rounds: [{ roundNumber: 1, responsesByAgent: {} }] });
 
     // Immediately load item B's snapshot (3 exchanges)
     const itemBExchanges = [
@@ -966,7 +984,7 @@ describe('brainReducer — Pending exchange integrity (V2-J)', () => {
     });
 
     // Sequence completes, then load item B
-    state = brainReducer(state, { type: 'SEQUENCE_COMPLETED', runId: 'run-A' });
+    state = brainReducer(state, { type: 'SEQUENCE_COMPLETED', runId: 'run-A', rounds: [{ roundNumber: 1, responsesByAgent: {} }] });
     state = brainReducer(state, {
       type: 'LOAD_CONVERSATION_SNAPSHOT',
       exchanges: [],
@@ -1074,6 +1092,7 @@ describe('brainReducer — Memory safety (V2-K)', () => {
     state = brainReducer(state, {
       type: 'SEQUENCE_COMPLETED',
       runId: 'run-big',
+      rounds: [{ roundNumber: 1, responsesByAgent: { gpt: createSuccessResponse('gpt') } }],
     });
 
     // Should have 101 exchanges
@@ -1094,12 +1113,14 @@ describe('brainReducer — Memory safety (V2-K)', () => {
 // -----------------------------------------------------------------------------
 
 describe('brainReducer — Exchange rounds (V3-A)', () => {
-  it('finalizePendingExchange creates rounds[0] from pending responsesByAgent', () => {
+  it('SEQUENCE_COMPLETED creates rounds from action.rounds', () => {
     let state = createProcessingState('run-rounds', 'Rounds test');
+    const gptResponse = createSuccessResponse('gpt');
+    const claudeResponse = createSuccessResponse('claude');
     state = brainReducer(state, {
       type: 'AGENT_COMPLETED',
       runId: 'run-rounds',
-      response: createSuccessResponse('gpt'),
+      response: gptResponse,
     });
     state = brainReducer(state, {
       type: 'AGENT_STARTED',
@@ -1109,9 +1130,13 @@ describe('brainReducer — Exchange rounds (V3-A)', () => {
     state = brainReducer(state, {
       type: 'AGENT_COMPLETED',
       runId: 'run-rounds',
-      response: createSuccessResponse('claude'),
+      response: claudeResponse,
     });
-    state = brainReducer(state, { type: 'SEQUENCE_COMPLETED', runId: 'run-rounds' });
+    state = brainReducer(state, {
+      type: 'SEQUENCE_COMPLETED',
+      runId: 'run-rounds',
+      rounds: [{ roundNumber: 1, responsesByAgent: { gpt: gptResponse, claude: claudeResponse } }],
+    });
 
     const exchange = state.exchanges[0];
     expect(exchange.rounds).toHaveLength(1);
@@ -1127,7 +1152,11 @@ describe('brainReducer — Exchange rounds (V3-A)', () => {
       runId: 'run-no-legacy',
       response: createSuccessResponse('gpt'),
     });
-    state = brainReducer(state, { type: 'SEQUENCE_COMPLETED', runId: 'run-no-legacy' });
+    state = brainReducer(state, {
+      type: 'SEQUENCE_COMPLETED',
+      runId: 'run-no-legacy',
+      rounds: [{ roundNumber: 1, responsesByAgent: { gpt: createSuccessResponse('gpt') } }],
+    });
 
     const exchange = state.exchanges[0];
     expect('responsesByAgent' in exchange).toBe(false);
@@ -1136,12 +1165,17 @@ describe('brainReducer — Exchange rounds (V3-A)', () => {
 
   it('getLatestRound returns rounds[rounds.length - 1]', () => {
     let state = createProcessingState('run-latest', 'Latest');
+    const gptResponse = createSuccessResponse('gpt');
     state = brainReducer(state, {
       type: 'AGENT_COMPLETED',
       runId: 'run-latest',
-      response: createSuccessResponse('gpt'),
+      response: gptResponse,
     });
-    state = brainReducer(state, { type: 'SEQUENCE_COMPLETED', runId: 'run-latest' });
+    state = brainReducer(state, {
+      type: 'SEQUENCE_COMPLETED',
+      runId: 'run-latest',
+      rounds: [{ roundNumber: 1, responsesByAgent: { gpt: gptResponse } }],
+    });
 
     const exchange = state.exchanges[0];
     const latest = getLatestRound(exchange);
@@ -1152,10 +1186,12 @@ describe('brainReducer — Exchange rounds (V3-A)', () => {
 
   it('transcript entries derive from rounds (not legacy responsesByAgent)', () => {
     let state = createProcessingState('run-transcript', 'Transcript test');
+    const gptResponse = createSuccessResponse('gpt');
+    const claudeResponse = createSuccessResponse('claude');
     state = brainReducer(state, {
       type: 'AGENT_COMPLETED',
       runId: 'run-transcript',
-      response: createSuccessResponse('gpt'),
+      response: gptResponse,
     });
     state = brainReducer(state, {
       type: 'AGENT_STARTED',
@@ -1165,9 +1201,13 @@ describe('brainReducer — Exchange rounds (V3-A)', () => {
     state = brainReducer(state, {
       type: 'AGENT_COMPLETED',
       runId: 'run-transcript',
-      response: createSuccessResponse('claude'),
+      response: claudeResponse,
     });
-    state = brainReducer(state, { type: 'SEQUENCE_COMPLETED', runId: 'run-transcript' });
+    state = brainReducer(state, {
+      type: 'SEQUENCE_COMPLETED',
+      runId: 'run-transcript',
+      rounds: [{ roundNumber: 1, responsesByAgent: { gpt: gptResponse, claude: claudeResponse } }],
+    });
 
     // Transcript: user + gpt + claude = 3 entries
     expect(state.transcript).toHaveLength(3);
@@ -1178,19 +1218,89 @@ describe('brainReducer — Exchange rounds (V3-A)', () => {
 
   it('CANCEL_COMPLETE also creates rounds[0]', () => {
     let state = createProcessingState('run-cancel-rounds', 'Cancel rounds');
+    const gptResponse = createSuccessResponse('gpt');
     state = brainReducer(state, {
       type: 'AGENT_COMPLETED',
       runId: 'run-cancel-rounds',
-      response: createSuccessResponse('gpt'),
+      response: gptResponse,
     });
     state = { ...state, userCancelled: true };
-    state = brainReducer(state, { type: 'CANCEL_COMPLETE', runId: 'run-cancel-rounds' });
+    state = brainReducer(state, {
+      type: 'CANCEL_COMPLETE',
+      runId: 'run-cancel-rounds',
+      rounds: [{ roundNumber: 1, responsesByAgent: { gpt: gptResponse } }],
+    });
 
     const exchange = state.exchanges[0];
     expect(exchange.rounds).toHaveLength(1);
     expect(exchange.rounds[0].roundNumber).toBe(1);
     expect(exchange.rounds[0].responsesByAgent.gpt).toBeDefined();
     expect('responsesByAgent' in exchange).toBe(false);
+  });
+});
+
+// -----------------------------------------------------------------------------
+// V3-B: RESET_PENDING_ROUND Tests
+// -----------------------------------------------------------------------------
+
+describe('brainReducer — RESET_PENDING_ROUND (V3-B)', () => {
+  it('clears responsesByAgent, keeps isProcessing=true', () => {
+    let state = createProcessingState('run-reset');
+    state = brainReducer(state, {
+      type: 'AGENT_COMPLETED',
+      runId: 'run-reset',
+      response: createSuccessResponse('gpt'),
+    });
+
+    const result = brainReducer(state, { type: 'RESET_PENDING_ROUND', runId: 'run-reset' });
+
+    expect(result.pendingExchange?.responsesByAgent).toEqual({});
+    expect(result.isProcessing).toBe(true);
+    expect(result.pendingExchange?.runId).toBe('run-reset');
+    expect(result.pendingExchange?.userPrompt).toBe('test');
+    expect(result.currentAgent).toBeNull();
+  });
+
+  it('REJECTED on runId mismatch', () => {
+    const state = createProcessingState('run-reset');
+    const result = brainReducer(state, { type: 'RESET_PENDING_ROUND', runId: 'run-stale' });
+    expect(result).toBe(state);
+  });
+
+  it('REJECTED if pendingExchange is null', () => {
+    const result = brainReducer(initialBrainState, { type: 'RESET_PENDING_ROUND', runId: 'run-x' });
+    expect(result).toBe(initialBrainState);
+  });
+});
+
+// -----------------------------------------------------------------------------
+// V3-B: Multi-round SEQUENCE_COMPLETED Tests
+// -----------------------------------------------------------------------------
+
+describe('brainReducer — Multi-round SEQUENCE_COMPLETED (V3-B)', () => {
+  it('creates Exchange with multi-round rounds array', () => {
+    const state = createProcessingState('run-multi', 'Multi-round test');
+    const rounds: Round[] = [
+      { roundNumber: 1, responsesByAgent: { gpt: createSuccessResponse('gpt') } },
+      { roundNumber: 2, responsesByAgent: { gpt: createSuccessResponse('gpt'), claude: createSuccessResponse('claude') } },
+    ];
+
+    const result = brainReducer(state, { type: 'SEQUENCE_COMPLETED', runId: 'run-multi', rounds });
+
+    expect(result.exchanges).toHaveLength(1);
+    expect(result.exchanges[0].rounds).toHaveLength(2);
+    expect(result.exchanges[0].rounds[0].roundNumber).toBe(1);
+    expect(result.exchanges[0].rounds[1].roundNumber).toBe(2);
+    expect(result.exchanges[0].rounds[1].responsesByAgent.claude).toBeDefined();
+  });
+
+  it('SEQUENCE_COMPLETED with empty rounds creates Exchange with empty rounds[]', () => {
+    const state = createProcessingState('run-empty', 'Empty rounds');
+    const result = brainReducer(state, { type: 'SEQUENCE_COMPLETED', runId: 'run-empty', rounds: [] });
+
+    expect(result.exchanges).toHaveLength(1);
+    expect(result.exchanges[0].rounds).toEqual([]);
+    expect(result.exchanges[0].userPrompt).toBe('Empty rounds');
   });
 });
 

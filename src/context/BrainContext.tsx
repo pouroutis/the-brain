@@ -22,11 +22,13 @@ import type {
   BrainState,
   Exchange,
   PendingExchange,
+  Round,
   WarningState,
   ErrorCode,
 } from '../types/brain';
 import { brainReducer, initialBrainState, getLatestRound } from '../reducer/brainReducer';
 import { callAgent } from '../api/agentClient';
+import { formatPriorRounds } from '../utils/contextBuilder';
 import { env } from '../config/env';
 
 // -----------------------------------------------------------------------------
@@ -37,6 +39,12 @@ import { env } from '../config/env';
  * Agent call timeout in milliseconds (matches agentClient DEFAULT_TIMEOUT_MS)
  */
 const AGENT_TIMEOUT_MS = 30_000;
+
+/** V3-B: Maximum deliberation rounds per exchange */
+const MAX_ROUNDS = 5;
+
+/** V3-B: Token agents emit when they have nothing to add */
+const TERMINATION_TOKEN = '[NO_FURTHER_INPUT]';
 
 // -----------------------------------------------------------------------------
 // Helper: Generate Run ID
@@ -49,47 +57,6 @@ function generateRunId(): string {
 // -----------------------------------------------------------------------------
 // Orchestrator Helpers
 // -----------------------------------------------------------------------------
-
-/**
- * Gatekeeping flags parsed from GPT's response.
- */
-interface GatekeepingFlags {
-  callClaude: boolean;
-  callGemini: boolean;
-  reasonTag: string;
-  valid: boolean;
-}
-
-/**
- * Parse GPT's gatekeeping response to extract routing flags.
- */
-function parseGatekeepingFlags(content: string): GatekeepingFlags {
-  const defaultFlags: GatekeepingFlags = {
-    callClaude: true,
-    callGemini: true,
-    reasonTag: 'parse_failed',
-    valid: false,
-  };
-
-  try {
-    const callClaudeMatch = content.match(/CALL_CLAUDE\s*=\s*(true|false)/i);
-    const callGeminiMatch = content.match(/CALL_GEMINI\s*=\s*(true|false)/i);
-    const reasonTagMatch = content.match(/REASON_TAG\s*=\s*(\S+)/i);
-
-    if (!callClaudeMatch || !callGeminiMatch) {
-      return defaultFlags;
-    }
-
-    return {
-      callClaude: callClaudeMatch[1].toLowerCase() === 'true',
-      callGemini: callGeminiMatch[1].toLowerCase() === 'true',
-      reasonTag: reasonTagMatch?.[1] ?? 'default',
-      valid: true,
-    };
-  } catch {
-    return defaultFlags;
-  }
-}
 
 /**
  * Compute agent order based on anchor agent.
@@ -269,23 +236,27 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
     const sequenceAbortController = new AbortController();
     abortControllerRef.current = sequenceAbortController;
 
-    const handleCancel = (): void => {
+    const isCancelled = (): boolean => userCancelledRef.current;
+
+    const handleCancel = (rounds: Round[]): void => {
       sequenceAbortController.abort();
-      dispatch({ type: 'CANCEL_COMPLETE', runId });
+      dispatch({ type: 'CANCEL_COMPLETE', runId, rounds });
       activeRunIdRef.current = null;
       abortControllerRef.current = null;
     };
 
-    const isCancelled = (): boolean => userCancelledRef.current;
-
     const runSequence = async (): Promise<void> => {
-      let conversationContext = '';
       const useProjectContext = projectDiscussionModeRef.current;
       const currentAnchor = anchorAgentRef.current;
-
       const agentOrder = getAgentOrder(currentAnchor);
 
-      const callAgentWithTimeout = async (agent: Agent): Promise<AgentResponse> => {
+      const agentLabels: Record<Agent, string> = {
+        gpt: 'GPT',
+        claude: 'Claude',
+        gemini: 'Gemini',
+      };
+
+      const callAgentWithTimeout = async (agent: Agent, context: string): Promise<AgentResponse> => {
         const agentAbortController = new AbortController();
         sequenceAbortController.signal.addEventListener('abort', () => {
           agentAbortController.abort();
@@ -300,7 +271,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
         const response = await callAgent(
           agent,
           userPrompt,
-          conversationContext,
+          context,
           agentAbortController,
           {
             runId,
@@ -314,74 +285,68 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
         return response;
       };
 
-      let flags: GatekeepingFlags = {
-        callClaude: true,
-        callGemini: true,
-        reasonTag: 'no_gatekeeping',
-        valid: false,
-      };
+      // V3-B: Multi-round loop
+      const completedRounds: Round[] = [];
+      let roundNumber = 1;
+      let terminated = false;
 
-      for (let i = 0; i < agentOrder.length; i++) {
-        const agent = agentOrder[i];
-        const isFirstAgent = i === 0;
+      while (roundNumber <= MAX_ROUNDS && !terminated) {
+        const roundResponses: Partial<Record<Agent, AgentResponse>> = {};
 
-        if (isCancelled()) {
-          handleCancel();
-          return;
+        // Build round context from prior rounds
+        let roundContext = '';
+        if (roundNumber > 1) {
+          roundContext = formatPriorRounds(completedRounds);
         }
 
-        dispatch({ type: 'AGENT_STARTED', runId, agent });
+        for (let i = 0; i < agentOrder.length; i++) {
+          const agent = agentOrder[i];
 
-        const response = await callAgentWithTimeout(agent);
+          if (isCancelled()) { handleCancel(completedRounds); return; }
 
-        if (isCancelled()) {
-          handleCancel();
-          return;
-        }
+          dispatch({ type: 'AGENT_STARTED', runId, agent });
 
-        if (!response) {
-          continue;
-        }
-
-        dispatch({ type: 'AGENT_COMPLETED', runId, response });
-
-        if (response.status === 'success' && response.content) {
-          const agentLabels: Record<Agent, string> = {
-            gpt: 'GPT',
-            claude: 'Claude',
-            gemini: 'Gemini',
-          };
-          conversationContext += `${agentLabels[agent]}: ${response.content}\n\n`;
-        }
-
-        if (isFirstAgent && agent === 'gpt') {
-          if (response.status === 'success' && response.content) {
-            flags = parseGatekeepingFlags(response.content);
-          } else {
-            flags = {
-              callClaude: true,
-              callGemini: true,
-              reasonTag: 'gpt_failed',
-              valid: false,
-            };
+          // Build per-agent context: prior rounds + earlier agents in current round
+          let agentContext = roundContext;
+          for (const prevAgent of agentOrder.slice(0, i)) {
+            const prevResp = roundResponses[prevAgent];
+            if (prevResp?.status === 'success' && prevResp.content) {
+              agentContext += (agentContext ? '\n\n' : '') + `${agentLabels[prevAgent]}: ${prevResp.content}`;
+            }
           }
 
-          if (!flags.valid) {
-            dispatch({
-              type: 'SET_WARNING',
-              runId,
-              warning: {
-                type: 'context_limit',
-                message: `Gatekeeping parse failed (${flags.reasonTag}). Calling all agents.`,
-                dismissable: true,
-              },
-            });
+          const response = await callAgentWithTimeout(agent, agentContext);
+
+          if (isCancelled()) { handleCancel(completedRounds); return; }
+          if (!response) continue;
+
+          dispatch({ type: 'AGENT_COMPLETED', runId, response });
+          roundResponses[agent] = response;
+        }
+
+        // Build Round from local responses
+        const round: Round = { roundNumber, responsesByAgent: { ...roundResponses } };
+
+        // Check termination: all 3 agents returned [NO_FURTHER_INPUT]
+        const allTerminated = agentOrder.every((agent) => {
+          const resp = roundResponses[agent];
+          return resp?.status === 'success' && resp.content?.trim() === TERMINATION_TOKEN;
+        });
+
+        if (allTerminated) {
+          terminated = true;
+        } else {
+          completedRounds.push(round);
+          roundNumber++;
+
+          if (roundNumber <= MAX_ROUNDS) {
+            dispatch({ type: 'RESET_PENDING_ROUND', runId });
           }
         }
       }
 
       if (!isCancelled() && activeRunIdRef.current === runId) {
-        dispatch({ type: 'SEQUENCE_COMPLETED', runId });
+        dispatch({ type: 'SEQUENCE_COMPLETED', runId, rounds: completedRounds });
       }
 
       activeRunIdRef.current = null;
@@ -390,7 +355,7 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
 
     runSequence().catch(() => {
       if (activeRunIdRef.current === runId) {
-        dispatch({ type: 'SEQUENCE_COMPLETED', runId });
+        dispatch({ type: 'SEQUENCE_COMPLETED', runId, rounds: [] });
       }
       activeRunIdRef.current = null;
       abortControllerRef.current = null;

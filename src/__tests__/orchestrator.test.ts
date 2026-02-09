@@ -116,15 +116,18 @@ beforeEach(() => {
 // -----------------------------------------------------------------------------
 
 describe('Orchestrator — Happy Path', () => {
-  it('calls Claude → Gemini → GPT in sequence (anchor=GPT speaks last)', async () => {
-    const claudeResponse = createMockResponse('claude', 'Claude response');
+  it('calls Gemini → Claude → GPT in sequence (anchor=GPT speaks last), terminates round 2', async () => {
     const geminiResponse = createMockResponse('gemini', 'Gemini response');
+    const claudeResponse = createMockResponse('claude', 'Claude response');
     const gptResponse = createGPTResponseWithFlags(true, true, 'comprehensive');
+    const nfiResponse = createMockResponse('gpt', '[NO_FURTHER_INPUT]');
 
+    // Round 1: content responses; Round 2+: NFI → terminates
     mockCallAgent
-      .mockResolvedValueOnce(claudeResponse)
       .mockResolvedValueOnce(geminiResponse)
-      .mockResolvedValueOnce(gptResponse);
+      .mockResolvedValueOnce(claudeResponse)
+      .mockResolvedValueOnce(gptResponse)
+      .mockResolvedValue(nfiResponse);
 
     const { result } = renderHook(() => useBrain(), { wrapper });
 
@@ -138,8 +141,9 @@ describe('Orchestrator — Happy Path', () => {
       expect(result.current.isProcessing()).toBe(false);
     });
 
-    // Verify all agents were called (anchor=GPT speaks LAST, order: gemini, claude, gpt)
-    expect(mockCallAgent).toHaveBeenCalledTimes(3);
+    // V3-B: 3 calls (round 1 content) + 3 calls (round 2 NFI termination) = 6
+    expect(mockCallAgent).toHaveBeenCalledTimes(6);
+    // Round 1 agent order: gemini, claude, gpt
     expect(mockCallAgent).toHaveBeenNthCalledWith(
       1,
       'gemini',
@@ -165,20 +169,24 @@ describe('Orchestrator — Happy Path', () => {
       expect.objectContaining({ runId: expect.any(String), callIndex: 3, exchanges: expect.any(Array) })
     );
 
-    // Verify exchange was finalized
+    // Verify exchange was finalized with 1 round (termination round discarded)
     expect(result.current.getExchanges()).toHaveLength(1);
     const exchange = result.current.getExchanges()[0];
+    expect(exchange.rounds).toHaveLength(1);
     expect(getLatestRound(exchange).responsesByAgent.gpt).toBeDefined();
     expect(getLatestRound(exchange).responsesByAgent.claude).toBeDefined();
     expect(getLatestRound(exchange).responsesByAgent.gemini).toBeDefined();
   });
 
   it('finalizes exchange with all responses on success', async () => {
-    // anchor=GPT speaks last: claude, gemini, gpt
+    // anchor=GPT speaks last: gemini, claude, gpt
+    // Round 1: content, Round 2: NFI → terminate
+    const nfiResponse = createMockResponse('gpt', '[NO_FURTHER_INPUT]');
     mockCallAgent
-      .mockResolvedValueOnce(createMockResponse('claude', 'Claude says'))
       .mockResolvedValueOnce(createMockResponse('gemini', 'Gemini says'))
-      .mockResolvedValueOnce(createGPTResponseWithFlags(true, true));
+      .mockResolvedValueOnce(createMockResponse('claude', 'Claude says'))
+      .mockResolvedValueOnce(createGPTResponseWithFlags(true, true))
+      .mockResolvedValue(nfiResponse);
 
     const { result } = renderHook(() => useBrain(), { wrapper });
 
@@ -192,6 +200,7 @@ describe('Orchestrator — Happy Path', () => {
 
     const exchange = result.current.getExchanges()[0];
     expect(exchange.userPrompt).toBe('Hello');
+    expect(exchange.rounds).toHaveLength(1);
     expect(getLatestRound(exchange).responsesByAgent.gpt?.status).toBe('success');
     expect(getLatestRound(exchange).responsesByAgent.claude?.status).toBe('success');
     expect(getLatestRound(exchange).responsesByAgent.gemini?.status).toBe('success');
@@ -523,18 +532,21 @@ describe('Orchestrator — Clear Board', () => {
   it('clearBoard is blocked while processing', async () => {
     let secondExchangeResolve: (value: AgentResponse) => void;
 
-    // anchor=GPT speaks last: claude, gemini, gpt
-    // Phase 2F: Force-all means 3 calls per exchange
-    // First exchange (calls 1-3) resolves immediately
-    // Second exchange (call 4+) hangs until resolved
+    // anchor=GPT speaks last: gemini, claude, gpt
+    // V3-B: First exchange = round 1 (calls 1-3 content) + round 2 (calls 4-6 NFI → terminate)
+    // Second exchange hangs on call 7
     let callCount = 0;
     mockCallAgent.mockImplementation((agent) => {
       callCount++;
-      // First exchange: calls 1-3 (Claude, Gemini, GPT) resolve immediately
+      // First exchange, round 1: calls 1-3 content
       if (callCount <= 3) {
         return Promise.resolve(createMockResponse(agent, `${agent} response`));
       }
-      // Second exchange: call 4 (Claude) hangs
+      // First exchange, round 2: calls 4-6 NFI → terminates
+      if (callCount <= 6) {
+        return Promise.resolve(createMockResponse(agent, '[NO_FURTHER_INPUT]'));
+      }
+      // Second exchange: call 7 hangs
       return new Promise((resolve) => {
         secondExchangeResolve = resolve;
       });
@@ -542,7 +554,7 @@ describe('Orchestrator — Clear Board', () => {
 
     const { result } = renderHook(() => useBrain(), { wrapper });
 
-    // First exchange completes (3 agent calls)
+    // First exchange completes (6 agent calls: round 1 content + round 2 NFI)
     act(() => {
       result.current.submitPrompt('Setup');
     });
@@ -553,7 +565,7 @@ describe('Orchestrator — Clear Board', () => {
 
     expect(result.current.getExchanges()).toHaveLength(1);
 
-    // Start second exchange (will hang on Claude call)
+    // Start second exchange (will hang on first agent call)
     act(() => {
       result.current.submitPrompt('Processing');
     });
@@ -568,13 +580,13 @@ describe('Orchestrator — Clear Board', () => {
     // Should still have the exchange (clear blocked)
     expect(result.current.getExchanges()).toHaveLength(1);
 
-    // Cleanup - resolve second exchange Claude, then Gemini/GPT will also resolve
+    // Cleanup - resolve hanging call, then remaining agents return NFI
     mockCallAgent.mockImplementation((agent) => {
-      return Promise.resolve(createMockResponse(agent, `${agent} response`));
+      return Promise.resolve(createMockResponse(agent, '[NO_FURTHER_INPUT]'));
     });
 
     await act(async () => {
-      secondExchangeResolve!(createMockResponse('claude', 'Claude response'));
+      secondExchangeResolve!(createMockResponse('gemini', 'Gemini response'));
     });
 
     await waitFor(() => {
@@ -583,4 +595,186 @@ describe('Orchestrator — Clear Board', () => {
   });
 });
 
+// -----------------------------------------------------------------------------
+// V3-B Multi-Round Tests
+// -----------------------------------------------------------------------------
+
+describe('Orchestrator — V3-B Multi-Round', () => {
+  it('round loop basic: content round 1, NFI round 2 → 1 round in exchange', async () => {
+    // Round 1: all agents return content
+    // Round 2: all agents return NFI → terminates, round discarded
+    const nfi = createMockResponse('gpt', '[NO_FURTHER_INPUT]');
+    mockCallAgent
+      .mockResolvedValueOnce(createMockResponse('gemini', 'Gemini R1'))
+      .mockResolvedValueOnce(createMockResponse('claude', 'Claude R1'))
+      .mockResolvedValueOnce(createMockResponse('gpt', 'GPT R1'))
+      .mockResolvedValue(nfi);
+
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    act(() => {
+      result.current.submitPrompt('Multi-round test');
+    });
+
+    await waitFor(() => {
+      expect(result.current.isProcessing()).toBe(false);
+    });
+
+    const exchange = result.current.getExchanges()[0];
+    expect(exchange.rounds).toHaveLength(1);
+    expect(exchange.rounds[0].roundNumber).toBe(1);
+    // 3 content + 3 NFI = 6 total calls
+    expect(mockCallAgent).toHaveBeenCalledTimes(6);
+  });
+
+  it('max rounds reached: always returns content → 5 rounds', async () => {
+    // Every call returns content → never terminates → hits MAX_ROUNDS (5)
+    mockCallAgent.mockImplementation((agent: Agent) => {
+      return Promise.resolve(createMockResponse(agent, `${agent} round content`));
+    });
+
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    act(() => {
+      result.current.submitPrompt('Max rounds test');
+    });
+
+    await waitFor(() => {
+      expect(result.current.isProcessing()).toBe(false);
+    });
+
+    const exchange = result.current.getExchanges()[0];
+    expect(exchange.rounds).toHaveLength(5);
+    expect(exchange.rounds[0].roundNumber).toBe(1);
+    expect(exchange.rounds[4].roundNumber).toBe(5);
+    // 5 rounds × 3 agents = 15 calls
+    expect(mockCallAgent).toHaveBeenCalledTimes(15);
+  });
+
+  it('round context propagation: round 2+ receives prior round context', async () => {
+    // Round 1: content, Round 2: content, Round 3: NFI
+    let callNum = 0;
+    mockCallAgent.mockImplementation((agent: Agent) => {
+      callNum++;
+      // Calls 1-6: content (rounds 1-2)
+      if (callNum <= 6) {
+        return Promise.resolve(createMockResponse(agent, `${agent} R${Math.ceil(callNum / 3)}`));
+      }
+      // Calls 7-9: NFI (round 3 → terminate)
+      return Promise.resolve(createMockResponse(agent, '[NO_FURTHER_INPUT]'));
+    });
+
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    act(() => {
+      result.current.submitPrompt('Context propagation test');
+    });
+
+    await waitFor(() => {
+      expect(result.current.isProcessing()).toBe(false);
+    });
+
+    // 2 content rounds + 1 terminated round = 2 rounds saved
+    const exchange = result.current.getExchanges()[0];
+    expect(exchange.rounds).toHaveLength(2);
+
+    // Round 2 agents (calls 4-6) should have received round 1 context
+    // Call 4 is gemini in round 2 — context arg should contain 'Round 1'
+    const round2GeminiCall = mockCallAgent.mock.calls[3]; // 0-indexed: call 4
+    expect(round2GeminiCall[0]).toBe('gemini'); // agent
+    expect(round2GeminiCall[2]).toContain('Round 1'); // context includes prior round
+  });
+
+  it('mixed termination: 2 NFI + 1 content → loop continues', async () => {
+    // Round 1: all content
+    // Round 2: gemini NFI, claude NFI, gpt content → NOT all terminated → continues
+    // Round 3: all NFI → terminates
+    let callNum = 0;
+    mockCallAgent.mockImplementation((agent: Agent) => {
+      callNum++;
+      // Round 1 (calls 1-3): all content
+      if (callNum <= 3) {
+        return Promise.resolve(createMockResponse(agent, `${agent} content`));
+      }
+      // Round 2 (calls 4-6): gpt content, others NFI
+      if (callNum <= 6) {
+        if (agent === 'gpt') {
+          return Promise.resolve(createMockResponse('gpt', 'GPT has more to say'));
+        }
+        return Promise.resolve(createMockResponse(agent, '[NO_FURTHER_INPUT]'));
+      }
+      // Round 3 (calls 7-9): all NFI → terminate
+      return Promise.resolve(createMockResponse(agent, '[NO_FURTHER_INPUT]'));
+    });
+
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    act(() => {
+      result.current.submitPrompt('Mixed termination');
+    });
+
+    await waitFor(() => {
+      expect(result.current.isProcessing()).toBe(false);
+    });
+
+    const exchange = result.current.getExchanges()[0];
+    // Rounds 1 and 2 saved (round 3 all-NFI → discarded)
+    expect(exchange.rounds).toHaveLength(2);
+    // 3 rounds × 3 agents = 9 calls
+    expect(mockCallAgent).toHaveBeenCalledTimes(9);
+  });
+
+  it('cancel mid-round 2 → only round 1 in exchange', async () => {
+    // Round 1: all content (resolves immediately)
+    // Round 2: first agent (gemini) hangs → cancel during round 2
+    let round2GeminiResolve: (value: AgentResponse) => void;
+    let callNum = 0;
+
+    mockCallAgent.mockImplementation((agent: Agent) => {
+      callNum++;
+      // Round 1: calls 1-3 content
+      if (callNum <= 3) {
+        return Promise.resolve(createMockResponse(agent, `${agent} R1`));
+      }
+      // Round 2, first agent (gemini): hangs
+      if (callNum === 4) {
+        return new Promise<AgentResponse>((resolve) => {
+          round2GeminiResolve = resolve;
+        });
+      }
+      // Should not reach here before cancel
+      return Promise.resolve(createMockResponse(agent, `${agent} late`));
+    });
+
+    const { result } = renderHook(() => useBrain(), { wrapper });
+
+    act(() => {
+      result.current.submitPrompt('Cancel mid-round');
+    });
+
+    // Wait for round 2 to start (round 1 completes, gemini hangs in round 2)
+    await waitFor(() => {
+      expect(mockCallAgent).toHaveBeenCalledTimes(4);
+    });
+
+    // Cancel during round 2
+    act(() => {
+      result.current.cancelSequence();
+    });
+
+    // Resolve gemini so the cancel path executes
+    await act(async () => {
+      round2GeminiResolve!(createMockResponse('gemini', 'Gemini R2'));
+    });
+
+    await waitFor(() => {
+      expect(result.current.isProcessing()).toBe(false);
+    });
+
+    // Only round 1 saved (cancel happened before round 2 completed)
+    const exchange = result.current.getExchanges()[0];
+    expect(exchange.rounds).toHaveLength(1);
+    expect(exchange.rounds[0].roundNumber).toBe(1);
+  });
+});
 

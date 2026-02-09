@@ -166,9 +166,10 @@ export type BrainAction =
   | { type: 'SUBMIT_START'; runId: string; userPrompt: string }
   | { type: 'AGENT_STARTED'; runId: string; agent: Agent }
   | { type: 'AGENT_COMPLETED'; runId: string; response: AgentResponse }
-  | { type: 'SEQUENCE_COMPLETED'; runId: string }
+  | { type: 'SEQUENCE_COMPLETED'; runId: string; rounds: Round[] }
   | { type: 'CANCEL_REQUESTED'; runId: string }
-  | { type: 'CANCEL_COMPLETE'; runId: string }
+  | { type: 'CANCEL_COMPLETE'; runId: string; rounds: Round[] }
+  | { type: 'RESET_PENDING_ROUND'; runId: string }
   | { type: 'SET_WARNING'; runId: string; warning: WarningState | null }
   | { type: 'CLEAR' }
   | { type: 'LOAD_CONVERSATION_SNAPSHOT'; exchanges: Exchange[]; pendingExchange: PendingExchange | null };

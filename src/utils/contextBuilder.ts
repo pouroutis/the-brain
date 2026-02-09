@@ -2,7 +2,7 @@
 // The Brain — Context Builder
 // =============================================================================
 
-import type { Agent, AgentResponse, Exchange } from '../types/brain';
+import type { Agent, AgentResponse, Exchange, Round } from '../types/brain';
 import { getLatestRound } from '../reducer/brainReducer';
 import {
   MAX_CONTEXT_CHARS,
@@ -75,6 +75,33 @@ function serializeExchange(exchange: Exchange): string {
   }
 
   return parts.join('\n');
+}
+
+/**
+ * V3-B: Format completed rounds as context for subsequent rounds.
+ */
+export function formatPriorRounds(rounds: Round[]): string {
+  if (rounds.length === 0) return '';
+
+  const agentOrder: Agent[] = ['gpt', 'claude', 'gemini'];
+  const agentLabels: Record<Agent, string> = { gpt: 'GPT', claude: 'Claude', gemini: 'Gemini' };
+  const parts: string[] = [];
+
+  for (const round of rounds) {
+    const lines: string[] = [`--- Round ${round.roundNumber} ---`];
+    for (const agent of agentOrder) {
+      const response = round.responsesByAgent[agent];
+      if (!response) continue;
+      if (response.status === 'success' && response.content) {
+        lines.push(`${agentLabels[agent]}: ${response.content}`);
+      } else {
+        lines.push(`${agentLabels[agent]}: [${response.status}]`);
+      }
+    }
+    parts.push(lines.join('\n'));
+  }
+
+  return parts.join('\n\n');
 }
 
 // -----------------------------------------------------------------------------

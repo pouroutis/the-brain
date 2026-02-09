@@ -123,19 +123,6 @@ function isRunIdMatch(state: BrainState, runId: string): boolean {
 }
 
 // -----------------------------------------------------------------------------
-// Helper: Finalize Pending Exchange to Exchange
-// -----------------------------------------------------------------------------
-
-function finalizePendingExchange(pending: PendingExchange): Exchange {
-  return {
-    id: generateExchangeId(),
-    userPrompt: pending.userPrompt,
-    rounds: [{ roundNumber: 1, responsesByAgent: pending.responsesByAgent }],
-    timestamp: Date.now(),
-  };
-}
-
-// -----------------------------------------------------------------------------
 // Reducer
 // -----------------------------------------------------------------------------
 
@@ -222,7 +209,7 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
     }
 
     // -------------------------------------------------------------------------
-    // SEQUENCE_COMPLETED
+    // SEQUENCE_COMPLETED (V3-B: carries accumulated rounds from orchestrator)
     // -------------------------------------------------------------------------
     case 'SEQUENCE_COMPLETED': {
       // Guard: Reject if runId mismatch
@@ -235,15 +222,23 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         return state;
       }
 
-      const finalizedExchange = finalizePendingExchange(state.pendingExchange);
+      const finalizedExchange: Exchange = {
+        id: generateExchangeId(),
+        userPrompt: state.pendingExchange.userPrompt,
+        rounds: action.rounds,
+        timestamp: Date.now(),
+      };
       const newExchanges = [...state.exchanges, finalizedExchange];
 
       // Update discussion session metadata
       const updatedSession = createOrUpdateSession(state.discussionSession, newExchanges.length);
 
-      // Append to transcript (append-only)
-      const newTranscriptEntries = exchangeToTranscriptEntries(finalizedExchange);
-      const updatedTranscript = [...state.transcript, ...newTranscriptEntries];
+      // Append to transcript (append-only) — only if rounds exist
+      let updatedTranscript = state.transcript;
+      if (finalizedExchange.rounds.length > 0) {
+        const newTranscriptEntries = exchangeToTranscriptEntries(finalizedExchange);
+        updatedTranscript = [...state.transcript, ...newTranscriptEntries];
+      }
 
       return {
         ...state,
@@ -274,7 +269,7 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
     }
 
     // -------------------------------------------------------------------------
-    // CANCEL_COMPLETE
+    // CANCEL_COMPLETE (V3-B: carries accumulated rounds from orchestrator)
     // -------------------------------------------------------------------------
     case 'CANCEL_COMPLETE': {
       // Guard: Reject if runId mismatch
@@ -287,17 +282,45 @@ export function brainReducer(state: BrainState, action: BrainAction): BrainState
         return state;
       }
 
-      // Finalize without reasonTag (cancellation is signaled via terminal statuses)
-      const finalizedExchange = finalizePendingExchange(state.pendingExchange);
+      const cancelledExchange: Exchange = {
+        id: generateExchangeId(),
+        userPrompt: state.pendingExchange.userPrompt,
+        rounds: action.rounds,
+        timestamp: Date.now(),
+      };
 
       return {
         ...state,
-        exchanges: [...state.exchanges, finalizedExchange],
+        exchanges: [...state.exchanges, cancelledExchange],
         pendingExchange: null,
         currentAgent: null,
         isProcessing: false,
         userCancelled: false,
         warningState: null,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // RESET_PENDING_ROUND (V3-B: clear responsesByAgent for next round)
+    // -------------------------------------------------------------------------
+    case 'RESET_PENDING_ROUND': {
+      // Guard: Reject if runId mismatch
+      if (!isRunIdMatch(state, action.runId)) {
+        return state;
+      }
+
+      // Guard: Reject if no pending exchange
+      if (state.pendingExchange === null) {
+        return state;
+      }
+
+      return {
+        ...state,
+        pendingExchange: {
+          ...state.pendingExchange,
+          responsesByAgent: {},
+        },
+        currentAgent: null,
       };
     }
 
