@@ -144,11 +144,12 @@ describe('Orchestrator — Happy Path', () => {
     // V3-B: 3 calls (round 1 content) + 3 calls (round 2 NFI termination) = 6
     expect(mockCallAgent).toHaveBeenCalledTimes(6);
     // Round 1 agent order: gemini, claude, gpt
+    // V3-E: context now includes round header
     expect(mockCallAgent).toHaveBeenNthCalledWith(
       1,
       'gemini',
       'Test question',
-      '',
+      '[ROUND 1 OF 5]',
       expect.any(AbortController),
       expect.objectContaining({ runId: expect.any(String), callIndex: 1, exchanges: expect.any(Array) })
     );

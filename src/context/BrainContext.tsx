@@ -315,7 +315,13 @@ export function BrainProvider({ children }: BrainProviderProps): JSX.Element {
             }
           }
 
-          const response = await callAgentWithTimeout(agent, agentContext);
+          // V3-E: Prepend round header so agents can enforce round discipline
+          const roundHeader = `[ROUND ${roundNumber} OF ${MAX_ROUNDS}]`;
+          const contextWithRound = agentContext
+            ? `${roundHeader}\n\n${agentContext}`
+            : roundHeader;
+
+          const response = await callAgentWithTimeout(agent, contextWithRound);
 
           if (isCancelled()) { handleCancel(completedRounds); return; }
           if (!response) continue;
